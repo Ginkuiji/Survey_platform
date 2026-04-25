@@ -1,0 +1,95 @@
+from .advanced_analytics_dataset import build_analysis_dataset
+from .advanced_analytics_methods import (
+    compute_chi_square,
+    compute_correlation_matrix,
+    compute_crosstab,
+    compute_linear_regression,
+)
+
+
+def _with_metadata(survey_id: int, analysis_type: str, dataset, result: dict) -> dict:
+    return {
+        "survey_id": survey_id,
+        "analysis_type": analysis_type,
+        "dataset_size": len(dataset.rows),
+        **result,
+    }
+
+
+def _single_variable(dataset, role: str):
+    if len(dataset.variables) != 1:
+        raise ValueError(
+            f"{role} variable must produce exactly one dataset column. "
+            "Use ordinal, binary, numeric, rank, or a specific single-column encoding."
+        )
+    return dataset.variables[0]
+
+
+def run_correlation_analysis(payload: dict) -> dict:
+    survey_id = payload["survey_id"]
+    dataset = build_analysis_dataset(survey_id, payload["variables"])
+    result = compute_correlation_matrix(
+        dataset.rows,
+        dataset.variables,
+        method=payload.get("method", "pearson"),
+    )
+    return _with_metadata(survey_id, "correlation", dataset, result)
+
+
+def run_crosstab_analysis(payload: dict) -> dict:
+    survey_id = payload["survey_id"]
+    dataset = build_analysis_dataset(survey_id, [payload["row"], payload["column"]])
+    if len(dataset.variables) != 2:
+        raise ValueError(
+            "Crosstab row and column must each produce exactly one dataset column. "
+            "For choice questions, use ordinal/category-style encoding instead of one_hot."
+        )
+
+    row_variable, column_variable = dataset.variables
+    result = compute_crosstab(dataset.rows, row_variable.code, column_variable.code)
+    return _with_metadata(survey_id, "crosstab", dataset, {"crosstab": result})
+
+
+def run_chi_square_analysis(payload: dict) -> dict:
+    survey_id = payload["survey_id"]
+    dataset = build_analysis_dataset(survey_id, [payload["row"], payload["column"]])
+    if len(dataset.variables) != 2:
+        raise ValueError(
+            "Chi-square row and column must each produce exactly one dataset column. "
+            "For choice questions, use ordinal/category-style encoding instead of one_hot."
+        )
+
+    row_variable, column_variable = dataset.variables
+    crosstab = compute_crosstab(dataset.rows, row_variable.code, column_variable.code)
+    chi_square = compute_chi_square(crosstab)
+    return _with_metadata(
+        survey_id,
+        "chi_square",
+        dataset,
+        {
+            "crosstab": crosstab,
+            "chi_square": chi_square,
+        },
+    )
+
+
+def run_regression_analysis(payload: dict) -> dict:
+    survey_id = payload["survey_id"]
+    specs = [payload["target"], *payload["features"]]
+    dataset = build_analysis_dataset(survey_id, specs)
+
+    target_dataset = build_analysis_dataset(survey_id, [payload["target"]])
+    target_variable = _single_variable(target_dataset, "Target")
+
+    feature_codes = [
+        variable.code
+        for variable in dataset.variables
+        if variable.code != target_variable.code
+    ]
+    result = compute_linear_regression(
+        dataset.rows,
+        target_variable.code,
+        feature_codes,
+        include_intercept=payload.get("include_intercept", True),
+    )
+    return _with_metadata(survey_id, "regression", dataset, result)

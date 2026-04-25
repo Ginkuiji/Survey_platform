@@ -1,0 +1,286 @@
+import math
+from collections import Counter, defaultdict
+from typing import Any
+
+try:
+    import numpy as np
+except ImportError:  # pragma: no cover - depends on deployment environment
+    np = None
+
+try:
+    from scipy import stats
+except ImportError:  # pragma: no cover - depends on deployment environment
+    stats = None
+
+
+def _is_missing(value: Any) -> bool:
+    return value is None or value == ""
+
+
+def _as_float(value: Any) -> float:
+    if isinstance(value, bool):
+        return float(int(value))
+    return float(value)
+
+
+def _is_numeric(value: Any) -> bool:
+    if _is_missing(value):
+        return False
+    try:
+        _as_float(value)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def get_column(rows, code):
+    return [row.get(code) for row in rows]
+
+
+def clean_numeric_pairs(x_values, y_values):
+    pairs = []
+    for x_value, y_value in zip(x_values, y_values):
+        if _is_numeric(x_value) and _is_numeric(y_value):
+            pairs.append((_as_float(x_value), _as_float(y_value)))
+    return pairs
+
+
+def _manual_pearson(x_values, y_values):
+    n = len(x_values)
+    if n < 2:
+        return None
+
+    mean_x = sum(x_values) / n
+    mean_y = sum(y_values) / n
+    numerator = sum((x - mean_x) * (y - mean_y) for x, y in zip(x_values, y_values))
+    denominator_x = math.sqrt(sum((x - mean_x) ** 2 for x in x_values))
+    denominator_y = math.sqrt(sum((y - mean_y) ** 2 for y in y_values))
+    denominator = denominator_x * denominator_y
+    if denominator == 0:
+        return None
+    return numerator / denominator
+
+
+def _rank_values(values):
+    sorted_pairs = sorted((value, index) for index, value in enumerate(values))
+    ranks = [0.0] * len(values)
+    position = 0
+    while position < len(sorted_pairs):
+        end = position
+        while end + 1 < len(sorted_pairs) and sorted_pairs[end + 1][0] == sorted_pairs[position][0]:
+            end += 1
+        average_rank = (position + 1 + end + 1) / 2
+        for _, original_index in sorted_pairs[position:end + 1]:
+            ranks[original_index] = average_rank
+        position = end + 1
+    return ranks
+
+
+def _manual_correlation(x_values, y_values, method):
+    if method == "spearman":
+        x_values = _rank_values(x_values)
+        y_values = _rank_values(y_values)
+    return _manual_pearson(x_values, y_values)
+
+
+def compute_correlation_matrix(rows, variables, method="pearson") -> dict:
+    if method not in ("pearson", "spearman"):
+        raise ValueError("Correlation method must be 'pearson' or 'spearman'.")
+
+    matrix = []
+    p_values = []
+    n_matrix = []
+
+    for left in variables:
+        matrix_row = []
+        p_row = []
+        n_row = []
+        for right in variables:
+            pairs = clean_numeric_pairs(get_column(rows, left.code), get_column(rows, right.code))
+            n = len(pairs)
+            n_row.append(n)
+
+            if left.code == right.code:
+                matrix_row.append(1.0 if n > 0 else None)
+                p_row.append(0.0 if n > 0 else None)
+                continue
+
+            if n < 2:
+                matrix_row.append(None)
+                p_row.append(None)
+                continue
+
+            x_values = [pair[0] for pair in pairs]
+            y_values = [pair[1] for pair in pairs]
+
+            if stats is not None:
+                result = stats.pearsonr(x_values, y_values) if method == "pearson" else stats.spearmanr(x_values, y_values)
+                coefficient = None if math.isnan(result.statistic) else float(result.statistic)
+                p_value = None if math.isnan(result.pvalue) else float(result.pvalue)
+            else:
+                coefficient = _manual_correlation(x_values, y_values, method)
+                p_value = None
+
+            matrix_row.append(coefficient)
+            p_row.append(p_value)
+
+        matrix.append(matrix_row)
+        p_values.append(p_row)
+        n_matrix.append(n_row)
+
+    return {
+        "method": method,
+        "variables": [{"code": variable.code, "label": variable.label} for variable in variables],
+        "matrix": matrix,
+        "p_values": p_values,
+        "n_matrix": n_matrix,
+    }
+
+
+def _sort_values(values):
+    return sorted(values, key=lambda value: (str(type(value)), value))
+
+
+def compute_crosstab(rows, row_var_code, col_var_code) -> dict:
+    counts = defaultdict(Counter)
+    row_totals = Counter()
+    column_values = set()
+    total = 0
+
+    for item in rows:
+        row_value = item.get(row_var_code)
+        column_value = item.get(col_var_code)
+        if _is_missing(row_value) or _is_missing(column_value):
+            continue
+        counts[row_value][column_value] += 1
+        row_totals[row_value] += 1
+        column_values.add(column_value)
+        total += 1
+
+    ordered_column_values = _sort_values(column_values)
+    result_rows = []
+    for row_value in _sort_values(row_totals.keys()):
+        row_total = row_totals[row_value]
+        columns = []
+        for column_value in ordered_column_values:
+            count = counts[row_value][column_value]
+            columns.append({
+                "value": column_value,
+                "count": count,
+                "percent_row": round(count / row_total * 100, 2) if row_total else 0,
+                "percent_total": round(count / total * 100, 2) if total else 0,
+            })
+        result_rows.append({
+            "value": row_value,
+            "columns": columns,
+            "total": row_total,
+        })
+
+    return {
+        "row_variable": row_var_code,
+        "column_variable": col_var_code,
+        "rows": result_rows,
+        "total": total,
+    }
+
+
+def _contingency_from_crosstab(crosstab_result):
+    return [
+        [column["count"] for column in row["columns"]]
+        for row in crosstab_result["rows"]
+    ]
+
+
+def compute_chi_square(crosstab_result) -> dict:
+    observed = _contingency_from_crosstab(crosstab_result)
+    if len(observed) < 2 or not observed or len(observed[0]) < 2:
+        raise ValueError("Chi-square requires at least a 2x2 crosstab.")
+
+    if stats is not None:
+        chi2, p_value, dof, expected = stats.chi2_contingency(observed)
+        return {
+            "chi2": float(chi2),
+            "p_value": float(p_value),
+            "dof": int(dof),
+            "expected": [[float(value) for value in row] for row in expected],
+        }
+
+    row_totals = [sum(row) for row in observed]
+    column_totals = [sum(observed[row_index][col_index] for row_index in range(len(observed))) for col_index in range(len(observed[0]))]
+    total = sum(row_totals)
+    if total == 0:
+        raise ValueError("Chi-square requires non-empty crosstab counts.")
+
+    expected = [
+        [row_total * column_total / total for column_total in column_totals]
+        for row_total in row_totals
+    ]
+    chi2 = 0.0
+    for row_index, row in enumerate(observed):
+        for col_index, observed_value in enumerate(row):
+            expected_value = expected[row_index][col_index]
+            if expected_value:
+                chi2 += (observed_value - expected_value) ** 2 / expected_value
+
+    return {
+        "chi2": chi2,
+        "p_value": None,
+        "dof": (len(observed) - 1) * (len(observed[0]) - 1),
+        "expected": expected,
+    }
+
+
+def _complete_regression_cases(rows, target_code, feature_codes):
+    y_values = []
+    x_values = []
+    for row in rows:
+        values = [row.get(target_code)] + [row.get(code) for code in feature_codes]
+        if all(_is_numeric(value) for value in values):
+            y_values.append(_as_float(values[0]))
+            x_values.append([_as_float(value) for value in values[1:]])
+    return y_values, x_values
+
+
+def compute_linear_regression(rows, target_code, feature_codes, include_intercept=True) -> dict:
+    if not feature_codes:
+        raise ValueError("Linear regression requires at least one feature.")
+    if np is None:
+        raise ValueError("Linear regression requires numpy to be installed.")
+
+    y_values, x_values = _complete_regression_cases(rows, target_code, feature_codes)
+    n = len(y_values)
+    feature_count = len(feature_codes)
+    parameter_count = feature_count + (1 if include_intercept else 0)
+
+    if n <= parameter_count:
+        raise ValueError("Not enough complete cases for linear regression.")
+
+    x_matrix = np.array(x_values, dtype=float)
+    if include_intercept:
+        x_matrix = np.column_stack([np.ones(n), x_matrix])
+    y_vector = np.array(y_values, dtype=float)
+
+    coefficients, _, rank, _ = np.linalg.lstsq(x_matrix, y_vector, rcond=None)
+    if rank < parameter_count:
+        raise ValueError("Regression design matrix is rank deficient.")
+
+    predicted = x_matrix @ coefficients
+    residual_sum_squares = float(np.sum((y_vector - predicted) ** 2))
+    total_sum_squares = float(np.sum((y_vector - np.mean(y_vector)) ** 2))
+    r2 = 1.0 if total_sum_squares == 0 else 1 - residual_sum_squares / total_sum_squares
+    adjusted_denominator = n - parameter_count
+    adjusted_r2 = 1 - (1 - r2) * (n - 1) / adjusted_denominator if adjusted_denominator > 0 else None
+
+    names = ["intercept"] + feature_codes if include_intercept else feature_codes
+    return {
+        "model": "linear",
+        "target": target_code,
+        "features": feature_codes,
+        "coefficients": [
+            {"name": name, "value": float(value)}
+            for name, value in zip(names, coefficients)
+        ],
+        "r2": float(r2),
+        "adjusted_r2": float(adjusted_r2) if adjusted_r2 is not None else None,
+        "n": n,
+    }
