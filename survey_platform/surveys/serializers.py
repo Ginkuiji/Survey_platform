@@ -11,6 +11,7 @@ from .models import (
     MatrixColumn,
     MatrixAnswerCell,
     RankingAnswerItem,
+    AnalysisReport,
 )
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -504,3 +505,48 @@ class QuestionConditionWriteSer(serializers.ModelSerializer):
 
 class BulkQuestionConditionsSer(serializers.Serializer):
     conditions = QuestionConditionWriteSer(many=True)
+
+
+class AnalysisReportListSer(serializers.ModelSerializer):
+    survey_title = serializers.CharField(source="survey.title", read_only=True)
+
+    class Meta:
+        model = AnalysisReport
+        fields = (
+            "id",
+            "survey",
+            "survey_title",
+            "title",
+            "created_at",
+            "updated_at",
+        )
+
+
+class AnalysisReportDetailSer(serializers.ModelSerializer):
+    survey_title = serializers.CharField(source="survey.title", read_only=True)
+
+    class Meta:
+        model = AnalysisReport
+        fields = (
+            "id",
+            "survey",
+            "survey_title",
+            "title",
+            "config",
+            "result",
+            "created_by",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("created_by", "created_at", "updated_at")
+
+
+class AnalysisReportCreateSer(serializers.ModelSerializer):
+    class Meta:
+        model = AnalysisReport
+        fields = (
+            "survey",
+            "title",
+            "config",
+            "result",
+        )

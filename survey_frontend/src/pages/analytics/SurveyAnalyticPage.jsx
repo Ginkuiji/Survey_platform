@@ -573,6 +573,9 @@ export default function SurveyAnalyticsPage() {
         <Button variant="contained" onClick={() => navigate(`/analytics/surveys/${survey.id}/responses`)}>
           Ответы
         </Button>
+        <Button variant="contained" onClick={() => navigate(`/analytics/surveys/${survey.id}/report-builder`)}>
+          Конструктор отчёта
+        </Button>
         <Button variant="outlined">Экспорт CSV</Button>
         <Button variant="outlined">Экспорт EXCEL</Button>
         <Button variant="outlined">Экспорт PDF</Button>

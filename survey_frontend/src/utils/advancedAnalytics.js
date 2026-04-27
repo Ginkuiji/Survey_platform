@@ -1,0 +1,173 @@
+const QUESTION_TYPE_LABELS = {
+  single: "Одиночный выбор",
+  multi: "Множественный выбор",
+  dropdown: "Выпадающий список",
+  yesno: "Да/Нет",
+  scale: "Шкала",
+  number: "Число",
+  ranking: "Ранжирование",
+  matrix_single: "Матрица: один выбор",
+  matrix_multi: "Матрица: много выборов",
+  text: "Текст",
+  date: "Дата",
+};
+
+export function getAllSurveyQuestions(survey) {
+  const byId = new Map();
+
+  (survey?.questions || []).forEach((question) => {
+    byId.set(question.id, question);
+  });
+
+  (survey?.pages || []).forEach((page) => {
+    (page.questions || []).forEach((question) => {
+      byId.set(question.id, question);
+    });
+  });
+
+  return Array.from(byId.values());
+}
+
+export function getQuestionTypeLabel(qtype) {
+  return QUESTION_TYPE_LABELS[qtype] || qtype;
+}
+
+export function isQuestionSupportedForAnalysis(question, analysisType, role = "variable") {
+  if (!question) return false;
+
+  if (analysisType === "correlation") {
+    return ["scale", "number", "yesno", "single", "dropdown", "ranking", "matrix_single"].includes(question.qtype);
+  }
+
+  if (analysisType === "crosstab" || analysisType === "chi_square") {
+    return ["single", "dropdown", "yesno"].includes(question.qtype);
+  }
+
+  if (analysisType === "regression") {
+    if (role === "target") {
+      return ["scale", "number"].includes(question.qtype);
+    }
+    return ["scale", "number", "yesno", "single", "dropdown", "multi", "ranking", "matrix_single"].includes(question.qtype);
+  }
+
+  return false;
+}
+
+export function getDefaultVariableSpec(question, analysisType, role = "variable") {
+  if (!isQuestionSupportedForAnalysis(question, analysisType, role)) {
+    return null;
+  }
+
+  if (["number", "scale"].includes(question.qtype)) {
+    return { question_id: question.id, encoding: "numeric", measure: "interval" };
+  }
+
+  if (question.qtype === "yesno") {
+    return { question_id: question.id, encoding: "binary", measure: "binary" };
+  }
+
+  if (["single", "dropdown"].includes(question.qtype)) {
+    if (analysisType === "correlation") {
+      return { question_id: question.id, encoding: "ordinal", measure: "ordinal" };
+    }
+
+    if (analysisType === "crosstab" || analysisType === "chi_square") {
+      return { question_id: question.id, encoding: "ordinal", measure: "nominal" };
+    }
+
+    if (analysisType === "regression" && role === "feature") {
+      return { question_id: question.id, encoding: "one_hot", measure: "nominal" };
+    }
+  }
+
+  if (question.qtype === "multi" && analysisType === "regression" && role === "feature") {
+    return { question_id: question.id, encoding: "one_hot", measure: "nominal" };
+  }
+
+  if (question.qtype === "ranking") {
+    return { question_id: question.id, encoding: "rank", measure: "ordinal" };
+  }
+
+  if (question.qtype === "matrix_single") {
+    return { question_id: question.id, encoding: "matrix_ordinal", measure: "ordinal" };
+  }
+
+  return null;
+}
+
+function getQuestion(questionsById, questionId, roleLabel) {
+  const question = questionsById.get(Number(questionId));
+  if (!question) {
+    throw new Error(`Не выбран вопрос для поля "${roleLabel}".`);
+  }
+  return question;
+}
+
+function getSpec(question, analysisType, role, roleLabel) {
+  const spec = getDefaultVariableSpec(question, analysisType, role);
+  if (!spec) {
+    throw new Error(`Вопрос "${question.text}" не поддерживается для поля "${roleLabel}".`);
+  }
+  return spec;
+}
+
+export function buildSectionPayload(surveyId, section, questionsById) {
+  if (section.type === "correlation") {
+    if ((section.questionIds || []).length < 2) {
+      throw new Error("Для корреляционного анализа выберите минимум два вопроса.");
+    }
+
+    return {
+      survey_id: Number(surveyId),
+      method: section.method || "pearson",
+      variables: section.questionIds.map((questionId) => {
+        const question = getQuestion(questionsById, questionId, "Переменные");
+        return getSpec(question, "correlation", "variable", "Переменные");
+      }),
+    };
+  }
+
+  if (section.type === "crosstab" || section.type === "chi_square") {
+    if (!section.rowQuestionId || !section.columnQuestionId) {
+      throw new Error("Выберите вопросы для строк и столбцов.");
+    }
+    if (Number(section.rowQuestionId) === Number(section.columnQuestionId)) {
+      throw new Error("Вопросы для строк и столбцов должны отличаться.");
+    }
+
+    const rowQuestion = getQuestion(questionsById, section.rowQuestionId, "Строки");
+    const columnQuestion = getQuestion(questionsById, section.columnQuestionId, "Столбцы");
+
+    return {
+      survey_id: Number(surveyId),
+      row: getSpec(rowQuestion, section.type, "row", "Строки"),
+      column: getSpec(columnQuestion, section.type, "column", "Столбцы"),
+    };
+  }
+
+  if (section.type === "regression") {
+    if (!section.targetQuestionId) {
+      throw new Error("Выберите целевой вопрос для регрессии.");
+    }
+    if ((section.featureQuestionIds || []).length < 1) {
+      throw new Error("Для регрессии выберите минимум один фактор.");
+    }
+    if ((section.featureQuestionIds || []).some((questionId) => Number(questionId) === Number(section.targetQuestionId))) {
+      throw new Error("Целевой вопрос не должен быть среди факторов.");
+    }
+
+    const targetQuestion = getQuestion(questionsById, section.targetQuestionId, "Целевая переменная");
+
+    return {
+      survey_id: Number(surveyId),
+      target: getSpec(targetQuestion, "regression", "target", "Целевая переменная"),
+      features: section.featureQuestionIds.map((questionId) => {
+        const question = getQuestion(questionsById, questionId, "Факторы");
+        return getSpec(question, "regression", "feature", "Факторы");
+      }),
+      include_intercept: section.include_intercept ?? true,
+    };
+  }
+
+  throw new Error("Неизвестный тип аналитического блока.");
+}

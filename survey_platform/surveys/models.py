@@ -332,6 +332,31 @@ class Answer(models.Model):
             )
         ]
 
+class AnalysisReport(models.Model):
+    survey = models.ForeignKey(
+        Survey,
+        on_delete=models.CASCADE,
+        related_name="analysis_reports",
+    )
+    title = models.CharField(max_length=255)
+    config = models.JSONField(default=dict)
+    result = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="analysis_reports",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        return f"{self.title} ({self.survey_id})"
+
 class AnalyticResults(models.Model):
     survey = models.ForeignKey(Survey, on_delete=models.PROTECT, related_name="produces")
     atype = models.CharField(max_length=20)

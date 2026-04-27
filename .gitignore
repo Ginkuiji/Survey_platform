@@ -1,2 +1,3 @@
 .vscode/*
 node_modules/
+survey_platform/survey_platform/settings.py

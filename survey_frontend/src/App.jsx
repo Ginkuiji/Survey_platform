@@ -16,6 +16,8 @@ import AdminResponsesPage from './admin/AdminResponsesPage';
 import AdminDetRespPage from './admin/AdminDetRespPage';
 import SurveyAnalyticsListPage from './pages/analytics/SurveyAnalyticsListPage';
 import SurveyAnalyticsPage from './pages/analytics/SurveyAnalyticPage';
+import ReportBuilderPage from "./pages/analytics/ReportBuilderPage";
+import ReportResultPage from "./pages/analytics/ReportResultPage";
 import CreateSurveyPage from './pages/CreateSurveyPage';
 
 export default function App() {
@@ -37,6 +39,8 @@ export default function App() {
         
         <Route path='/analytics/surveys' element={<MainLayout><SurveyAnalyticsListPage/></MainLayout>}/>
         <Route path='/analytics/surveys/:id' element={<MainLayout><SurveyAnalyticsPage/></MainLayout>}/>
+        <Route path="/analytics/surveys/:id/report-builder" element={<MainLayout><ReportBuilderPage /></MainLayout>}/>
+        <Route path="/analytics/surveys/:id/report-result/:reportId" element={<MainLayout><ReportResultPage /></MainLayout>}/>
         <Route path='/analytics/surveys/:id/responses' element={<MainLayout><AdminResponsesPage/></MainLayout>}/>
         <Route path='/analytics/surveys/:id/responses/:responseId' element={<MainLayout><AdminDetRespPage/></MainLayout>}/>
 

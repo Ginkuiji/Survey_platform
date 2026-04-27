@@ -9,6 +9,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response as DRFResponse
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.exceptions import PermissionDenied
 from .models import (
     Survey,
     Response as Resp,
@@ -21,11 +22,12 @@ from .models import (
     MatrixColumn,
     MatrixAnswerCell,
     RankingAnswerItem,
+    AnalysisReport,
 )
 from .serializers import (
     SurveyListSer, SurveyDetailSer, StartResponseSer, SubmitAnswerSer, AnalyticsSer, SurveyAnalyticsSer, ResponseReadSer,
     UserListSer, UserProfileSer, AdminUserUpdateSer, SurveyCreateUpdateSer, BulkQuestionsSer, BulkSurveyPagesSer,
-    AdminSurveyListSer, AdminSurveyDetailSer, BulkQuestionConditionsSer, QuestionConditionReadSer
+    AdminSurveyListSer, AdminSurveyDetailSer, BulkQuestionConditionsSer, QuestionConditionReadSer, AnalysisReportCreateSer, AnalysisReportListSer, AnalysisReportDetailSer
 )
 from .permissions import IsAdminRole, IsOrganizerOrAdmin, IsOrganizer
 from .analytics import question_distribution, survey_distribution
@@ -814,3 +816,28 @@ class AdminSurveyViewSet(viewsets.ModelViewSet):
             {"conditions": QuestionConditionReadSer(qs, many=True).data},
             status=status.HTTP_200_OK,
         )
+
+
+class AnalysisReportViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsOrganizerOrAdmin]
+
+    def get_queryset(self):
+        qs = AnalysisReport.objects.select_related("survey", "created_by")
+        if self.request.user.role == "admin":
+            return qs
+        return qs.filter(survey__owners=self.request.user)
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return AnalysisReportListSer
+        if self.action == "create":
+            return AnalysisReportCreateSer
+        return AnalysisReportDetailSer
+
+    def perform_create(self, serializer):
+        survey = serializer.validated_data["survey"]
+
+        if self.request.user.role != "admin" and not survey.owners.filter(id=self.request.user.id).exists():
+            raise PermissionDenied("You do not have access to this survey.")
+
+        serializer.save(created_by=self.request.user)

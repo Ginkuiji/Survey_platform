@@ -78,6 +78,18 @@ def run_regression_analysis(payload: dict) -> dict:
     specs = [payload["target"], *payload["features"]]
     dataset = build_analysis_dataset(survey_id, specs)
 
+    variables_meta = {
+        variable.code: {
+            "code": variable.code,
+            "label": variable.label,
+            "question_id": variable.question_id,
+            "qtype": variable.qtype,
+            "encoding": variable.encoding,
+            "measure": variable.measure,
+        }
+        for variable in dataset.variables
+    }
+
     target_dataset = build_analysis_dataset(survey_id, [payload["target"]])
     target_variable = _single_variable(target_dataset, "Target")
 
@@ -92,4 +104,7 @@ def run_regression_analysis(payload: dict) -> dict:
         feature_codes,
         include_intercept=payload.get("include_intercept", True),
     )
+    result["variables"] = list(variables_meta.values())
+    result["variables_by_code"] = variables_meta
+    
     return _with_metadata(survey_id, "regression", dataset, result)

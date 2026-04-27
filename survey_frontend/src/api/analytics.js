@@ -8,3 +8,50 @@ export const fetchSurveyAnalytics = (surveyId) =>
 
 export const fetchSurveyResponses = (surveyId) =>
   apiFetch(`/surveys/${surveyId}/responses/`);
+
+export const runCorrelationAnalysis = (payload) =>
+  apiFetch("/analytics/advanced/correlation/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const runCrosstabAnalysis = (payload) =>
+  apiFetch("/analytics/advanced/crosstab/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const runChiSquareAnalysis = (payload) =>
+  apiFetch("/analytics/advanced/chi-square/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const runRegressionAnalysis = (payload) =>
+  apiFetch("/analytics/advanced/regression/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const fetchAnalysisReports = () =>
+  apiFetch("/analytics/reports/");
+
+export const fetchAnalysisReportById = (id) =>
+  apiFetch(`/analytics/reports/${id}/`);
+
+export const createAnalysisReport = (payload) =>
+  apiFetch("/analytics/reports/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const updateAnalysisReport = (id, payload) =>
+  apiFetch(`/analytics/reports/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+
+export const deleteAnalysisReport = (id) =>
+  apiFetch(`/analytics/reports/${id}/`, {
+    method: "DELETE",
+  });
