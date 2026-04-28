@@ -9,7 +9,8 @@ from .views import (
     SurveyResponseViewSet,
     SurveyViewSet,
     UserViewSet,
-    AnalysisReportViewSet
+    AnalysisReportViewSet,
+    AnalyticResultsViewSet
 )
 
 router = DefaultRouter()
@@ -18,6 +19,7 @@ router.register(r"analytics", AnalyticsViewSet, basename="analytics")
 router.register(r"analytics/advanced", AdvancedAnalyticsViewSet, basename="advanced-analytics")
 router.register(r"admin/surveys", AdminSurveyViewSet, basename="admin-survey")
 router.register(r"analytics/reports", AnalysisReportViewSet, basename="analysis-report")
+router.register(r"analytics/results", AnalyticResultsViewSet, basename="analytic-results")
 urlpatterns = router.urls
 
 survey_responses = SurveyResponseViewSet.as_view({

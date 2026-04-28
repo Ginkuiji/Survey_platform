@@ -12,6 +12,7 @@ from .models import (
     MatrixAnswerCell,
     RankingAnswerItem,
     AnalysisReport,
+    AnalyticResults
 )
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -545,8 +546,40 @@ class AnalysisReportCreateSer(serializers.ModelSerializer):
     class Meta:
         model = AnalysisReport
         fields = (
+            "id",
             "survey",
             "title",
             "config",
             "result",
+        )
+        read_only_fields = ("id",)
+
+class AnalyticResultsListSer(serializers.ModelSerializer):
+    survey_title = serializers.CharField(source="survey.title", read_only=True)
+
+    class Meta:
+        model = AnalyticResults
+        fields = (
+            "id",
+            "survey",
+            "survey_title",
+            "title",
+            "generated_at",
+            "total_responses",
+        )
+
+
+class AnalyticResultsDetailSer(serializers.ModelSerializer):
+    survey_title = serializers.CharField(source="survey.title", read_only=True)
+
+    class Meta:
+        model = AnalyticResults
+        fields = (
+            "id",
+            "survey",
+            "survey_title",
+            "title",
+            "generated_at",
+            "total_responses",
+            "data",
         )

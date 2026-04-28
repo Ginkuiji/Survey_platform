@@ -287,8 +287,14 @@ function renderSection(section) {
 }
 
 export default function ReportResultPage() {
+  const { id, reportId } = useParams();
+  const navigate = useNavigate();
 
   const { report, storedReport, isLoading, error } = useStoredReport(reportId);
+  const reportTitle = storedReport?.title || report?.title;
+  const surveyTitle = storedReport?.survey?.title || report?.survey_title;
+  const generatedAt = storedReport?.generatedAt || report?.created_at;
+  const sections = storedReport?.sections || [];
 
   if (isLoading) {
     return <CircularProgress />;
@@ -303,8 +309,6 @@ export default function ReportResultPage() {
       <Alert severity="warning">Результат отчёта не найден</Alert>
     );
   }
-
-  const navigate = useNavigate();
 
   if (!report) {
     return (
@@ -328,10 +332,10 @@ export default function ReportResultPage() {
       <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={2} sx={{ mb: 3 }}>
         <Box>
           <Typography variant="h4" sx={{ mb: 1 }}>
-            {report.title}
+            {reportTitle}
           </Typography>
           <Typography color="text.secondary">
-            {report.survey?.title} · {formatDate(report.generatedAt)}
+            {surveyTitle} · {formatDate(generatedAt)}
           </Typography>
         </Box>
         <Button
@@ -344,7 +348,7 @@ export default function ReportResultPage() {
       </Stack>
 
       <Stack spacing={3}>
-        {(report.result?.sections || []).map((section, index) => (
+        {sections.map((section, index) => (
           <Card key={section.id || index}>
             <CardContent>
               <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1} sx={{ mb: 2 }}>

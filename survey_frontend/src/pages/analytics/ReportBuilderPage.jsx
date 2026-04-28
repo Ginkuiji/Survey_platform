@@ -309,17 +309,27 @@ export default function ReportBuilderPage() {
 
     // sessionStorage.setItem("advancedReportResult", JSON.stringify(reportResult));
     
-    const savedReport = await createAnalysisReport({
-      survey: Number(id),
-      title: reportTitle,
-      config: {
+    try {
+      const savedReport = await createAnalysisReport({
+        survey: Number(id),
         title: reportTitle,
-        sections,
-      },
-      result: reportResult,
-    });
-    setIsRunning(false);
-    navigate(`/analytics/surveys/${id}/report-result/${savedReport.id}`);
+        config: {
+          title: reportTitle,
+          sections,
+        },
+        result: reportResult,
+      });
+
+      if (!savedReport?.id) {
+        throw new Error("Backend did not return saved report id.");
+      }
+
+      navigate(`/analytics/surveys/${id}/report-result/${savedReport.id}`);
+    } catch (error) {
+      setPageError(getErrorMessage(error));
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   if (isLoading || !survey) return null;

@@ -55,3 +55,20 @@ export const deleteAnalysisReport = (id) =>
   apiFetch(`/analytics/reports/${id}/`, {
     method: "DELETE",
   });
+
+export const fetchAnalyticResults = (surveyId) =>
+  apiFetch(`/analytics/results/?survey_id=${surveyId}`);
+
+export const fetchAnalyticResultById = (id) =>
+  apiFetch(`/analytics/results/${id}/`);
+
+export const createAnalyticResult = (payload) =>
+  apiFetch(`/analytics/results/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const deleteAnalyticResults = (id) =>
+  apiFetch(`/analytics/results/${id}/`, {
+    method: "DELETE",
+  });

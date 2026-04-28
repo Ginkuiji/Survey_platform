@@ -23,11 +23,13 @@ from .models import (
     MatrixAnswerCell,
     RankingAnswerItem,
     AnalysisReport,
+    AnalyticResults
 )
 from .serializers import (
     SurveyListSer, SurveyDetailSer, StartResponseSer, SubmitAnswerSer, AnalyticsSer, SurveyAnalyticsSer, ResponseReadSer,
     UserListSer, UserProfileSer, AdminUserUpdateSer, SurveyCreateUpdateSer, BulkQuestionsSer, BulkSurveyPagesSer,
-    AdminSurveyListSer, AdminSurveyDetailSer, BulkQuestionConditionsSer, QuestionConditionReadSer, AnalysisReportCreateSer, AnalysisReportListSer, AnalysisReportDetailSer
+    AdminSurveyListSer, AdminSurveyDetailSer, BulkQuestionConditionsSer, QuestionConditionReadSer, AnalysisReportCreateSer, 
+    AnalysisReportListSer, AnalysisReportDetailSer, AnalyticResultsListSer, AnalyticResultsDetailSer
 )
 from .permissions import IsAdminRole, IsOrganizerOrAdmin, IsOrganizer
 from .analytics import question_distribution, survey_distribution
@@ -841,3 +843,44 @@ class AnalysisReportViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You do not have access to this survey.")
 
         serializer.save(created_by=self.request.user)
+
+class AnalyticResultsViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsOrganizerOrAdmin]
+
+    def get_queryset(self):
+        qs = AnalyticResults.objects.select_related("survey")
+        survey_id = self.request.query_params.get("survey_id")
+        if survey_id:
+            qs = qs.filter(survey_id=survey_id)
+
+        if self.request.user.role == "admin":
+            return qs
+        return qs.filter(survey__owners=self.request.user)
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return AnalyticResultsListSer
+        return AnalyticResultsDetailSer
+
+    def create(self, request):
+        survey_id = request.data.get("survey_id")
+        title = request.data.get("title") or f"Срез аналитики от {timezone.now():%d.%m.%Y %H:%M}"
+
+        survey = get_object_or_404(Survey, id=survey_id)
+
+        if request.user.role != "admin" and not survey.owners.filter(id=request.user.id).exists():
+            raise PermissionDenied("You do not have access to this survey.")
+
+        data = survey_distribution(survey.id, save=False)
+
+        snapshot = AnalyticResults.objects.create(
+            survey=survey,
+            title=title,
+            total_responses=data["summary"]["total_finished"],
+            data=data,
+        )
+
+        return DRFResponse(
+            AnalyticResultsDetailSer(snapshot).data,
+            status=status.HTTP_201_CREATED,
+        )

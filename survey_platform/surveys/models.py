@@ -359,10 +359,10 @@ class AnalysisReport(models.Model):
 
 class AnalyticResults(models.Model):
     survey = models.ForeignKey(Survey, on_delete=models.PROTECT, related_name="produces")
-    atype = models.CharField(max_length=20)
+    title = models.CharField(max_length=255, blank=True, default='')
     generated_at = models.DateTimeField(auto_now_add=True)
     total_responses = models.PositiveIntegerField(default=0)
     data = models.JSONField(default=dict)
 
     class Meta:
-        unique_together = ("survey", "generated_at")
+        ordering = ["-generated_at"]

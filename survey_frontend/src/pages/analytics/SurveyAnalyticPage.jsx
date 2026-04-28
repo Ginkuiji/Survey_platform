@@ -1,21 +1,32 @@
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Alert,
   Box,
   Button,
   Card,
   CardContent,
   Chip,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
+  FormControl,
   Grid,
+  InputLabel,
   LinearProgress,
+  MenuItem,
+  Select,
   Stack,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  TextField,
   Typography,
 } from "@mui/material";
 import {
@@ -32,13 +43,22 @@ import {
 } from "recharts";
 
 import { fetchAdminSurveyById } from "../../api/surveys";
-import { fetchSurveyAnalytics } from "../../api/analytics";
+import {
+  createAnalyticResult,
+  fetchAnalyticResultById,
+  fetchAnalyticResults,
+  fetchSurveyAnalytics,
+} from "../../api/analytics";
 
 const CHART_COLORS = ["#2f80ed", "#27ae60", "#f2c94c", "#eb5757", "#9b51e0", "#56ccf2"];
 const PIE_CHART_WIDTH = 360;
 const BAR_CHART_WIDTH = 560;
 const CHART_HEIGHT = 300;
 const LEGEND_LABEL_MAX_LENGTH = 24;
+
+function getDefaultSnapshotTitle() {
+  return `Срез от ${new Intl.DateTimeFormat("ru-RU").format(new Date())}`;
+}
 
 const QUESTION_TYPE_LABELS = {
   single: "Одиночный выбор",
@@ -539,6 +559,11 @@ function QuestionResult({ question }) {
 export default function SurveyAnalyticsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [snapshotDialogOpen, setSnapshotDialogOpen] = useState(false);
+  const [snapshotTitle, setSnapshotTitle] = useState(getDefaultSnapshotTitle);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState("current");
+  const [snapshotError, setSnapshotError] = useState("");
+  const [isSavingSnapshot, setIsSavingSnapshot] = useState(false);
 
   const { data: survey } = useQuery({
     queryKey: ["survey", id],
@@ -551,16 +576,59 @@ export default function SurveyAnalyticsPage() {
     queryFn: () => fetchSurveyAnalytics(id),
   });
 
+  const { data: snapshots = [], refetch: refetchSnapshots } = useQuery({
+    queryKey: ["analytic-results", id],
+    enabled: !!id,
+    queryFn: () => fetchAnalyticResults(id),
+  });
+
+  const { data: selectedSnapshot } = useQuery({
+    queryKey: ["analytic-result", selectedSnapshotId],
+    enabled: selectedSnapshotId !== "current",
+    queryFn: () => fetchAnalyticResultById(selectedSnapshotId),
+  });
+
+  const handleOpenSnapshotDialog = () => {
+    setSnapshotTitle(getDefaultSnapshotTitle());
+    setSnapshotError("");
+    setSnapshotDialogOpen(true);
+  };
+
+  const handleSaveSnapshot = async () => {
+    setSnapshotError("");
+    setIsSavingSnapshot(true);
+
+    try {
+      const createdSnapshot = await createAnalyticResult({
+        survey_id: Number(id),
+        title: snapshotTitle,
+      });
+      await refetchSnapshots();
+      setSelectedSnapshotId(createdSnapshot.id);
+      setSnapshotDialogOpen(false);
+    } catch (error) {
+      setSnapshotError(error.message || "Не удалось сохранить срез аналитики.");
+    } finally {
+      setIsSavingSnapshot(false);
+    }
+  };
+
   if (!survey || !analyticsData) return null;
 
-  const questions = analyticsData.questions ?? [];
-  const summary = analyticsData.summary ?? {};
-  const screening = analyticsData.screening ?? {};
+  const displayedAnalyticsData = selectedSnapshotId === "current"
+    ? analyticsData
+    : selectedSnapshot?.data;
+
+  if (!displayedAnalyticsData) return null;
+
+  const questions = displayedAnalyticsData.questions ?? [];
+  const summary = displayedAnalyticsData.summary ?? {};
+  const screening = displayedAnalyticsData.screening ?? {};
 
   return (
     <Container maxWidth={false} sx={{ mt: 4, width: "100%" }}>
       <Typography variant="h4" sx={{ mb: 1 }}>
-        Аналитика: {analyticsData.survey?.title ?? survey.title}
+        Аналитика: {displayedAnalyticsData.survey?.title ?? survey.title}
       </Typography>
 
       {survey.description && (
@@ -576,10 +644,65 @@ export default function SurveyAnalyticsPage() {
         <Button variant="contained" onClick={() => navigate(`/analytics/surveys/${survey.id}/report-builder`)}>
           Конструктор отчёта
         </Button>
+        <Button variant="contained" onClick={handleOpenSnapshotDialog}>
+          Сохранить срез аналитики
+        </Button>
         <Button variant="outlined">Экспорт CSV</Button>
         <Button variant="outlined">Экспорт EXCEL</Button>
         <Button variant="outlined">Экспорт PDF</Button>
       </Stack>
+
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ xs: "stretch", md: "center" }}>
+            <Typography variant="h6" sx={{ minWidth: 190 }}>
+              Сохранённые версии
+            </Typography>
+            <FormControl fullWidth>
+              <InputLabel>Версия аналитики</InputLabel>
+              <Select
+                label="Версия аналитики"
+                value={selectedSnapshotId}
+                onChange={(event) => setSelectedSnapshotId(event.target.value)}
+              >
+                <MenuItem value="current">Текущая аналитика</MenuItem>
+                {snapshots.map((snapshot) => (
+                  <MenuItem key={snapshot.id} value={snapshot.id}>
+                    Сохранённый срез: {snapshot.title || `#${snapshot.id}`}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Dialog open={snapshotDialogOpen} onClose={() => setSnapshotDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Сохранить срез аналитики</DialogTitle>
+        <DialogContent>
+          {snapshotError && <Alert severity="error" sx={{ mb: 2 }}>{snapshotError}</Alert>}
+          <TextField
+            autoFocus
+            fullWidth
+            label="Название версии"
+            value={snapshotTitle}
+            onChange={(event) => setSnapshotTitle(event.target.value)}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSnapshotDialogOpen(false)}>
+            Отмена
+          </Button>
+          <Button
+            variant="contained"
+            disabled={isSavingSnapshot || !snapshotTitle.trim()}
+            onClick={handleSaveSnapshot}
+          >
+            {isSavingSnapshot ? "Сохранение..." : "Сохранить"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <EnhancedSummaryBlock summary={summary} />
       <ScreeningBlock screening={screening} />
