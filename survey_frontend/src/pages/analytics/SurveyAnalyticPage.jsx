@@ -45,6 +45,8 @@ import {
 import { fetchAdminSurveyById } from "../../api/surveys";
 import {
   createAnalyticResult,
+  exportAnalyticsPdf,
+  fetchAnalysisReports,
   fetchAnalyticResultById,
   fetchAnalyticResults,
   fetchSurveyAnalytics,
@@ -564,6 +566,11 @@ export default function SurveyAnalyticsPage() {
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("current");
   const [snapshotError, setSnapshotError] = useState("");
   const [isSavingSnapshot, setIsSavingSnapshot] = useState(false);
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+  const [selectedPdfAnalyticResultId, setSelectedPdfAnalyticResultId] = useState("");
+  const [selectedPdfAnalysisReportId, setSelectedPdfAnalysisReportId] = useState("");
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState("");
 
   const { data: survey } = useQuery({
     queryKey: ["survey", id],
@@ -580,6 +587,11 @@ export default function SurveyAnalyticsPage() {
     queryKey: ["analytic-results", id],
     enabled: !!id,
     queryFn: () => fetchAnalyticResults(id),
+  });
+
+  const { data: analysisReports = [] } = useQuery({
+    queryKey: ["analysis-reports"],
+    queryFn: fetchAnalysisReports,
   });
 
   const { data: selectedSnapshot } = useQuery({
@@ -610,6 +622,45 @@ export default function SurveyAnalyticsPage() {
       setSnapshotError(error.message || "Не удалось сохранить срез аналитики.");
     } finally {
       setIsSavingSnapshot(false);
+    }
+  };
+
+  const surveyAnalysisReports = analysisReports.filter((report) => Number(report.survey) === Number(id));
+
+  const handleOpenPdfDialog = () => {
+    setPdfError("");
+    setSelectedPdfAnalyticResultId(snapshots[0]?.id || "");
+    setSelectedPdfAnalysisReportId(surveyAnalysisReports[0]?.id || "");
+    setPdfDialogOpen(true);
+  };
+
+  const handleExportPdf = async () => {
+    if (!selectedPdfAnalyticResultId || !selectedPdfAnalysisReportId) {
+      setPdfError("Выберите срез общей аналитики и сложный аналитический отчёт.");
+      return;
+    }
+
+    setPdfError("");
+    setIsExportingPdf(true);
+    try {
+      const blob = await exportAnalyticsPdf({
+        survey_id: Number(id),
+        analytic_result_id: Number(selectedPdfAnalyticResultId),
+        analysis_report_id: Number(selectedPdfAnalysisReportId),
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `analytics_report_${id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setPdfDialogOpen(false);
+    } catch (error) {
+      setPdfError(error.message || "Ошибка экспорта PDF.");
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -649,7 +700,7 @@ export default function SurveyAnalyticsPage() {
         </Button>
         <Button variant="outlined">Экспорт CSV</Button>
         <Button variant="outlined">Экспорт EXCEL</Button>
-        <Button variant="outlined">Экспорт PDF</Button>
+        <Button variant="outlined" onClick={handleOpenPdfDialog}>Экспорт PDF</Button>
       </Stack>
 
       <Card sx={{ mb: 3 }}>
@@ -700,6 +751,69 @@ export default function SurveyAnalyticsPage() {
             onClick={handleSaveSnapshot}
           >
             {isSavingSnapshot ? "Сохранение..." : "Сохранить"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={pdfDialogOpen} onClose={() => setPdfDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Экспорт PDF</DialogTitle>
+        <DialogContent>
+          {pdfError && <Alert severity="error" sx={{ mb: 2 }}>{pdfError}</Alert>}
+
+          {!snapshots.length && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Сначала сохраните срез общей аналитики.
+            </Alert>
+          )}
+
+          {!surveyAnalysisReports.length && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Сначала сформируйте отчёт в конструкторе.
+            </Alert>
+          )}
+
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <FormControl fullWidth disabled={!snapshots.length}>
+              <InputLabel>Срез общей аналитики</InputLabel>
+              <Select
+                label="Срез общей аналитики"
+                value={selectedPdfAnalyticResultId}
+                onChange={(event) => setSelectedPdfAnalyticResultId(event.target.value)}
+              >
+                {snapshots.map((snapshot) => (
+                  <MenuItem key={snapshot.id} value={snapshot.id}>
+                    {snapshot.title || `Срез #${snapshot.id}`}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth disabled={!surveyAnalysisReports.length}>
+              <InputLabel>Сложный аналитический отчёт</InputLabel>
+              <Select
+                label="Сложный аналитический отчёт"
+                value={selectedPdfAnalysisReportId}
+                onChange={(event) => setSelectedPdfAnalysisReportId(event.target.value)}
+              >
+                {surveyAnalysisReports.map((report) => (
+                  <MenuItem key={report.id} value={report.id}>
+                    {report.title || `Отчёт #${report.id}`}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPdfDialogOpen(false)}>
+            Отмена
+          </Button>
+          <Button
+            variant="contained"
+            disabled={isExportingPdf || !snapshots.length || !surveyAnalysisReports.length}
+            onClick={handleExportPdf}
+          >
+            {isExportingPdf ? "Формирование..." : "Сформировать PDF"}
           </Button>
         </DialogActions>
       </Dialog>

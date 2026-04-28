@@ -583,3 +583,9 @@ class AnalyticResultsDetailSer(serializers.ModelSerializer):
             "total_responses",
             "data",
         )
+
+
+class AnalyticsPdfExportSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    analytic_result_id = serializers.IntegerField()
+    analysis_report_id = serializers.IntegerField()

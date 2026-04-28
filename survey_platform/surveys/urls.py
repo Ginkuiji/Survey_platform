@@ -10,13 +10,15 @@ from .views import (
     SurveyViewSet,
     UserViewSet,
     AnalysisReportViewSet,
-    AnalyticResultsViewSet
+    AnalyticResultsViewSet,
+    AnalyticsExportViewSet,
 )
 
 router = DefaultRouter()
 router.register(r"surveys", SurveyViewSet, basename="survey")
 router.register(r"analytics", AnalyticsViewSet, basename="analytics")
 router.register(r"analytics/advanced", AdvancedAnalyticsViewSet, basename="advanced-analytics")
+router.register(r"analytics/export", AnalyticsExportViewSet, basename="analytics-export")
 router.register(r"admin/surveys", AdminSurveyViewSet, basename="admin-survey")
 router.register(r"analytics/reports", AnalysisReportViewSet, basename="analysis-report")
 router.register(r"analytics/results", AnalyticResultsViewSet, basename="analytic-results")

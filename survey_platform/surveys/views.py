@@ -1,5 +1,6 @@
 # surveys/views.py
 import secrets, datetime as dt
+from django.http import HttpResponse
 from django.utils import timezone
 from django.shortcuts import get_object_or_404, render
 from django.contrib.auth import get_user_model
@@ -29,7 +30,8 @@ from .serializers import (
     SurveyListSer, SurveyDetailSer, StartResponseSer, SubmitAnswerSer, AnalyticsSer, SurveyAnalyticsSer, ResponseReadSer,
     UserListSer, UserProfileSer, AdminUserUpdateSer, SurveyCreateUpdateSer, BulkQuestionsSer, BulkSurveyPagesSer,
     AdminSurveyListSer, AdminSurveyDetailSer, BulkQuestionConditionsSer, QuestionConditionReadSer, AnalysisReportCreateSer, 
-    AnalysisReportListSer, AnalysisReportDetailSer, AnalyticResultsListSer, AnalyticResultsDetailSer
+    AnalysisReportListSer, AnalysisReportDetailSer, AnalyticResultsListSer, AnalyticResultsDetailSer,
+    AnalyticsPdfExportSer
 )
 from .permissions import IsAdminRole, IsOrganizerOrAdmin, IsOrganizer
 from .analytics import question_distribution, survey_distribution
@@ -45,6 +47,7 @@ from .advanced_analytics_services import (
     run_crosstab_analysis,
     run_regression_analysis,
 )
+from .pdf_export import build_analytics_pdf
 
 User = get_user_model()
 
@@ -571,6 +574,46 @@ class AdvancedAnalyticsViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="regression")
     def regression(self, request):
         return self._run(request, RegressionAnalysisSer, run_regression_analysis)
+
+
+class AnalyticsExportViewSet(viewsets.ViewSet):
+    permission_classes = [IsOrganizerOrAdmin]
+
+    def _check_survey_access(self, request, survey):
+        if request.user.role == "admin":
+            return
+        if not survey.owners.filter(id=request.user.id).exists():
+            raise PermissionDenied("You do not have access to this survey.")
+
+    @action(detail=False, methods=["post"], url_path="pdf")
+    def pdf(self, request):
+        ser = AnalyticsPdfExportSer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+
+        survey = get_object_or_404(Survey, id=data["survey_id"])
+        self._check_survey_access(request, survey)
+
+        analytic_result = get_object_or_404(
+            AnalyticResults,
+            id=data["analytic_result_id"],
+            survey=survey,
+        )
+        analysis_report = get_object_or_404(
+            AnalysisReport,
+            id=data["analysis_report_id"],
+            survey=survey,
+        )
+
+        try:
+            pdf_bytes = build_analytics_pdf(survey, analytic_result, analysis_report)
+        except RuntimeError as exc:
+            return DRFResponse({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        filename = f"analytics_report_{survey.id}_{timezone.now():%Y%m%d_%H%M}.pdf"
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
 
 class SurveyResponseViewSet(viewsets.ReadOnlyModelViewSet):

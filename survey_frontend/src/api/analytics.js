@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { API_URL, apiFetch } from "./client";
 
 export const fetchQuestionAnalytics = (questionId) =>
   apiFetch(`/analytics/distribution/?question_id=${questionId}`);
@@ -72,3 +72,23 @@ export const deleteAnalyticResults = (id) =>
   apiFetch(`/analytics/results/${id}/`, {
     method: "DELETE",
   });
+
+export const exportAnalyticsPdf = async (payload) => {
+  const accessToken = localStorage.getItem("accessToken");
+
+  const res = await fetch(`${API_URL}/analytics/export/pdf/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Ошибка экспорта PDF");
+  }
+
+  return res.blob();
+};
