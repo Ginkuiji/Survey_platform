@@ -45,7 +45,9 @@ import {
 import { fetchAdminSurveyById } from "../../api/surveys";
 import {
   createAnalyticResult,
+  exportAnalyticsCsv,
   exportAnalyticsPdf,
+  exportAnalyticsXlsx,
   fetchAnalysisReports,
   fetchAnalyticResultById,
   fetchAnalyticResults,
@@ -571,6 +573,16 @@ export default function SurveyAnalyticsPage() {
   const [selectedPdfAnalysisReportId, setSelectedPdfAnalysisReportId] = useState("");
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [pdfError, setPdfError] = useState("");
+  const [csvDialogOpen, setCsvDialogOpen] = useState(false);
+  const [selectedCsvAnalyticResultId, setSelectedCsvAnalyticResultId] = useState("");
+  const [selectedCsvAnalysisReportId, setSelectedCsvAnalysisReportId] = useState("");
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
+  const [csvError, setCsvError] = useState("");
+  const [xlsxDialogOpen, setXlsxDialogOpen] = useState(false);
+  const [selectedXlsxAnalyticResultId, setSelectedXlsxAnalyticResultId] = useState("");
+  const [selectedXlsxAnalysisReportId, setSelectedXlsxAnalysisReportId] = useState("");
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false);
+  const [xlsxError, setXlsxError] = useState("");
 
   const { data: survey } = useQuery({
     queryKey: ["survey", id],
@@ -634,6 +646,20 @@ export default function SurveyAnalyticsPage() {
     setPdfDialogOpen(true);
   };
 
+  const handleOpenCsvDialog = () => {
+    setCsvError("");
+    setSelectedCsvAnalyticResultId(snapshots[0]?.id || "");
+    setSelectedCsvAnalysisReportId(surveyAnalysisReports[0]?.id || "");
+    setCsvDialogOpen(true);
+  };
+
+  const handleOpenXlsxDialog = () => {
+    setXlsxError("");
+    setSelectedXlsxAnalyticResultId(snapshots[0]?.id || "");
+    setSelectedXlsxAnalysisReportId(surveyAnalysisReports[0]?.id || "");
+    setXlsxDialogOpen(true);
+  };
+
   const handleExportPdf = async () => {
     if (!selectedPdfAnalyticResultId || !selectedPdfAnalysisReportId) {
       setPdfError("Выберите срез общей аналитики и сложный аналитический отчёт.");
@@ -661,6 +687,66 @@ export default function SurveyAnalyticsPage() {
       setPdfError(error.message || "Ошибка экспорта PDF.");
     } finally {
       setIsExportingPdf(false);
+    }
+  };
+
+  const handleExportCsv = async () => {
+    if (!selectedCsvAnalyticResultId || !selectedCsvAnalysisReportId) {
+      setCsvError("Выберите срез общей аналитики и сложный аналитический отчёт.");
+      return;
+    }
+
+    setCsvError("");
+    setIsExportingCsv(true);
+    try {
+      const blob = await exportAnalyticsCsv({
+        survey_id: Number(id),
+        analytic_result_id: Number(selectedCsvAnalyticResultId),
+        analysis_report_id: Number(selectedCsvAnalysisReportId),
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `analytics_report_${id}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setCsvDialogOpen(false);
+    } catch (error) {
+      setCsvError(error.message || "Ошибка экспорта CSV.");
+    } finally {
+      setIsExportingCsv(false);
+    }
+  };
+
+  const handleExportXlsx = async () => {
+    if (!selectedXlsxAnalyticResultId || !selectedXlsxAnalysisReportId) {
+      setXlsxError("Выберите срез общей аналитики и сложный аналитический отчёт.");
+      return;
+    }
+
+    setXlsxError("");
+    setIsExportingXlsx(true);
+    try {
+      const blob = await exportAnalyticsXlsx({
+        survey_id: Number(id),
+        analytic_result_id: Number(selectedXlsxAnalyticResultId),
+        analysis_report_id: Number(selectedXlsxAnalysisReportId),
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `analytics_report_${id}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setXlsxDialogOpen(false);
+    } catch (error) {
+      setXlsxError(error.message || "Ошибка экспорта XLSX.");
+    } finally {
+      setIsExportingXlsx(false);
     }
   };
 
@@ -698,8 +784,8 @@ export default function SurveyAnalyticsPage() {
         <Button variant="contained" onClick={handleOpenSnapshotDialog}>
           Сохранить срез аналитики
         </Button>
-        <Button variant="outlined">Экспорт CSV</Button>
-        <Button variant="outlined">Экспорт EXCEL</Button>
+        <Button variant="outlined" onClick={handleOpenCsvDialog}>Экспорт CSV</Button>
+        <Button variant="outlined" onClick={handleOpenXlsxDialog}>Экспорт EXCEL</Button>
         <Button variant="outlined" onClick={handleOpenPdfDialog}>Экспорт PDF</Button>
       </Stack>
 
@@ -814,6 +900,132 @@ export default function SurveyAnalyticsPage() {
             onClick={handleExportPdf}
           >
             {isExportingPdf ? "Формирование..." : "Сформировать PDF"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={csvDialogOpen} onClose={() => setCsvDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Экспорт CSV</DialogTitle>
+        <DialogContent>
+          {csvError && <Alert severity="error" sx={{ mb: 2 }}>{csvError}</Alert>}
+
+          {!snapshots.length && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Сначала сохраните срез общей аналитики.
+            </Alert>
+          )}
+
+          {!surveyAnalysisReports.length && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Сначала сформируйте отчёт в конструкторе.
+            </Alert>
+          )}
+
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <FormControl fullWidth disabled={!snapshots.length}>
+              <InputLabel>Срез общей аналитики</InputLabel>
+              <Select
+                label="Срез общей аналитики"
+                value={selectedCsvAnalyticResultId}
+                onChange={(event) => setSelectedCsvAnalyticResultId(event.target.value)}
+              >
+                {snapshots.map((snapshot) => (
+                  <MenuItem key={snapshot.id} value={snapshot.id}>
+                    {snapshot.title || `Срез #${snapshot.id}`}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth disabled={!surveyAnalysisReports.length}>
+              <InputLabel>Сложный аналитический отчёт</InputLabel>
+              <Select
+                label="Сложный аналитический отчёт"
+                value={selectedCsvAnalysisReportId}
+                onChange={(event) => setSelectedCsvAnalysisReportId(event.target.value)}
+              >
+                {surveyAnalysisReports.map((report) => (
+                  <MenuItem key={report.id} value={report.id}>
+                    {report.title || `Отчёт #${report.id}`}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCsvDialogOpen(false)}>
+            Отмена
+          </Button>
+          <Button
+            variant="contained"
+            disabled={isExportingCsv || !snapshots.length || !surveyAnalysisReports.length}
+            onClick={handleExportCsv}
+          >
+            {isExportingCsv ? "Формирование..." : "Скачать CSV"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={xlsxDialogOpen} onClose={() => setXlsxDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Экспорт EXCEL</DialogTitle>
+        <DialogContent>
+          {xlsxError && <Alert severity="error" sx={{ mb: 2 }}>{xlsxError}</Alert>}
+
+          {!snapshots.length && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Сначала сохраните срез общей аналитики.
+            </Alert>
+          )}
+
+          {!surveyAnalysisReports.length && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Сначала сформируйте отчёт в конструкторе.
+            </Alert>
+          )}
+
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <FormControl fullWidth disabled={!snapshots.length}>
+              <InputLabel>Срез общей аналитики</InputLabel>
+              <Select
+                label="Срез общей аналитики"
+                value={selectedXlsxAnalyticResultId}
+                onChange={(event) => setSelectedXlsxAnalyticResultId(event.target.value)}
+              >
+                {snapshots.map((snapshot) => (
+                  <MenuItem key={snapshot.id} value={snapshot.id}>
+                    {snapshot.title || `Срез #${snapshot.id}`}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth disabled={!surveyAnalysisReports.length}>
+              <InputLabel>Сложный аналитический отчёт</InputLabel>
+              <Select
+                label="Сложный аналитический отчёт"
+                value={selectedXlsxAnalysisReportId}
+                onChange={(event) => setSelectedXlsxAnalysisReportId(event.target.value)}
+              >
+                {surveyAnalysisReports.map((report) => (
+                  <MenuItem key={report.id} value={report.id}>
+                    {report.title || `Отчёт #${report.id}`}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setXlsxDialogOpen(false)}>
+            Отмена
+          </Button>
+          <Button
+            variant="contained"
+            disabled={isExportingXlsx || !snapshots.length || !surveyAnalysisReports.length}
+            onClick={handleExportXlsx}
+          >
+            {isExportingXlsx ? "Формирование..." : "Скачать XLSX"}
           </Button>
         </DialogActions>
       </Dialog>

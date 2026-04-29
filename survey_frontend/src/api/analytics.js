@@ -92,3 +92,43 @@ export const exportAnalyticsPdf = async (payload) => {
 
   return res.blob();
 };
+
+export const exportAnalyticsCsv = async (payload) => {
+  const accessToken = localStorage.getItem("accessToken");
+
+  const res = await fetch(`${API_URL}/analytics/export/csv/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Ошибка экспорта CSV");
+  }
+
+  return res.blob();
+};
+
+export const exportAnalyticsXlsx = async (payload) => {
+  const accessToken = localStorage.getItem("accessToken");
+
+  const res = await fetch(`${API_URL}/analytics/export/xlsx/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Ошибка экспорта XLSX");
+  }
+
+  return res.blob();
+};

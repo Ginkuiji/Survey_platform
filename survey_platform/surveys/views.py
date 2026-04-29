@@ -31,7 +31,7 @@ from .serializers import (
     UserListSer, UserProfileSer, AdminUserUpdateSer, SurveyCreateUpdateSer, BulkQuestionsSer, BulkSurveyPagesSer,
     AdminSurveyListSer, AdminSurveyDetailSer, BulkQuestionConditionsSer, QuestionConditionReadSer, AnalysisReportCreateSer, 
     AnalysisReportListSer, AnalysisReportDetailSer, AnalyticResultsListSer, AnalyticResultsDetailSer,
-    AnalyticsPdfExportSer
+    AnalyticsCsvExportSer, AnalyticsPdfExportSer, AnalyticsXlsxExportSer
 )
 from .permissions import IsAdminRole, IsOrganizerOrAdmin, IsOrganizer
 from .analytics import question_distribution, survey_distribution
@@ -48,6 +48,8 @@ from .advanced_analytics_services import (
     run_regression_analysis,
 )
 from .pdf_export import build_analytics_pdf
+from .csv_export import build_analytics_csv
+from .xlsx_export import build_analytics_xlsx
 
 User = get_user_model()
 
@@ -585,9 +587,8 @@ class AnalyticsExportViewSet(viewsets.ViewSet):
         if not survey.owners.filter(id=request.user.id).exists():
             raise PermissionDenied("You do not have access to this survey.")
 
-    @action(detail=False, methods=["post"], url_path="pdf")
-    def pdf(self, request):
-        ser = AnalyticsPdfExportSer(data=request.data)
+    def _get_export_objects(self, request, serializer_class):
+        ser = serializer_class(data=request.data)
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
 
@@ -604,6 +605,11 @@ class AnalyticsExportViewSet(viewsets.ViewSet):
             id=data["analysis_report_id"],
             survey=survey,
         )
+        return survey, analytic_result, analysis_report
+
+    @action(detail=False, methods=["post"], url_path="pdf")
+    def pdf(self, request):
+        survey, analytic_result, analysis_report = self._get_export_objects(request, AnalyticsPdfExportSer)
 
         try:
             pdf_bytes = build_analytics_pdf(survey, analytic_result, analysis_report)
@@ -612,6 +618,33 @@ class AnalyticsExportViewSet(viewsets.ViewSet):
 
         filename = f"analytics_report_{survey.id}_{timezone.now():%Y%m%d_%H%M}.pdf"
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(detail=False, methods=["post"], url_path="csv")
+    def csv(self, request):
+        survey, analytic_result, analysis_report = self._get_export_objects(request, AnalyticsCsvExportSer)
+
+        csv_bytes = build_analytics_csv(survey, analytic_result, analysis_report)
+        filename = f"analytics_report_{survey.id}_{timezone.now():%Y%m%d_%H%M}.csv"
+        response = HttpResponse(csv_bytes, content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(detail=False, methods=["post"], url_path="xlsx")
+    def xlsx(self, request):
+        survey, analytic_result, analysis_report = self._get_export_objects(request, AnalyticsXlsxExportSer)
+
+        try:
+            xlsx_bytes = build_analytics_xlsx(survey, analytic_result, analysis_report)
+        except RuntimeError as exc:
+            return DRFResponse({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        filename = f"analytics_report_{survey.id}_{timezone.now():%Y%m%d_%H%M}.xlsx"
+        response = HttpResponse(
+            xlsx_bytes,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
 

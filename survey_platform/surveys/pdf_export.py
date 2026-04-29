@@ -15,6 +15,18 @@ def _format_value(value: Any) -> str:
     return str(value)
 
 
+def _format_p_value(value: Any) -> str:
+    if value is None or value == "":
+        return "—"
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if 0 < numeric_value < 0.0001:
+        return "<0.0001"
+    return f"{numeric_value:.4f}".rstrip("0").rstrip(".")
+
+
 def _format_datetime(value: Any) -> str:
     if not value:
         return "—"
@@ -171,7 +183,7 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
                     [9 * cm, 3 * cm, 3 * cm],
                 ))
 
-    def add_matrix_table(story, title, matrix, variables=None):
+    def add_matrix_table(story, title, matrix, variables=None, formatter=_format_value):
         if not matrix:
             return
         story.extend(heading(title))
@@ -186,7 +198,7 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
                 label = variables[row_index].get("label") or variables[row_index].get("code")
             else:
                 label = f"R{row_index + 1}"
-            rows.append([label, *[_format_value(value) for value in row]])
+            rows.append([label, *[formatter(value) for value in row]])
         story.append(table([header, *rows]))
 
     def add_crosstab(story, crosstab):
@@ -220,7 +232,7 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
                 ["dataset_size", result.get("dataset_size")],
             ]))
             add_matrix_table(story, "Correlation matrix", result.get("matrix") or [], result.get("variables") or [])
-            add_matrix_table(story, "P-values", result.get("p_values") or [], result.get("variables") or [])
+            add_matrix_table(story, "P-values", result.get("p_values") or [], result.get("variables") or [], _format_p_value)
         elif section_type == "crosstab":
             add_crosstab(story, result.get("crosstab") or {})
         elif section_type == "chi_square":
@@ -228,7 +240,7 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
             chi = result.get("chi_square") or {}
             story.append(key_value_table([
                 ["chi2", chi.get("chi2")],
-                ["p_value", chi.get("p_value")],
+                ["p_value", _format_p_value(chi.get("p_value"))],
                 ["dof", chi.get("dof")],
             ]))
             add_matrix_table(story, "Expected values", chi.get("expected") or [])
