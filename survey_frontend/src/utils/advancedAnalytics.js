@@ -47,7 +47,11 @@ export function isQuestionSupportedForAnalysis(question, analysisType, role = "v
     if (role === "target") {
       return ["scale", "number"].includes(question.qtype);
     }
-    return ["scale", "number", "yesno", "single", "dropdown", "multi", "ranking", "matrix_single"].includes(question.qtype);
+    return ["scale", "number", "yesno", "single", "dropdown", "multi", "ranking", "matrix_single", "matrix_multi"].includes(question.qtype);
+  }
+
+  if (analysisType === "factor_analysis") {
+    return ["scale", "number", "yesno", "single", "dropdown", "ranking", "matrix_single"].includes(question.qtype);
   }
 
   return false;
@@ -67,7 +71,7 @@ export function getDefaultVariableSpec(question, analysisType, role = "variable"
   }
 
   if (["single", "dropdown"].includes(question.qtype)) {
-    if (analysisType === "correlation") {
+    if (analysisType === "correlation" || analysisType === "factor_analysis") {
       return { question_id: question.id, encoding: "ordinal", measure: "ordinal" };
     }
 
@@ -90,6 +94,10 @@ export function getDefaultVariableSpec(question, analysisType, role = "variable"
 
   if (question.qtype === "matrix_single") {
     return { question_id: question.id, encoding: "matrix_ordinal", measure: "ordinal" };
+  }
+
+  if (question.qtype === "matrix_multi" && analysisType === "regression" && role === "feature") {
+    return { question_id: question.id, encoding: "matrix_multi_binary", measure: "binary" };
   }
 
   return null;
@@ -166,6 +174,23 @@ export function buildSectionPayload(surveyId, section, questionsById) {
         return getSpec(question, "regression", "feature", "Факторы");
       }),
       include_intercept: section.include_intercept ?? true,
+    };
+  }
+
+  if (section.type === "factor_analysis") {
+    if ((section.questionIds || []).length < 3) {
+      throw new Error("Для факторного анализа выберите минимум три вопроса.");
+    }
+
+    return {
+      survey_id: Number(surveyId),
+      variables: section.questionIds.map((questionId) => {
+        const question = getQuestion(questionsById, questionId, "Переменные");
+        return getSpec(question, "factor_analysis", "variable", "Переменные");
+      }),
+      n_factors: section.n_factors || 2,
+      rotation: section.rotation || "varimax",
+      standardize: section.standardize ?? true,
     };
   }
 

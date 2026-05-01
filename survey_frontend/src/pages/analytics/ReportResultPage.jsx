@@ -26,12 +26,18 @@ const SECTION_LABELS = {
   crosstab: "Таблица сопряжённости",
   chi_square: "χ²-критерий",
   regression: "Линейная регрессия",
+  factor_analysis: "Факторный анализ",
 };
 
 function formatNumber(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   if (typeof value !== "number") return String(value);
   return Number.isInteger(value) ? String(value) : value.toFixed(4);
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "вЂ”";
+  return `${(Number(value) * 100).toFixed(2)}%`;
 }
 
 function formatDate(value) {
@@ -237,12 +243,14 @@ function renderChiSquareSection(section) {
 
 function renderRegressionSection(section) {
   const result = section.result;
+  const featureLabels = (result?.features || []).map(code => getVariableLabel(result, code));
 
   return (
     <Stack spacing={2}>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
         <Chip label={`Target: ${getVariableLabel(result, result?.target)}`} />
         <Chip label={`n: ${formatNumber(result?.n)}`} />
+        <Chip label={`Features: ${featureLabels.length}`} />
         <Chip label={`R²: ${formatNumber(result?.r2)}`} />
         <Chip label={`Adjusted R²: ${formatNumber(result?.adjusted_r2)}`} />
       </Stack>
@@ -273,6 +281,108 @@ function renderRegressionSection(section) {
   );
 }
 
+function renderFactorAnalysisSection(section) {
+  const result = section.result || {};
+  const explainedVariance = result.explained_variance || [];
+  const loadings = result.loadings || [];
+  const eigenvalues = result.eigenvalues || [];
+  const factorNames = explainedVariance.map(item => item.factor);
+
+  return (
+    <Stack spacing={3}>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Chip label={`Method: ${result.method || "вЂ”"}`} />
+        <Chip label={`n: ${formatNumber(result.n)}`} />
+        <Chip label={`Variables: ${formatNumber(result.n_variables)}`} />
+        <Chip label={`Factors: ${formatNumber(result.n_factors)}`} />
+        <Chip label={`Rotation: ${result.rotation || "вЂ”"}`} />
+        <Chip label={`Cumulative: ${formatPercent(result.cumulative_explained_variance)}`} />
+      </Stack>
+
+      {(result.warnings || []).map((warning) => (
+        <Alert key={warning} severity="warning">{warning}</Alert>
+      ))}
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Explained variance
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Factor</TableCell>
+              <TableCell align="right">Value</TableCell>
+              <TableCell align="right">Percent</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {explainedVariance.map((item) => (
+              <TableRow key={item.factor}>
+                <TableCell>{item.factor}</TableCell>
+                <TableCell align="right">{formatNumber(item.value)}</TableCell>
+                <TableCell align="right">{formatPercent(item.value)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Loadings
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Variable</TableCell>
+              <TableCell align="right">Communality</TableCell>
+              {factorNames.map((factor) => (
+                <TableCell key={factor} align="right">{factor}</TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loadings.map((item) => {
+              const factorsByName = new Map((item.factors || []).map(factor => [factor.factor, factor.loading]));
+              return (
+                <TableRow key={item.variable}>
+                  <TableCell>{item.label || item.variable}</TableCell>
+                  <TableCell align="right">{formatNumber(item.communality)}</TableCell>
+                  {factorNames.map((factor) => (
+                    <TableCell key={factor} align="right">{formatNumber(factorsByName.get(factor))}</TableCell>
+                  ))}
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </Box>
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Eigenvalues
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Component</TableCell>
+              <TableCell align="right">Eigenvalue</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {eigenvalues.map((value, index) => (
+              <TableRow key={index}>
+                <TableCell>Component {index + 1}</TableCell>
+                <TableCell align="right">{formatNumber(value)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+    </Stack>
+  );
+}
+
 function renderSection(section) {
   if (section.error) {
     return <Alert severity="error">{section.error}</Alert>;
@@ -282,6 +392,7 @@ function renderSection(section) {
   if (section.type === "crosstab") return renderCrosstabSection(section);
   if (section.type === "chi_square") return renderChiSquareSection(section);
   if (section.type === "regression") return renderRegressionSection(section);
+  if (section.type === "factor_analysis") return renderFactorAnalysisSection(section);
 
   return <Typography color="text.secondary">Неизвестный тип секции.</Typography>;
 }

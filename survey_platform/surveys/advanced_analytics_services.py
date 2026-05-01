@@ -3,6 +3,7 @@ from .advanced_analytics_methods import (
     compute_chi_square,
     compute_correlation_matrix,
     compute_crosstab,
+    compute_factor_analysis,
     compute_linear_regression,
 )
 
@@ -75,6 +76,8 @@ def run_chi_square_analysis(payload: dict) -> dict:
 
 def run_regression_analysis(payload: dict) -> dict:
     survey_id = payload["survey_id"]
+    if payload["target"].get("encoding") == "matrix_multi_binary":
+        raise ValueError("matrix_multi can be used only as a regression feature, not as a target.")
     specs = [payload["target"], *payload["features"]]
     dataset = build_analysis_dataset(survey_id, specs)
 
@@ -108,3 +111,31 @@ def run_regression_analysis(payload: dict) -> dict:
     result["variables_by_code"] = variables_meta
     
     return _with_metadata(survey_id, "regression", dataset, result)
+
+
+def run_factor_analysis(payload: dict) -> dict:
+    survey_id = payload["survey_id"]
+    variable_specs = payload["variables"]
+    unsupported_encodings = {"one_hot", "matrix_multi_binary"}
+    invalid_specs = [
+        spec.get("encoding")
+        for spec in variable_specs
+        if spec.get("encoding") in unsupported_encodings
+    ]
+    if invalid_specs:
+        raise ValueError("Factor analysis does not support one_hot or matrix_multi encodings in MVP.")
+
+    dataset = build_analysis_dataset(survey_id, variable_specs)
+    if len(dataset.variables) < 3:
+        raise ValueError("Factor analysis requires at least three expanded variables.")
+    if payload.get("n_factors", 2) >= len(dataset.variables):
+        raise ValueError("n_factors must be less than number of expanded variables.")
+
+    result = compute_factor_analysis(
+        dataset.rows,
+        dataset.variables,
+        n_factors=payload.get("n_factors", 2),
+        rotation=payload.get("rotation", "varimax"),
+        standardize=payload.get("standardize", True),
+    )
+    return _with_metadata(survey_id, "factor_analysis", dataset, result)

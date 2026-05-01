@@ -114,6 +114,24 @@ def _variables_for_spec(question: Question, encoding: str, measure: str) -> list
             for row in _ordered_matrix_rows(question)
         ]
 
+    if question.qtype == Question.MATRIX_MULTI and encoding == "matrix_multi_binary":
+        rows = _ordered_matrix_rows(question)
+        columns = _ordered_matrix_columns(question)
+        if not rows or not columns:
+            return []
+        return [
+            AnalysisVariable(
+                f"q_{question.id}_row_{row.id}_col_{column.id}",
+                f"{base_label}: {row.text} -> {column.text}",
+                question.id,
+                question.qtype,
+                measure,
+                encoding,
+            )
+            for row in rows
+            for column in columns
+        ]
+
     raise _unsupported(question, encoding)
 
 
@@ -184,6 +202,22 @@ def _fill_question_values(row: dict[str, Any], question: Question, encoding: str
             row[f"q_{question.id}_row_{matrix_row.id}"] = values_by_row.get(matrix_row.id)
         return
 
+    if question.qtype == Question.MATRIX_MULTI and encoding == "matrix_multi_binary":
+        matrix_rows = _ordered_matrix_rows(question)
+        matrix_columns = _ordered_matrix_columns(question)
+        selected_cells = set()
+        if answer:
+            selected_cells = {
+                (cell.row_id, cell.column_id)
+                for cell in answer.matrix_cells.all()
+            }
+        for matrix_row in matrix_rows:
+            for matrix_column in matrix_columns:
+                row[f"q_{question.id}_row_{matrix_row.id}_col_{matrix_column.id}"] = (
+                    1 if (matrix_row.id, matrix_column.id) in selected_cells else 0
+                )
+        return
+
     raise _unsupported(question, encoding)
 
 
@@ -212,7 +246,8 @@ def build_analysis_dataset(survey_id: int, variable_specs: list[dict]) -> Analys
         .prefetch_related(
             "answers",
             "answers__selected_options",
-            "answers__matrix_cells",
+            "answers__matrix_cells__row",
+            "answers__matrix_cells__column",
             "answers__ranking_items",
         )
     )
@@ -223,7 +258,8 @@ def build_analysis_dataset(survey_id: int, variable_specs: list[dict]) -> Analys
         .select_related("question", "response")
         .prefetch_related(
             "selected_options",
-            "matrix_cells",
+            "matrix_cells__row",
+            "matrix_cells__column",
             "ranking_items",
         )
     )

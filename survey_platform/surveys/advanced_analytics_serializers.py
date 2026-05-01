@@ -8,6 +8,7 @@ ENCODING_CHOICES = (
     "one_hot",
     "rank",
     "matrix_ordinal",
+    "matrix_multi_binary",
 )
 
 MEASURE_CHOICES = (
@@ -58,3 +59,23 @@ class RegressionAnalysisSer(serializers.Serializer):
         if len(value) < 1:
             raise serializers.ValidationError("Regression requires at least one feature.")
         return value
+
+
+class FactorAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    variables = AdvancedVariableSer(many=True, allow_empty=False)
+    n_factors = serializers.IntegerField(min_value=1, required=False, default=2)
+    rotation = serializers.ChoiceField(choices=("none", "varimax"), required=False, default="varimax")
+    standardize = serializers.BooleanField(default=True)
+
+    def validate_variables(self, value):
+        if len(value) < 3:
+            raise serializers.ValidationError("Factor analysis requires at least three variables.")
+        return value
+
+    def validate(self, attrs):
+        variables = attrs.get("variables", [])
+        n_factors = attrs.get("n_factors", 2)
+        if n_factors >= len(variables):
+            raise serializers.ValidationError("n_factors must be less than number of variables.")
+        return attrs

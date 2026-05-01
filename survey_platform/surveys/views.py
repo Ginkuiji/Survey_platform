@@ -39,12 +39,14 @@ from .advanced_analytics_serializers import (
     ChiSquareAnalysisSer,
     CorrelationAnalysisSer,
     CrosstabAnalysisSer,
+    FactorAnalysisSer,
     RegressionAnalysisSer,
 )
 from .advanced_analytics_services import (
     run_chi_square_analysis,
     run_correlation_analysis,
     run_crosstab_analysis,
+    run_factor_analysis,
     run_regression_analysis,
 )
 from .pdf_export import build_analytics_pdf
@@ -576,6 +578,10 @@ class AdvancedAnalyticsViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="regression")
     def regression(self, request):
         return self._run(request, RegressionAnalysisSer, run_regression_analysis)
+
+    @action(detail=False, methods=["post"], url_path="factor-analysis")
+    def factor_analysis(self, request):
+        return self._run(request, FactorAnalysisSer, run_factor_analysis)
 
 
 class AnalyticsExportViewSet(viewsets.ViewSet):

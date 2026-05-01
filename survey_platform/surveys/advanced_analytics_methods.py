@@ -284,3 +284,126 @@ def compute_linear_regression(rows, target_code, feature_codes, include_intercep
         "adjusted_r2": float(adjusted_r2) if adjusted_r2 is not None else None,
         "n": n,
     }
+
+
+def _complete_factor_cases(rows, variables):
+    matrix = []
+    codes = [variable.code for variable in variables]
+    for row in rows:
+        values = [row.get(code) for code in codes]
+        if all(_is_numeric(value) for value in values):
+            matrix.append([_as_float(value) for value in values])
+    return matrix
+
+
+def _varimax(loadings, gamma=1.0, q=20, tol=1e-6):
+    p, k = loadings.shape
+    rotation = np.eye(k)
+    previous = 0
+    for _ in range(q):
+        rotated = loadings @ rotation
+        u, singular_values, vh = np.linalg.svd(
+            loadings.T @ (
+                rotated ** 3
+                - (gamma / p) * rotated @ np.diag(np.diag(rotated.T @ rotated))
+            )
+        )
+        rotation = u @ vh
+        current = np.sum(singular_values)
+        if previous and current < previous * (1 + tol):
+            break
+        previous = current
+    return loadings @ rotation
+
+
+def compute_factor_analysis(rows, variables, n_factors=2, rotation="varimax", standardize=True) -> dict:
+    if np is None:
+        raise ValueError("Factor analysis requires numpy to be installed.")
+    if rotation not in ("none", "varimax"):
+        raise ValueError("Factor analysis rotation must be 'none' or 'varimax'.")
+
+    p = len(variables)
+    if p < 3:
+        raise ValueError("Factor analysis requires at least three variables.")
+    if n_factors < 1:
+        raise ValueError("n_factors must be at least 1.")
+    if n_factors >= p:
+        raise ValueError("n_factors must be less than number of variables.")
+
+    complete_cases = _complete_factor_cases(rows, variables)
+    n = len(complete_cases)
+    if n <= p:
+        raise ValueError("Not enough complete cases for factor analysis.")
+
+    x_matrix = np.array(complete_cases, dtype=float)
+    warnings = []
+    if n < max(20, 5 * p):
+        warnings.append("Small sample size for factor analysis; interpret results cautiously.")
+
+    means = np.mean(x_matrix, axis=0)
+    standard_deviations = np.std(x_matrix, axis=0, ddof=1)
+    zero_variance_indexes = np.where(standard_deviations == 0)[0]
+    if len(zero_variance_indexes):
+        labels = [variables[index].label for index in zero_variance_indexes]
+        raise ValueError(f"Factor analysis cannot use variables with zero variance: {', '.join(labels)}.")
+
+    if standardize:
+        x_matrix = (x_matrix - means) / standard_deviations
+
+    correlation_matrix = np.corrcoef(x_matrix, rowvar=False)
+    if not np.all(np.isfinite(correlation_matrix)):
+        raise ValueError("Factor analysis correlation matrix contains non-finite values.")
+
+    eigenvalues, eigenvectors = np.linalg.eigh(correlation_matrix)
+    order = np.argsort(eigenvalues)[::-1]
+    eigenvalues = eigenvalues[order]
+    eigenvectors = eigenvectors[:, order]
+    eigenvalues = np.maximum(eigenvalues, 0)
+
+    selected_eigenvalues = eigenvalues[:n_factors]
+    loadings = eigenvectors[:, :n_factors] * np.sqrt(selected_eigenvalues)
+    if rotation == "varimax" and n_factors > 1:
+        try:
+            loadings = _varimax(loadings)
+        except (np.linalg.LinAlgError, ValueError):
+            warnings.append("Varimax rotation failed; unrotated loadings returned.")
+
+    total_eigenvalue = float(np.sum(eigenvalues))
+    explained = [
+        float(value / total_eigenvalue) if total_eigenvalue else 0
+        for value in selected_eigenvalues
+    ]
+    communalities = np.sum(loadings ** 2, axis=1)
+
+    return {
+        "method": "pca_factor_extraction",
+        "n": n,
+        "n_variables": p,
+        "n_factors": n_factors,
+        "rotation": rotation,
+        "standardize": standardize,
+        "variables": [
+            {"code": variable.code, "label": variable.label}
+            for variable in variables
+        ],
+        "eigenvalues": [float(value) for value in eigenvalues],
+        "explained_variance": [
+            {"factor": f"Factor {index + 1}", "value": value}
+            for index, value in enumerate(explained)
+        ],
+        "cumulative_explained_variance": float(sum(explained)),
+        "loadings": [
+            {
+                "variable": variable.code,
+                "label": variable.label,
+                "factors": [
+                    {"factor": f"Factor {index + 1}", "loading": float(loadings[row_index, index])}
+                    for index in range(n_factors)
+                ],
+                "communality": float(communalities[row_index]),
+            }
+            for row_index, variable in enumerate(variables)
+        ],
+        "correlation_matrix": correlation_matrix.tolist(),
+        "warnings": warnings,
+    }

@@ -43,6 +43,15 @@ def _get_report_result(analysis_report) -> dict:
     return result if isinstance(result, dict) else {}
 
 
+def _variable_label(result: dict, code: str) -> str:
+    if not code:
+        return "вЂ”"
+    if code == "intercept":
+        return "РЎРІРѕР±РѕРґРЅС‹Р№ С‡Р»РµРЅ"
+    variable = (result.get("variables_by_code") or {}).get(code) or {}
+    return variable.get("label") or code
+
+
 def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
     try:
         from reportlab.lib import colors
@@ -161,7 +170,7 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
             rows.extend([[f"Ответ {index + 1}", text] for index, text in enumerate(texts[:10])])
             story.append(Spacer(1, 0.15 * cm))
             story.append(key_value_table(rows))
-        elif qtype in ("matrix_single", "matrix_multi"):
+        elif qtype == "matrix_single":
             matrix_rows = result.get("rows") or []
             if matrix_rows and matrix_rows[0].get("columns"):
                 header = ["Row", *[column.get("text") for column in matrix_rows[0].get("columns", [])]]
@@ -171,6 +180,60 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
                 ]
                 story.append(Spacer(1, 0.15 * cm))
                 story.append(table([header, *body]))
+        elif qtype == "matrix_multi":
+            matrix_rows = result.get("rows") or []
+            matrix_columns = result.get("columns") or []
+            cells_by_key = {
+                (cell.get("row_id"), cell.get("column_id")): cell
+                for cell in result.get("cells") or []
+            }
+            if matrix_rows and matrix_columns:
+                header = ["Row", *[column.get("text") for column in matrix_columns]]
+                body = []
+                for matrix_row in matrix_rows:
+                    body.append([
+                        matrix_row.get("text"),
+                        *[
+                            (
+                                f"{cell.get('count', 0)}\n"
+                                f"{_format_value(cell.get('percent_answered'))}% answered\n"
+                                f"{_format_value(cell.get('percent_total'))}% total"
+                            )
+                            for column in matrix_columns
+                            for cell in [cells_by_key.get((matrix_row.get("id"), column.get("id")), {})]
+                        ],
+                    ])
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table([header, *body]))
+            row_summary = result.get("row_summary") or []
+            if row_summary:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table(
+                    [["Row", "Selected total", "Respondents", "% respondents", "Avg selected"], *[
+                        [
+                            item.get("row_text"),
+                            item.get("selected_total"),
+                            item.get("respondent_count"),
+                            item.get("respondent_share"),
+                            item.get("avg_selected_per_respondent"),
+                        ]
+                        for item in row_summary
+                    ]],
+                ))
+            column_summary = result.get("column_summary") or []
+            if column_summary:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table(
+                    [["Column", "Selected total", "Respondents", "% respondents"], *[
+                        [
+                            item.get("column_text"),
+                            item.get("selected_total"),
+                            item.get("respondent_count"),
+                            item.get("respondent_share"),
+                        ]
+                        for item in column_summary
+                    ]],
+                ))
         elif qtype == "ranking":
             options = result.get("options") or []
             if options:
@@ -244,17 +307,67 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
                 ["dof", chi.get("dof")],
             ]))
             add_matrix_table(story, "Expected values", chi.get("expected") or [])
+        elif section_type == "factor_analysis":
+            story.append(key_value_table([
+                ["method", result.get("method")],
+                ["n", result.get("n")],
+                ["n_variables", result.get("n_variables")],
+                ["n_factors", result.get("n_factors")],
+                ["rotation", result.get("rotation")],
+                ["standardize", result.get("standardize")],
+                ["cumulative_explained_variance", result.get("cumulative_explained_variance")],
+            ]))
+            warnings = result.get("warnings") or []
+            if warnings:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table([["Warnings"], *[[warning] for warning in warnings]], [16 * cm]))
+            explained = result.get("explained_variance") or []
+            if explained:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table(
+                    [["Factor", "Value", "Percent"], *[
+                        [item.get("factor"), item.get("value"), f"{float(item.get('value') or 0) * 100:.2f}%"]
+                        for item in explained
+                    ]],
+                    [6 * cm, 4 * cm, 4 * cm],
+                ))
+            loadings = result.get("loadings") or []
+            factors = [item.get("factor") for item in explained]
+            if loadings and factors:
+                story.append(Spacer(1, 0.15 * cm))
+                rows = [["Variable", "Communality", *factors]]
+                for item in loadings:
+                    factors_by_name = {
+                        factor.get("factor"): factor.get("loading")
+                        for factor in item.get("factors") or []
+                    }
+                    rows.append([
+                        item.get("label") or item.get("variable"),
+                        item.get("communality"),
+                        *[factors_by_name.get(factor) for factor in factors],
+                    ])
+                story.append(table(rows))
+            eigenvalues = result.get("eigenvalues") or []
+            if eigenvalues:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table(
+                    [["Component", "Eigenvalue"], *[
+                        [f"Component {index}", value]
+                        for index, value in enumerate(eigenvalues, start=1)
+                    ]],
+                    [8 * cm, 5 * cm],
+                ))
         elif section_type == "regression":
             story.append(key_value_table([
-                ["target", result.get("target")],
-                ["features", ", ".join(result.get("features") or [])],
+                ["target", _variable_label(result, result.get("target"))],
+                ["features", ", ".join(_variable_label(result, code) for code in (result.get("features") or []))],
                 ["n", result.get("n")],
                 ["r2", result.get("r2")],
                 ["adjusted_r2", result.get("adjusted_r2")],
             ]))
             coefficients = result.get("coefficients") or []
             if coefficients:
-                story.append(table([["Name", "Value"], *[[item.get("name"), item.get("value")] for item in coefficients]], [9 * cm, 5 * cm]))
+                story.append(table([["Name", "Value"], *[[_variable_label(result, item.get("name")), item.get("value")] for item in coefficients]], [9 * cm, 5 * cm]))
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1.4 * cm, leftMargin=1.4 * cm, topMargin=1.4 * cm, bottomMargin=1.4 * cm)

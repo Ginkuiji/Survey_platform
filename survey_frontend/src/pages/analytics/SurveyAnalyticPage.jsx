@@ -475,6 +475,122 @@ function MatrixAnalytics({ question }) {
   );
 }
 
+function MatrixMultiAnalytics({ question }) {
+  const rows = question.result?.rows ?? [];
+  const columns = question.result?.columns ?? [];
+  const cells = question.result?.cells ?? [];
+  const rowSummary = question.result?.row_summary ?? [];
+  const columnSummary = question.result?.column_summary ?? [];
+  const cellsByKey = new Map(cells.map((cell) => [`${cell.row_id}:${cell.column_id}`, cell]));
+  const wrapCellSx = { whiteSpace: "normal", overflowWrap: "anywhere", minWidth: 140 };
+
+  if (!rows.length || !columns.length) {
+    return (
+      <Typography color="text.secondary" variant="body2">
+        Р”Р°РЅРЅС‹С… РїРѕ РјР°С‚СЂРёС†Рµ РїРѕРєР° РЅРµС‚.
+      </Typography>
+    );
+  }
+
+  return (
+    <Stack spacing={3}>
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell sx={wrapCellSx}>Row</TableCell>
+              {columns.map(column => (
+                <TableCell key={column.id} align="center" sx={wrapCellSx}>
+                  {column.text}
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map(row => (
+              <TableRow key={row.id}>
+                <TableCell component="th" scope="row" sx={wrapCellSx}>
+                  {row.text}
+                </TableCell>
+                {columns.map(column => {
+                  const cell = cellsByKey.get(`${row.id}:${column.id}`) || {};
+                  return (
+                    <TableCell key={column.id} align="center" sx={wrapCellSx}>
+                      <Typography>{cell.count ?? 0}</Typography>
+                      <Typography color="text.secondary" variant="caption" component="div">
+                        {formatNumber(cell.percent_answered ?? 0)}%
+                      </Typography>
+                      <Typography color="text.secondary" variant="caption" component="div">
+                        {formatNumber(cell.percent_total ?? 0)}%
+                      </Typography>
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+
+      <Divider />
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Row Summary
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell sx={wrapCellSx}>Row</TableCell>
+              <TableCell align="right">Selected total</TableCell>
+              <TableCell align="right">Respondents</TableCell>
+              <TableCell align="right">% respondents</TableCell>
+              <TableCell align="right">Avg selected</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rowSummary.map(row => (
+              <TableRow key={row.row_id}>
+                <TableCell sx={wrapCellSx}>{row.row_text}</TableCell>
+                <TableCell align="right">{row.selected_total ?? 0}</TableCell>
+                <TableCell align="right">{row.respondent_count ?? 0}</TableCell>
+                <TableCell align="right">{formatNumber(row.respondent_share ?? 0)}%</TableCell>
+                <TableCell align="right">{formatNumber(row.avg_selected_per_respondent ?? 0)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Column Summary
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell sx={wrapCellSx}>Column</TableCell>
+              <TableCell align="right">Selected total</TableCell>
+              <TableCell align="right">Respondents</TableCell>
+              <TableCell align="right">% respondents</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {columnSummary.map(column => (
+              <TableRow key={column.column_id}>
+                <TableCell sx={wrapCellSx}>{column.column_text}</TableCell>
+                <TableCell align="right">{column.selected_total ?? 0}</TableCell>
+                <TableCell align="right">{column.respondent_count ?? 0}</TableCell>
+                <TableCell align="right">{formatNumber(column.respondent_share ?? 0)}%</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+    </Stack>
+  );
+}
+
 function RankingAnalytics({ question }) {
   const options = question.result?.options ?? [];
 
@@ -545,8 +661,12 @@ function QuestionResult({ question }) {
     return <DateAnalytics question={question} />;
   }
 
-  if (question.qtype === "matrix_single" || question.qtype === "matrix_multi") {
+  if (question.qtype === "matrix_single") {
     return <MatrixAnalytics question={question} />;
+  }
+
+  if (question.qtype === "matrix_multi") {
+    return <MatrixMultiAnalytics question={question} />;
   }
 
   if (question.qtype === "ranking") {

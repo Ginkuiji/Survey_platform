@@ -29,6 +29,7 @@ import {
   runChiSquareAnalysis,
   runCorrelationAnalysis,
   runCrosstabAnalysis,
+  runFactorAnalysis,
   runRegressionAnalysis,
 } from "../../api/analytics";
 import {
@@ -43,6 +44,7 @@ const ANALYSIS_TYPES = [
   { value: "crosstab", label: "Таблица сопряжённости" },
   { value: "chi_square", label: "χ²-критерий" },
   { value: "regression", label: "Линейная регрессия" },
+  { value: "factor_analysis", label: "Факторный анализ" },
 ];
 
 const API_BY_TYPE = {
@@ -50,6 +52,7 @@ const API_BY_TYPE = {
   crosstab: runCrosstabAnalysis,
   chi_square: runChiSquareAnalysis,
   regression: runRegressionAnalysis,
+  factor_analysis: runFactorAnalysis,
 };
 
 function createSection(type) {
@@ -65,6 +68,18 @@ function createSection(type) {
 
   if (type === "chi_square") {
     return { id, type, title: "χ²-критерий", rowQuestionId: "", columnQuestionId: "" };
+  }
+
+  if (type === "factor_analysis") {
+    return {
+      id,
+      type,
+      title: "Факторный анализ",
+      questionIds: [],
+      n_factors: 2,
+      rotation: "varimax",
+      standardize: true,
+    };
   }
 
   return {
@@ -94,6 +109,13 @@ function QuestionOption({ question }) {
         ({getQuestionTypeLabel(question.qtype)})
       </Typography>
     </>
+  );
+}
+
+function isRegressionFeatureQuestion(question, targetQuestionId) {
+  return (
+    isQuestionSupportedForAnalysis(question, "regression", "feature")
+    && Number(question.id) !== Number(targetQuestionId)
   );
 }
 
@@ -174,11 +196,87 @@ function SectionFields({ section, questions, updateSection }) {
     );
   }
 
+  if (section.type === "factor_analysis") {
+    const availableQuestions = questions.filter((question) => isQuestionSupportedForAnalysis(question, "factor_analysis"));
+    const maxFactors = Math.max(1, Math.min(5, (section.questionIds?.length || 0) - 1));
+    const factorOptions = Array.from({ length: maxFactors }, (_, index) => index + 1);
+    const selectedFactors = Math.min(section.n_factors || 2, maxFactors);
+
+    return (
+      <Stack spacing={2}>
+        {(section.questionIds || []).length < 3 && (
+          <Alert severity="info">Для факторного анализа требуется минимум три переменные.</Alert>
+        )}
+
+        <FormControl fullWidth>
+          <InputLabel>Переменные</InputLabel>
+          <Select
+            multiple
+            label="Переменные"
+            value={section.questionIds}
+            renderValue={(selected) => `${selected.length} выбрано`}
+            onChange={(event) => {
+              const questionIds = event.target.value;
+              const nextMaxFactors = Math.max(1, Math.min(5, questionIds.length - 1));
+              updateSection(section.id, {
+                questionIds,
+                n_factors: Math.min(section.n_factors || 2, nextMaxFactors),
+              });
+            }}
+          >
+            {availableQuestions.map((question) => (
+              <MenuItem key={question.id} value={question.id}>
+                <Checkbox checked={section.questionIds.includes(question.id)} />
+                <ListItemText primary={<QuestionOption question={question} />} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <FormControl fullWidth>
+            <InputLabel>Количество факторов</InputLabel>
+            <Select
+              label="Количество факторов"
+              value={selectedFactors}
+              onChange={(event) => updateSection(section.id, { n_factors: event.target.value })}
+            >
+              {factorOptions.map((value) => (
+                <MenuItem key={value} value={value}>
+                  {value}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl fullWidth>
+            <InputLabel>Rotation</InputLabel>
+            <Select
+              label="Rotation"
+              value={section.rotation}
+              onChange={(event) => updateSection(section.id, { rotation: event.target.value })}
+            >
+              <MenuItem value="varimax">varimax</MenuItem>
+              <MenuItem value="none">none</MenuItem>
+            </Select>
+          </FormControl>
+        </Stack>
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={section.standardize}
+              onChange={(event) => updateSection(section.id, { standardize: event.target.checked })}
+            />
+          }
+          label="Стандартизировать переменные"
+        />
+      </Stack>
+    );
+  }
+
   const targets = questions.filter((question) => isQuestionSupportedForAnalysis(question, "regression", "target"));
-  const features = questions.filter((question) => (
-    isQuestionSupportedForAnalysis(question, "regression", "feature")
-    && Number(question.id) !== Number(section.targetQuestionId)
-  ));
+  const features = questions.filter((question) => isRegressionFeatureQuestion(question, section.targetQuestionId));
 
   return (
     <Stack spacing={2}>

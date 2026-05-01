@@ -3,7 +3,7 @@ from collections import Counter
 from statistics import median
 from typing import Any, Callable, Dict, Iterable, Optional
 
-from .models import AnalyticResults, Answer, Option, Question, QuestionCondition, Response, Survey, SurveyPage
+from .models import AnalyticResults, Answer, MatrixAnswerCell, MatrixColumn, MatrixRow, Option, Question, QuestionCondition, Response, Survey, SurveyPage
 
 
 # ---- Data access layer ----------------------------------------------------
@@ -478,6 +478,114 @@ def analyze_matrix(question: Question, answers, base: Dict[str, int]) -> Dict[st
     }
 
 
+def matrix_multi_distribution(question: Question, responses, shown_response_ids=None) -> Dict[str, Any]:
+    response_ids = [response.id for response in responses]
+    answers = list(get_question_answers(question.id, response_ids))
+    if shown_response_ids is None:
+        shown_response_ids = response_ids
+    base = build_question_base(question, responses, answers, shown_response_ids)
+    rows = list(MatrixRow.objects.filter(question=question).order_by("order", "id"))
+    columns = list(MatrixColumn.objects.filter(question=question).order_by("order", "id"))
+
+    row_payloads = [
+        {"id": row.id, "text": row.text, "value": row.value}
+        for row in rows
+    ]
+    column_payloads = [
+        {"id": column.id, "text": column.text, "value": column.value}
+        for column in columns
+    ]
+
+    if not rows or not columns:
+        return {
+            "type": Question.MATRIX_MULTI,
+            "base": base,
+            "rows": row_payloads,
+            "columns": column_payloads,
+            "cells": [],
+            "row_summary": [],
+            "column_summary": [],
+        }
+
+    row_by_id = {row.id: row for row in rows}
+    column_by_id = {column.id: column for column in columns}
+    answer_ids = [answer.id for answer in answers]
+    cells_qs = (
+        MatrixAnswerCell.objects
+        .filter(answer_id__in=answer_ids, row__question=question, column__question=question)
+        .select_related("answer", "row", "column")
+    )
+
+    cell_counts = Counter()
+    row_selected_totals = Counter()
+    column_selected_totals = Counter()
+    row_respondents: Dict[int, set[int]] = {row.id: set() for row in rows}
+    column_respondents: Dict[int, set[int]] = {column.id: set() for column in columns}
+    respondent_cells = set()
+
+    for cell in cells_qs:
+        if cell.row_id not in row_by_id or cell.column_id not in column_by_id:
+            continue
+        response_id = cell.answer.response_id
+        key = (response_id, cell.row_id, cell.column_id)
+        if key in respondent_cells:
+            continue
+        respondent_cells.add(key)
+        cell_counts[(cell.row_id, cell.column_id)] += 1
+        row_selected_totals[cell.row_id] += 1
+        column_selected_totals[cell.column_id] += 1
+        row_respondents[cell.row_id].add(response_id)
+        column_respondents[cell.column_id].add(response_id)
+
+    cells = []
+    for row in rows:
+        for column in columns:
+            count = cell_counts[(row.id, column.id)]
+            cells.append({
+                "row_id": row.id,
+                "row_text": row.text,
+                "column_id": column.id,
+                "column_text": column.text,
+                "count": count,
+                "percent_answered": percent(count, base["answered_count"]),
+                "percent_total": percent(count, base["total_completed"]),
+            })
+
+    row_summary = []
+    for row in rows:
+        respondent_count = len(row_respondents[row.id])
+        selected_total = row_selected_totals[row.id]
+        row_summary.append({
+            "row_id": row.id,
+            "row_text": row.text,
+            "selected_total": selected_total,
+            "respondent_count": respondent_count,
+            "respondent_share": percent(respondent_count, base["answered_count"]),
+            "avg_selected_per_respondent": round(selected_total / respondent_count, 2) if respondent_count else 0,
+        })
+
+    column_summary = []
+    for column in columns:
+        respondent_count = len(column_respondents[column.id])
+        column_summary.append({
+            "column_id": column.id,
+            "column_text": column.text,
+            "selected_total": column_selected_totals[column.id],
+            "respondent_count": respondent_count,
+            "respondent_share": percent(respondent_count, base["answered_count"]),
+        })
+
+    return {
+        "type": Question.MATRIX_MULTI,
+        "base": base,
+        "rows": row_payloads,
+        "columns": column_payloads,
+        "cells": cells,
+        "row_summary": row_summary,
+        "column_summary": column_summary,
+    }
+
+
 def analyze_ranking(question: Question, answers, base: Dict[str, int]) -> Dict[str, Any]:
     ranks_by_option: Dict[int, list[int]] = {option.id: [] for option in question.options.all()}
     rank_distribution: Dict[int, Counter] = {
@@ -530,7 +638,6 @@ QUESTION_ANALYZERS: Dict[str, Callable[[Question, Any, Dict[str, int]], Dict[str
     Question.NUMBER: analyze_scale,
     Question.DATE: analyze_text,
     Question.MATRIX_SINGLE: analyze_matrix,
-    Question.MATRIX_MULTI: analyze_matrix,
     Question.RANKING: analyze_ranking,
 }
 
@@ -608,13 +715,18 @@ def build_question_result(question: Question, completed_normal_responses, shown_
     completed_response_ids = [response.id for response in completed_normal_responses]
     answers = list(get_question_answers(question.id, completed_response_ids))
     base = build_question_base(question, completed_normal_responses, answers, shown_response_ids)
+    result = (
+        matrix_multi_distribution(question, completed_normal_responses, shown_response_ids)
+        if question.qtype == Question.MATRIX_MULTI
+        else analyze_question(question, answers, base)
+    )
 
     return {
         "id": question.id,
         "text": question.text,
         "qtype": question.qtype,
         "base": base,
-        "result": analyze_question(question, answers, base),
+        "result": result,
     }
 
 
@@ -626,7 +738,8 @@ def analyze_survey(survey_id: int, save: bool = False) -> Dict[str, Any]:
         .prefetch_related(
             "answers",
             "answers__selected_options",
-            "answers__matrix_cells",
+            "answers__matrix_cells__row",
+            "answers__matrix_cells__column",
             "answers__ranking_items",
         )
     )
@@ -683,7 +796,8 @@ def question_distribution(question_id: int, save: bool = False) -> Dict[str, Any
         .prefetch_related(
             "answers",
             "answers__selected_options",
-            "answers__matrix_cells",
+            "answers__matrix_cells__row",
+            "answers__matrix_cells__column",
             "answers__ranking_items",
         )
     )

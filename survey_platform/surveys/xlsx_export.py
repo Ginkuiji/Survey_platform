@@ -150,7 +150,7 @@ def _add_questions_sheet(ws, survey, analytic_data):
                 ["№", "Ответ"],
                 [[index + 1, text] for index, text in enumerate((result.get("text_answers") or [])[:20])],
             )
-        elif qtype in ("matrix_single", "matrix_multi"):
+        elif qtype == "matrix_single":
             rows = []
             for matrix_row in result.get("rows") or []:
                 for column in matrix_row.get("columns") or []:
@@ -162,6 +162,56 @@ def _add_questions_sheet(ws, survey, analytic_data):
                         format_number(column.get("percent_total")),
                     ])
             _append_table(ws, ["Строка", "Колонка", "Количество", "% от ответивших", "% от завершивших"], rows)
+        elif qtype == "matrix_multi":
+            append_section_title(ws, "Matrix")
+            matrix_rows = result.get("rows") or []
+            matrix_columns = result.get("columns") or []
+            cells_by_key = {
+                (cell.get("row_id"), cell.get("column_id")): cell
+                for cell in result.get("cells") or []
+            }
+            ws.append(["Row"] + [column.get("text") for column in matrix_columns])
+            _style_header(ws, ws.max_row)
+            for matrix_row in matrix_rows:
+                ws.append([
+                    matrix_row.get("text"),
+                    *[
+                        (
+                            f"{cell.get('count', 0)} | "
+                            f"{format_number(cell.get('percent_answered'))}% answered | "
+                            f"{format_number(cell.get('percent_total'))}% total"
+                        )
+                        for column in matrix_columns
+                        for cell in [cells_by_key.get((matrix_row.get("id"), column.get("id")), {})]
+                    ],
+                ])
+            _append_table(
+                ws,
+                ["Row Summary", "Selected total", "Respondents", "% respondents", "Avg selected"],
+                [
+                    [
+                        item.get("row_text"),
+                        item.get("selected_total"),
+                        item.get("respondent_count"),
+                        format_number(item.get("respondent_share")),
+                        format_number(item.get("avg_selected_per_respondent")),
+                    ]
+                    for item in result.get("row_summary") or []
+                ],
+            )
+            _append_table(
+                ws,
+                ["Column Summary", "Selected total", "Respondents", "% respondents"],
+                [
+                    [
+                        item.get("column_text"),
+                        item.get("selected_total"),
+                        item.get("respondent_count"),
+                        format_number(item.get("respondent_share")),
+                    ]
+                    for item in result.get("column_summary") or []
+                ],
+            )
         elif qtype == "ranking":
             options = result.get("options") or []
             _append_table(
@@ -249,6 +299,46 @@ def _add_report_sheet(ws, analysis_report):
             append_key_value(ws, "dof", chi.get("dof"))
             _append_crosstab(ws, result.get("crosstab") or {})
             _append_matrix(ws, "Expected values", [], chi.get("expected") or [])
+        elif section_type == "factor_analysis":
+            append_key_value(ws, "method", result.get("method"))
+            append_key_value(ws, "n", result.get("n"))
+            append_key_value(ws, "n_variables", result.get("n_variables"))
+            append_key_value(ws, "n_factors", result.get("n_factors"))
+            append_key_value(ws, "rotation", result.get("rotation"))
+            append_key_value(ws, "standardize", result.get("standardize"))
+            append_key_value(ws, "cumulative_explained_variance", format_number(result.get("cumulative_explained_variance")))
+            _append_table(
+                ws,
+                ["Component", "Eigenvalue"],
+                [
+                    [f"Component {index}", format_number(value)]
+                    for index, value in enumerate(result.get("eigenvalues") or [], start=1)
+                ],
+            )
+            _append_table(
+                ws,
+                ["Factor", "Value", "Percent"],
+                [
+                    [item.get("factor"), format_number(item.get("value")), f"{float(item.get('value') or 0) * 100:.2f}%"]
+                    for item in result.get("explained_variance") or []
+                ],
+            )
+            factors = [item.get("factor") for item in result.get("explained_variance") or []]
+            loading_rows = []
+            for item in result.get("loadings") or []:
+                factors_by_name = {
+                    factor.get("factor"): factor.get("loading")
+                    for factor in item.get("factors") or []
+                }
+                loading_rows.append([
+                    item.get("label") or item.get("variable"),
+                    format_number(item.get("communality")),
+                    *[format_number(factors_by_name.get(factor)) for factor in factors],
+                ])
+            _append_table(ws, ["Variable", "Communality", *factors], loading_rows)
+            warnings = result.get("warnings") or []
+            if warnings:
+                _append_table(ws, ["Warnings"], [[warning] for warning in warnings])
         elif section_type == "regression":
             append_key_value(ws, "target", get_variable_label(result, result.get("target")))
             append_key_value(ws, "features", ", ".join(get_variable_label(result, code) for code in (result.get("features") or [])))

@@ -131,7 +131,7 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
             row(section, "Текстовых ответов", result.get("total_text_answers"))
             for text in (result.get("text_answers") or [])[:20]:
                 row(section, "Ответ", text)
-        elif qtype in ("matrix_single", "matrix_multi"):
+        elif qtype == "matrix_single":
             for matrix_row in result.get("rows") or []:
                 for column in matrix_row.get("columns") or []:
                     row(
@@ -146,6 +146,46 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
                         "percent_total",
                         column.get("percent_total"),
                     )
+        elif qtype == "matrix_multi":
+            for cell in result.get("cells") or []:
+                row(
+                    section,
+                    "РњР°С‚СЂРёС†Р°",
+                    cell.get("row_text"),
+                    cell.get("column_text"),
+                    "count",
+                    cell.get("count"),
+                    "percent_answered",
+                    cell.get("percent_answered"),
+                    "percent_total",
+                    cell.get("percent_total"),
+                )
+            for item in result.get("row_summary") or []:
+                row(
+                    section,
+                    "Row Summary",
+                    item.get("row_text"),
+                    "selected_total",
+                    item.get("selected_total"),
+                    "respondent_count",
+                    item.get("respondent_count"),
+                    "respondent_share",
+                    item.get("respondent_share"),
+                    "avg_selected_per_respondent",
+                    item.get("avg_selected_per_respondent"),
+                )
+            for item in result.get("column_summary") or []:
+                row(
+                    section,
+                    "Column Summary",
+                    item.get("column_text"),
+                    "selected_total",
+                    item.get("selected_total"),
+                    "respondent_count",
+                    item.get("respondent_count"),
+                    "respondent_share",
+                    item.get("respondent_share"),
+                )
         elif qtype == "ranking":
             for option in result.get("options") or []:
                 row(
@@ -237,6 +277,25 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
             row("Регрессия", title, "adjusted_r2", result.get("adjusted_r2"))
             for coefficient in result.get("coefficients") or []:
                 row("Регрессия", title, "coefficient", _variable_label(result, coefficient.get("name")), "value", coefficient.get("value"))
+
+        elif section_type == "factor_analysis":
+            row("Factor analysis", title, "method", result.get("method"))
+            row("Factor analysis", title, "n", result.get("n"))
+            row("Factor analysis", title, "n_variables", result.get("n_variables"))
+            row("Factor analysis", title, "n_factors", result.get("n_factors"))
+            row("Factor analysis", title, "rotation", result.get("rotation"))
+            row("Factor analysis", title, "standardize", result.get("standardize"))
+            row("Factor analysis", title, "cumulative_explained_variance", result.get("cumulative_explained_variance"))
+            for index, value in enumerate(result.get("eigenvalues") or [], start=1):
+                row("Factor analysis", title, "eigenvalue", f"Component {index}", value)
+            for item in result.get("explained_variance") or []:
+                row("Factor analysis", title, "explained_variance", item.get("factor"), item.get("value"))
+            for item in result.get("loadings") or []:
+                for factor in item.get("factors") or []:
+                    row("Factor analysis", title, "loading", item.get("label") or item.get("variable"), factor.get("factor"), factor.get("loading"))
+                row("Factor analysis", title, "communality", item.get("label") or item.get("variable"), item.get("communality"))
+            for warning in result.get("warnings") or []:
+                row("Factor analysis", title, "warning", warning)
 
     csv_text = output.getvalue()
     return ("\ufeff" + csv_text).encode("utf-8")

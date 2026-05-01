@@ -33,6 +33,12 @@ export const runRegressionAnalysis = (payload) =>
     body: JSON.stringify(payload),
   });
 
+export const runFactorAnalysis = (payload) =>
+  apiFetch("/analytics/advanced/factor-analysis/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
 export const fetchAnalysisReports = () =>
   apiFetch("/analytics/reports/");
 
