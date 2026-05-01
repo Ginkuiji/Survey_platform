@@ -27,6 +27,7 @@ const SECTION_LABELS = {
   chi_square: "χ²-критерий",
   regression: "Линейная регрессия",
   factor_analysis: "Факторный анализ",
+  cluster_analysis: "Кластерный анализ",
 };
 
 function formatNumber(value) {
@@ -383,6 +384,64 @@ function renderFactorAnalysisSection(section) {
   );
 }
 
+function renderClusterAnalysisSection(section) {
+  const result = section.result || {};
+  const variables = result.variables || [];
+  const clusters = result.clusters || [];
+
+  return (
+    <Stack spacing={3}>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Chip label={`Method: ${result.method || "—"}`} />
+        <Chip label={`n: ${formatNumber(result.n)}`} />
+        <Chip label={`Variables: ${formatNumber(result.n_variables)}`} />
+        <Chip label={`Clusters: ${formatNumber(result.n_clusters)}`} />
+        <Chip label={`Standardize: ${result.standardize ? "yes" : "no"}`} />
+        <Chip label={`Inertia: ${formatNumber(result.inertia)}`} />
+      </Stack>
+
+      {(result.warnings || []).map((warning) => (
+        <Alert key={warning} severity="warning">{warning}</Alert>
+      ))}
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Cluster</TableCell>
+              <TableCell align="right">Size</TableCell>
+              <TableCell align="right">Percent</TableCell>
+              {variables.map((variable) => (
+                <TableCell key={variable.code} align="right">
+                  {variable.label || variable.code}
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {clusters.map((cluster) => (
+              <TableRow key={cluster.cluster}>
+                <TableCell>{cluster.cluster}</TableCell>
+                <TableCell align="right">{formatNumber(cluster.size)}</TableCell>
+                <TableCell align="right">{formatNumber(cluster.percent)}%</TableCell>
+                {variables.map((variable) => (
+                  <TableCell key={variable.code} align="right">
+                    {formatNumber(cluster.centroid?.[variable.code])}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+
+      <Typography color="text.secondary" variant="body2">
+        Assignments are stored in the result for export/API use; this view shows cluster summary only.
+      </Typography>
+    </Stack>
+  );
+}
+
 function renderSection(section) {
   if (section.error) {
     return <Alert severity="error">{section.error}</Alert>;
@@ -393,6 +452,7 @@ function renderSection(section) {
   if (section.type === "chi_square") return renderChiSquareSection(section);
   if (section.type === "regression") return renderRegressionSection(section);
   if (section.type === "factor_analysis") return renderFactorAnalysisSection(section);
+  if (section.type === "cluster_analysis") return renderClusterAnalysisSection(section);
 
   return <Typography color="text.secondary">Неизвестный тип секции.</Typography>;
 }

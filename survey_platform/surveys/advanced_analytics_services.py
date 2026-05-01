@@ -4,6 +4,7 @@ from .advanced_analytics_methods import (
     compute_correlation_matrix,
     compute_crosstab,
     compute_factor_analysis,
+    compute_kmeans_clustering,
     compute_linear_regression,
 )
 
@@ -139,3 +140,19 @@ def run_factor_analysis(payload: dict) -> dict:
         standardize=payload.get("standardize", True),
     )
     return _with_metadata(survey_id, "factor_analysis", dataset, result)
+
+
+def run_cluster_analysis(payload: dict) -> dict:
+    survey_id = payload["survey_id"]
+    dataset = build_analysis_dataset(survey_id, payload["variables"])
+    if len(dataset.variables) < 2:
+        raise ValueError("Cluster analysis requires at least two expanded variables.")
+
+    result = compute_kmeans_clustering(
+        dataset.rows,
+        dataset.variables,
+        n_clusters=payload.get("n_clusters", 3),
+        standardize=payload.get("standardize", True),
+        max_iter=payload.get("max_iter", 300),
+    )
+    return _with_metadata(survey_id, "cluster_analysis", dataset, result)

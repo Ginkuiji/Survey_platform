@@ -79,3 +79,16 @@ class FactorAnalysisSer(serializers.Serializer):
         if n_factors >= len(variables):
             raise serializers.ValidationError("n_factors must be less than number of variables.")
         return attrs
+
+
+class ClusterAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    variables = AdvancedVariableSer(many=True, allow_empty=False)
+    n_clusters = serializers.IntegerField(min_value=2, max_value=10, required=False, default=3)
+    standardize = serializers.BooleanField(default=True)
+    max_iter = serializers.IntegerField(min_value=10, max_value=1000, required=False, default=300)
+
+    def validate_variables(self, value):
+        if len(value) < 2:
+            raise serializers.ValidationError("Cluster analysis requires at least two variables.")
+        return value

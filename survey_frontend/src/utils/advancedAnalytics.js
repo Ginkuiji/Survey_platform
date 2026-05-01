@@ -54,6 +54,10 @@ export function isQuestionSupportedForAnalysis(question, analysisType, role = "v
     return ["scale", "number", "yesno", "single", "dropdown", "ranking", "matrix_single"].includes(question.qtype);
   }
 
+  if (analysisType === "cluster_analysis") {
+    return ["scale", "number", "yesno", "single", "dropdown", "ranking", "matrix_single", "matrix_multi"].includes(question.qtype);
+  }
+
   return false;
 }
 
@@ -71,7 +75,7 @@ export function getDefaultVariableSpec(question, analysisType, role = "variable"
   }
 
   if (["single", "dropdown"].includes(question.qtype)) {
-    if (analysisType === "correlation" || analysisType === "factor_analysis") {
+    if (analysisType === "correlation" || analysisType === "factor_analysis" || analysisType === "cluster_analysis") {
       return { question_id: question.id, encoding: "ordinal", measure: "ordinal" };
     }
 
@@ -97,6 +101,10 @@ export function getDefaultVariableSpec(question, analysisType, role = "variable"
   }
 
   if (question.qtype === "matrix_multi" && analysisType === "regression" && role === "feature") {
+    return { question_id: question.id, encoding: "matrix_multi_binary", measure: "binary" };
+  }
+
+  if (question.qtype === "matrix_multi" && analysisType === "cluster_analysis") {
     return { question_id: question.id, encoding: "matrix_multi_binary", measure: "binary" };
   }
 
@@ -191,6 +199,23 @@ export function buildSectionPayload(surveyId, section, questionsById) {
       n_factors: section.n_factors || 2,
       rotation: section.rotation || "varimax",
       standardize: section.standardize ?? true,
+    };
+  }
+
+  if (section.type === "cluster_analysis") {
+    if ((section.questionIds || []).length < 2) {
+      throw new Error("Для кластерного анализа выберите минимум две переменные.");
+    }
+
+    return {
+      survey_id: Number(surveyId),
+      variables: section.questionIds.map((questionId) => {
+        const question = getQuestion(questionsById, questionId, "Переменные");
+        return getSpec(question, "cluster_analysis", "variable", "Переменные");
+      }),
+      n_clusters: section.n_clusters || 3,
+      standardize: section.standardize ?? true,
+      max_iter: section.max_iter || 300,
     };
   }
 

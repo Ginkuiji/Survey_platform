@@ -357,6 +357,35 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
                     ]],
                     [8 * cm, 5 * cm],
                 ))
+        elif section_type == "cluster_analysis":
+            story.append(key_value_table([
+                ["method", result.get("method")],
+                ["n", result.get("n")],
+                ["n_clusters", result.get("n_clusters")],
+                ["standardize", result.get("standardize")],
+                ["inertia", result.get("inertia")],
+            ]))
+            warnings = result.get("warnings") or []
+            if warnings:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table([["Warnings"], *[[warning] for warning in warnings]], [16 * cm]))
+            variables = result.get("variables") or []
+            if result.get("clusters"):
+                header = ["Cluster", "Size", "Percent", *[
+                    variable.get("label") or variable.get("code")
+                    for variable in variables
+                ]]
+                rows = []
+                for cluster in result.get("clusters") or []:
+                    centroid = cluster.get("centroid") or {}
+                    rows.append([
+                        cluster.get("cluster"),
+                        cluster.get("size"),
+                        cluster.get("percent"),
+                        *[centroid.get(variable.get("code")) for variable in variables],
+                    ])
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table([header, *rows]))
         elif section_type == "regression":
             story.append(key_value_table([
                 ["target", _variable_label(result, result.get("target"))],

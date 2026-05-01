@@ -37,6 +37,7 @@ from .permissions import IsAdminRole, IsOrganizerOrAdmin, IsOrganizer
 from .analytics import question_distribution, survey_distribution
 from .advanced_analytics_serializers import (
     ChiSquareAnalysisSer,
+    ClusterAnalysisSer,
     CorrelationAnalysisSer,
     CrosstabAnalysisSer,
     FactorAnalysisSer,
@@ -44,6 +45,7 @@ from .advanced_analytics_serializers import (
 )
 from .advanced_analytics_services import (
     run_chi_square_analysis,
+    run_cluster_analysis,
     run_correlation_analysis,
     run_crosstab_analysis,
     run_factor_analysis,
@@ -582,6 +584,10 @@ class AdvancedAnalyticsViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="factor-analysis")
     def factor_analysis(self, request):
         return self._run(request, FactorAnalysisSer, run_factor_analysis)
+
+    @action(detail=False, methods=["post"], url_path="cluster-analysis")
+    def cluster_analysis(self, request):
+        return self._run(request, ClusterAnalysisSer, run_cluster_analysis)
 
 
 class AnalyticsExportViewSet(viewsets.ViewSet):

@@ -39,6 +39,12 @@ export const runFactorAnalysis = (payload) =>
     body: JSON.stringify(payload),
   });
 
+export const runClusterAnalysis = (payload) =>
+  apiFetch("/analytics/advanced/cluster-analysis/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
 export const fetchAnalysisReports = () =>
   apiFetch("/analytics/reports/");
 

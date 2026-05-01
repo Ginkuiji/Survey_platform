@@ -303,6 +303,149 @@ def _complete_factor_cases(rows, variables):
     return matrix
 
 
+def _complete_kmeans_cases(rows, variables):
+    matrix = []
+    response_ids = []
+    codes = [variable.code for variable in variables]
+    for row in rows:
+        values = [row.get(code) for code in codes]
+        if any(_is_missing(value) for value in values):
+            continue
+        if not all(_is_numeric(value) for value in values):
+            raise ValueError("Cluster analysis requires all selected values to be numeric.")
+        matrix.append([_as_float(value) for value in values])
+        response_ids.append(row.get("response_id"))
+    return response_ids, matrix
+
+
+def _run_numpy_kmeans(x_matrix, n_clusters, max_iter, random_state):
+    rng = np.random.default_rng(random_state)
+    n = x_matrix.shape[0]
+    initial_indexes = rng.choice(n, size=n_clusters, replace=False)
+    centers = x_matrix[initial_indexes].copy()
+    labels = np.zeros(n, dtype=int)
+
+    for _ in range(max_iter):
+        distances = np.sum((x_matrix[:, None, :] - centers[None, :, :]) ** 2, axis=2)
+        next_labels = np.argmin(distances, axis=1)
+
+        next_centers = centers.copy()
+        for cluster_index in range(n_clusters):
+            members = x_matrix[next_labels == cluster_index]
+            if len(members):
+                next_centers[cluster_index] = np.mean(members, axis=0)
+            else:
+                farthest_index = int(np.argmax(np.min(distances, axis=1)))
+                next_centers[cluster_index] = x_matrix[farthest_index]
+
+        if np.array_equal(labels, next_labels) and np.allclose(centers, next_centers):
+            labels = next_labels
+            centers = next_centers
+            break
+
+        labels = next_labels
+        centers = next_centers
+
+    inertia = float(np.sum((x_matrix - centers[labels]) ** 2))
+    return labels, centers, inertia
+
+
+def compute_kmeans_clustering(
+    rows,
+    variables,
+    n_clusters=3,
+    standardize=True,
+    max_iter=300,
+    random_state=42,
+) -> dict:
+    if np is None:
+        raise ValueError("Cluster analysis requires numpy to be installed.")
+    if len(variables) < 2:
+        raise ValueError("Cluster analysis requires at least two variables.")
+    if n_clusters < 2 or n_clusters > 10:
+        raise ValueError("n_clusters must be between 2 and 10.")
+    if max_iter < 10 or max_iter > 1000:
+        raise ValueError("max_iter must be between 10 and 1000.")
+
+    response_ids, complete_cases = _complete_kmeans_cases(rows, variables)
+    n = len(complete_cases)
+    p = len(variables)
+    if n < n_clusters:
+        raise ValueError("Cluster analysis requires at least as many complete cases as clusters.")
+
+    raw_matrix = np.array(complete_cases, dtype=float)
+    if not np.all(np.isfinite(raw_matrix)):
+        raise ValueError("Cluster analysis data contains non-finite numeric values.")
+
+    means = np.mean(raw_matrix, axis=0)
+    standard_deviations = np.std(raw_matrix, axis=0, ddof=1)
+    zero_variance_indexes = np.where(standard_deviations == 0)[0]
+    if len(zero_variance_indexes):
+        labels = [variables[index].label for index in zero_variance_indexes]
+        raise ValueError(f"Cluster analysis cannot use variables with zero variance: {', '.join(labels)}.")
+
+    x_matrix = (raw_matrix - means) / standard_deviations if standardize else raw_matrix
+    warnings = []
+    method = "numpy_kmeans"
+
+    try:
+        from sklearn.cluster import KMeans
+
+        model = KMeans(
+            n_clusters=n_clusters,
+            max_iter=max_iter,
+            random_state=random_state,
+            n_init=10,
+        )
+        labels = model.fit_predict(x_matrix)
+        centers = model.cluster_centers_
+        inertia = float(model.inertia_)
+        method = "sklearn_kmeans"
+    except ImportError:
+        labels, centers, inertia = _run_numpy_kmeans(x_matrix, n_clusters, max_iter, random_state)
+        warnings.append("sklearn is not installed; numpy fallback k-means was used.")
+
+    output_centers = (centers * standard_deviations + means) if standardize else centers
+    order = sorted(range(n_clusters), key=lambda index: (-int(np.sum(labels == index)), index))
+    cluster_number_by_label = {label: position + 1 for position, label in enumerate(order)}
+
+    clusters = []
+    for label in order:
+        size = int(np.sum(labels == label))
+        center = output_centers[label]
+        clusters.append({
+            "cluster": cluster_number_by_label[label],
+            "size": size,
+            "percent": round(size / n * 100, 2) if n else 0,
+            "centroid": {
+                variable.code: float(center[index])
+                for index, variable in enumerate(variables)
+            },
+        })
+
+    return {
+        "method": method,
+        "n": n,
+        "n_variables": p,
+        "n_clusters": n_clusters,
+        "standardize": standardize,
+        "variables": [
+            {"code": variable.code, "label": variable.label}
+            for variable in variables
+        ],
+        "clusters": clusters,
+        "assignments": [
+            {
+                "response_id": response_id,
+                "cluster": cluster_number_by_label[int(label)],
+            }
+            for response_id, label in zip(response_ids, labels)
+        ],
+        "inertia": inertia,
+        "warnings": warnings,
+    }
+
+
 def _varimax(loadings, gamma=1.0, q=20, tol=1e-6):
     p, k = loadings.shape
     rotation = np.eye(k)

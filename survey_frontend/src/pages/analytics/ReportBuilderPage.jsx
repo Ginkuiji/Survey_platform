@@ -27,6 +27,7 @@ import { fetchAdminSurveyById } from "../../api/surveys";
 import {
   createAnalysisReport,
   runChiSquareAnalysis,
+  runClusterAnalysis,
   runCorrelationAnalysis,
   runCrosstabAnalysis,
   runFactorAnalysis,
@@ -45,6 +46,7 @@ const ANALYSIS_TYPES = [
   { value: "chi_square", label: "χ²-критерий" },
   { value: "regression", label: "Линейная регрессия" },
   { value: "factor_analysis", label: "Факторный анализ" },
+  { value: "cluster_analysis", label: "Кластерный анализ" },
 ];
 
 const API_BY_TYPE = {
@@ -53,6 +55,7 @@ const API_BY_TYPE = {
   chi_square: runChiSquareAnalysis,
   regression: runRegressionAnalysis,
   factor_analysis: runFactorAnalysis,
+  cluster_analysis: runClusterAnalysis,
 };
 
 function createSection(type) {
@@ -79,6 +82,18 @@ function createSection(type) {
       n_factors: 2,
       rotation: "varimax",
       standardize: true,
+    };
+  }
+
+  if (type === "cluster_analysis") {
+    return {
+      id,
+      type,
+      title: "Кластерный анализ",
+      questionIds: [],
+      n_clusters: 3,
+      standardize: true,
+      max_iter: 300,
     };
   }
 
@@ -261,6 +276,65 @@ function SectionFields({ section, questions, updateSection }) {
               <MenuItem value="none">none</MenuItem>
             </Select>
           </FormControl>
+        </Stack>
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={section.standardize}
+              onChange={(event) => updateSection(section.id, { standardize: event.target.checked })}
+            />
+          }
+          label="Стандартизировать переменные"
+        />
+      </Stack>
+    );
+  }
+
+  if (section.type === "cluster_analysis") {
+    const availableQuestions = questions.filter((question) => isQuestionSupportedForAnalysis(question, "cluster_analysis"));
+
+    return (
+      <Stack spacing={2}>
+        {(section.questionIds || []).length < 2 && (
+          <Alert severity="info">Для кластерного анализа требуется минимум две переменные.</Alert>
+        )}
+
+        <FormControl fullWidth>
+          <InputLabel>Переменные</InputLabel>
+          <Select
+            multiple
+            label="Переменные"
+            value={section.questionIds}
+            renderValue={(selected) => `${selected.length} выбрано`}
+            onChange={(event) => updateSection(section.id, { questionIds: event.target.value })}
+          >
+            {availableQuestions.map((question) => (
+              <MenuItem key={question.id} value={question.id}>
+                <Checkbox checked={section.questionIds.includes(question.id)} />
+                <ListItemText primary={<QuestionOption question={question} />} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <TextField
+            fullWidth
+            type="number"
+            label="n_clusters"
+            inputProps={{ min: 2, max: 10 }}
+            value={section.n_clusters}
+            onChange={(event) => updateSection(section.id, { n_clusters: Number(event.target.value) })}
+          />
+          <TextField
+            fullWidth
+            type="number"
+            label="max_iter"
+            inputProps={{ min: 10, max: 1000 }}
+            value={section.max_iter}
+            onChange={(event) => updateSection(section.id, { max_iter: Number(event.target.value) })}
+          />
         </Stack>
 
         <FormControlLabel

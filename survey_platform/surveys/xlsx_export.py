@@ -339,6 +339,35 @@ def _add_report_sheet(ws, analysis_report):
             warnings = result.get("warnings") or []
             if warnings:
                 _append_table(ws, ["Warnings"], [[warning] for warning in warnings])
+        elif section_type == "cluster_analysis":
+            append_key_value(ws, "method", result.get("method"))
+            append_key_value(ws, "n", result.get("n"))
+            append_key_value(ws, "n_clusters", result.get("n_clusters"))
+            append_key_value(ws, "standardize", result.get("standardize"))
+            append_key_value(ws, "inertia", format_number(result.get("inertia")))
+            variables = result.get("variables") or []
+            _append_table(
+                ws,
+                ["Cluster", "Size", "Percent", *[
+                    variable.get("label") or variable.get("code")
+                    for variable in variables
+                ]],
+                [
+                    [
+                        cluster.get("cluster"),
+                        cluster.get("size"),
+                        format_number(cluster.get("percent")),
+                        *[
+                            format_number((cluster.get("centroid") or {}).get(variable.get("code")))
+                            for variable in variables
+                        ],
+                    ]
+                    for cluster in result.get("clusters") or []
+                ],
+            )
+            warnings = result.get("warnings") or []
+            if warnings:
+                _append_table(ws, ["Warnings"], [[warning] for warning in warnings])
         elif section_type == "regression":
             append_key_value(ws, "target", get_variable_label(result, result.get("target")))
             append_key_value(ws, "features", ", ".join(get_variable_label(result, code) for code in (result.get("features") or [])))

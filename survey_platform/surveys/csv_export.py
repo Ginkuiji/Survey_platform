@@ -297,5 +297,39 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
             for warning in result.get("warnings") or []:
                 row("Factor analysis", title, "warning", warning)
 
+        elif section_type == "cluster_analysis":
+            row("Cluster analysis", title, "method", result.get("method"))
+            row("Cluster analysis", title, "n", result.get("n"))
+            row("Cluster analysis", title, "n_clusters", result.get("n_clusters"))
+            row("Cluster analysis", title, "standardize", result.get("standardize"))
+            row("Cluster analysis", title, "inertia", result.get("inertia"))
+            variables = result.get("variables") or []
+            variables_by_code = {
+                variable.get("code"): variable.get("label") or variable.get("code")
+                for variable in variables
+            }
+            for cluster in result.get("clusters") or []:
+                row(
+                    "Cluster analysis",
+                    title,
+                    "cluster_size",
+                    cluster.get("cluster"),
+                    "size",
+                    cluster.get("size"),
+                    "percent",
+                    cluster.get("percent"),
+                )
+                for code, value in (cluster.get("centroid") or {}).items():
+                    row(
+                        "Cluster analysis",
+                        title,
+                        "centroid",
+                        cluster.get("cluster"),
+                        variables_by_code.get(code, code),
+                        value,
+                    )
+            for warning in result.get("warnings") or []:
+                row("Cluster analysis", title, "warning", warning)
+
     csv_text = output.getvalue()
     return ("\ufeff" + csv_text).encode("utf-8")
