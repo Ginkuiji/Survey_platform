@@ -134,6 +134,7 @@ function SectionFields({ section, questions, updateSection }) {
           >
             <MenuItem value="pearson">Pearson</MenuItem>
             <MenuItem value="spearman">Spearman</MenuItem>
+            <MenuItem value="kendall">Kendall</MenuItem>
           </Select>
         </FormControl>
 

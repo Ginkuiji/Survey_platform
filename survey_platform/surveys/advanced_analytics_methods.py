@@ -84,8 +84,8 @@ def _manual_correlation(x_values, y_values, method):
 
 
 def compute_correlation_matrix(rows, variables, method="pearson") -> dict:
-    if method not in ("pearson", "spearman"):
-        raise ValueError("Correlation method must be 'pearson' or 'spearman'.")
+    if method not in ("pearson", "spearman", "kendall"):
+        raise ValueError("Correlation method must be 'pearson', 'spearman', or 'kendall'.")
 
     matrix = []
     p_values = []
@@ -114,10 +114,17 @@ def compute_correlation_matrix(rows, variables, method="pearson") -> dict:
             y_values = [pair[1] for pair in pairs]
 
             if stats is not None:
-                result = stats.pearsonr(x_values, y_values) if method == "pearson" else stats.spearmanr(x_values, y_values)
+                if method == "pearson":
+                    result = stats.pearsonr(x_values, y_values)
+                elif method == "spearman":
+                    result = stats.spearmanr(x_values, y_values)
+                else:
+                    result = stats.kendalltau(x_values, y_values)
                 coefficient = None if math.isnan(result.statistic) else float(result.statistic)
                 p_value = None if math.isnan(result.pvalue) else float(result.pvalue)
             else:
+                if method == "kendall":
+                    raise ValueError("Kendall correlation requires scipy to be installed.")
                 coefficient = _manual_correlation(x_values, y_values, method)
                 p_value = None
 

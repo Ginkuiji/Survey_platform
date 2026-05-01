@@ -28,7 +28,7 @@ class AdvancedVariableSer(serializers.Serializer):
 
 class CorrelationAnalysisSer(serializers.Serializer):
     survey_id = serializers.IntegerField()
-    method = serializers.ChoiceField(choices=("pearson", "spearman"), default="pearson")
+    method = serializers.ChoiceField(choices=("pearson", "spearman", "kendall"), default="pearson")
     variables = AdvancedVariableSer(many=True, allow_empty=False)
 
     def validate_variables(self, value):
