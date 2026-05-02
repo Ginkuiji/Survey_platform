@@ -31,6 +31,7 @@ import {
   runCorrelationAnalysis,
   runCrosstabAnalysis,
   runFactorAnalysis,
+  runGroupComparisonAnalysis,
   runRegressionAnalysis,
 } from "../../api/analytics";
 import {
@@ -47,6 +48,7 @@ const ANALYSIS_TYPES = [
   { value: "regression", label: "Линейная регрессия" },
   { value: "factor_analysis", label: "Факторный анализ" },
   { value: "cluster_analysis", label: "Кластерный анализ" },
+  { value: "group_comparison", label: "Сравнение групп" },
 ];
 
 const API_BY_TYPE = {
@@ -56,6 +58,7 @@ const API_BY_TYPE = {
   regression: runRegressionAnalysis,
   factor_analysis: runFactorAnalysis,
   cluster_analysis: runClusterAnalysis,
+  group_comparison: runGroupComparisonAnalysis,
 };
 
 function createSection(type) {
@@ -94,6 +97,18 @@ function createSection(type) {
       n_clusters: 3,
       standardize: true,
       max_iter: 300,
+    };
+  }
+
+  if (type === "group_comparison") {
+    return {
+      id,
+      type,
+      title: "Сравнение групп",
+      groupQuestionId: "",
+      valueQuestionId: "",
+      method: "anova",
+      alpha: 0.05,
     };
   }
 
@@ -346,6 +361,82 @@ function SectionFields({ section, questions, updateSection }) {
           }
           label="Стандартизировать переменные"
         />
+      </Stack>
+    );
+  }
+
+  if (section.type === "group_comparison") {
+    const groupQuestions = questions.filter((question) => isQuestionSupportedForAnalysis(question, "group_comparison", "group"));
+    const valueQuestions = questions.filter((question) => (
+      isQuestionSupportedForAnalysis(question, "group_comparison", "value")
+      && Number(question.id) !== Number(section.groupQuestionId)
+    ));
+
+    return (
+      <Stack spacing={2}>
+        <Alert severity="info">
+          t-test и Mann-Whitney требуют ровно 2 группы; ANOVA и Kruskal-Wallis подходят для 2+ групп.
+        </Alert>
+
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <FormControl fullWidth>
+            <InputLabel>Группирующая переменная</InputLabel>
+            <Select
+              label="Группирующая переменная"
+              value={section.groupQuestionId}
+              onChange={(event) => updateSection(section.id, {
+                groupQuestionId: event.target.value,
+                valueQuestionId: Number(event.target.value) === Number(section.valueQuestionId) ? "" : section.valueQuestionId,
+              })}
+            >
+              {groupQuestions.map((question) => (
+                <MenuItem key={question.id} value={question.id}>
+                  <QuestionOption question={question} />
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl fullWidth>
+            <InputLabel>Показатель</InputLabel>
+            <Select
+              label="Показатель"
+              value={section.valueQuestionId}
+              onChange={(event) => updateSection(section.id, { valueQuestionId: event.target.value })}
+            >
+              {valueQuestions.map((question) => (
+                <MenuItem key={question.id} value={question.id}>
+                  <QuestionOption question={question} />
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Stack>
+
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <FormControl fullWidth>
+            <InputLabel>Метод</InputLabel>
+            <Select
+              label="Метод"
+              value={section.method}
+              onChange={(event) => updateSection(section.id, { method: event.target.value })}
+            >
+              <MenuItem value="t_test">Welch t-test</MenuItem>
+              <MenuItem value="anova">ANOVA</MenuItem>
+              <MenuItem value="mann_whitney">Mann-Whitney U</MenuItem>
+              <MenuItem value="kruskal_wallis">Kruskal-Wallis</MenuItem>
+            </Select>
+          </FormControl>
+
+          <TextField
+            fullWidth
+            type="number"
+            label="alpha"
+            inputProps={{ min: 0.001, max: 0.2, step: 0.001 }}
+            value={section.alpha}
+            onChange={(event) => updateSection(section.id, { alpha: Number(event.target.value) })}
+          />
+        </Stack>
       </Stack>
     );
   }

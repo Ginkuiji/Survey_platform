@@ -5,6 +5,7 @@ from .advanced_analytics_methods import (
     compute_cramers_v,
     compute_crosstab,
     compute_factor_analysis,
+    compute_group_comparison,
     compute_kmeans_clustering,
     compute_linear_regression,
 )
@@ -159,3 +160,32 @@ def run_cluster_analysis(payload: dict) -> dict:
         max_iter=payload.get("max_iter", 300),
     )
     return _with_metadata(survey_id, "cluster_analysis", dataset, result)
+
+
+def run_group_comparison(payload: dict) -> dict:
+    survey_id = payload["survey_id"]
+    group_spec = payload["group"]
+    value_spec = payload["value"]
+    dataset = build_analysis_dataset(survey_id, [group_spec, value_spec])
+
+    group_variables = [
+        variable
+        for variable in dataset.variables
+        if variable.question_id == group_spec["question_id"]
+    ]
+    value_variables = [
+        variable
+        for variable in dataset.variables
+        if variable.question_id == value_spec["question_id"]
+    ]
+    if len(group_variables) != 1 or len(value_variables) != 1:
+        raise ValueError("Group comparison currently requires variables that produce exactly one column.")
+
+    result = compute_group_comparison(
+        rows=dataset.rows,
+        group_var=group_variables[0],
+        value_var=value_variables[0],
+        method=payload.get("method", "anova"),
+        alpha=payload.get("alpha", 0.05),
+    )
+    return _with_metadata(survey_id, "group_comparison", dataset, result)

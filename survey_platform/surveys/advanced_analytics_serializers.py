@@ -92,3 +92,19 @@ class ClusterAnalysisSer(serializers.Serializer):
         if len(value) < 2:
             raise serializers.ValidationError("Cluster analysis requires at least two variables.")
         return value
+
+
+class GroupComparisonSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    group = AdvancedVariableSer()
+    value = AdvancedVariableSer()
+    method = serializers.ChoiceField(
+        choices=("t_test", "anova", "mann_whitney", "kruskal_wallis"),
+        default="anova",
+    )
+    alpha = serializers.FloatField(default=0.05, min_value=0.001, max_value=0.2)
+
+    def validate(self, attrs):
+        if attrs["group"]["question_id"] == attrs["value"]["question_id"]:
+            raise serializers.ValidationError("Group and value variables must be different questions.")
+        return attrs

@@ -28,6 +28,7 @@ const SECTION_LABELS = {
   regression: "Линейная регрессия",
   factor_analysis: "Факторный анализ",
   cluster_analysis: "Кластерный анализ",
+  group_comparison: "Сравнение групп",
 };
 
 function formatNumber(value) {
@@ -451,6 +452,74 @@ function renderClusterAnalysisSection(section) {
   );
 }
 
+function renderGroupComparisonSection(section) {
+  const result = section.result || {};
+  const test = result.test || {};
+  const effectSize = result.effect_size;
+
+  return (
+    <Stack spacing={3}>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Chip label={`Метод: ${result.method_name || result.method || "—"}`} />
+        <Chip label={`n: ${formatNumber(result.n)}`} />
+        <Chip label={`Групп: ${formatNumber(result.n_groups)}`} />
+        <Chip label={`alpha: ${formatNumber(result.alpha)}`} />
+        <Chip label={`statistic: ${formatNumber(test.statistic)}`} />
+        <Chip label={`p-value: ${formatNumber(test.p_value)}`} />
+        <Chip label={`Статистически значимо: ${test.significant ? "да" : "нет"}`} />
+      </Stack>
+
+      <Typography color="text.secondary" variant="body2">
+        {test.interpretation || "—"}
+      </Typography>
+
+      {effectSize && (
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Chip label={`Effect size: ${effectSize.type}`} />
+          <Chip label={`value: ${formatNumber(effectSize.value)}`} />
+          <Chip label={effectSize.interpretation || "—"} />
+        </Stack>
+      )}
+
+      {(result.warnings || []).map((warning) => (
+        <Alert key={warning} severity="warning">{warning}</Alert>
+      ))}
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Группы
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Группа</TableCell>
+              <TableCell align="right">n</TableCell>
+              <TableCell align="right">Среднее</TableCell>
+              <TableCell align="right">Медиана</TableCell>
+              <TableCell align="right">Std</TableCell>
+              <TableCell align="right">Min</TableCell>
+              <TableCell align="right">Max</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {(result.groups || []).map((group) => (
+              <TableRow key={String(group.group)}>
+                <TableCell>{group.label || group.group}</TableCell>
+                <TableCell align="right">{formatNumber(group.n)}</TableCell>
+                <TableCell align="right">{formatNumber(group.mean)}</TableCell>
+                <TableCell align="right">{formatNumber(group.median)}</TableCell>
+                <TableCell align="right">{formatNumber(group.std)}</TableCell>
+                <TableCell align="right">{formatNumber(group.min)}</TableCell>
+                <TableCell align="right">{formatNumber(group.max)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+    </Stack>
+  );
+}
+
 function renderSection(section) {
   if (section.error) {
     return <Alert severity="error">{section.error}</Alert>;
@@ -462,6 +531,7 @@ function renderSection(section) {
   if (section.type === "regression") return renderRegressionSection(section);
   if (section.type === "factor_analysis") return renderFactorAnalysisSection(section);
   if (section.type === "cluster_analysis") return renderClusterAnalysisSection(section);
+  if (section.type === "group_comparison") return renderGroupComparisonSection(section);
 
   return <Typography color="text.secondary">Неизвестный тип секции.</Typography>;
 }

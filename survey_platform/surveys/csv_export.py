@@ -337,5 +337,40 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
             for warning in result.get("warnings") or []:
                 row("Cluster analysis", title, "warning", warning)
 
+        elif section_type == "group_comparison":
+            test = result.get("test") or {}
+            effect_size = result.get("effect_size") or {}
+            row("Сравнение групп", title, "method", result.get("method_name") or result.get("method"))
+            row("Сравнение групп", title, "n", result.get("n"))
+            row("Сравнение групп", title, "n_groups", result.get("n_groups"))
+            row("Сравнение групп", title, "statistic", test.get("statistic"))
+            row("Сравнение групп", title, "p_value", _format_p_value(test.get("p_value")))
+            row("Сравнение групп", title, "significant", test.get("significant"))
+            row("Сравнение групп", title, "interpretation", test.get("interpretation"))
+            row("Сравнение групп", title, "effect_size_type", effect_size.get("type"))
+            row("Сравнение групп", title, "effect_size_value", effect_size.get("value"))
+            row("Сравнение групп", title, "effect_size_interpretation", effect_size.get("interpretation"))
+            for group in result.get("groups") or []:
+                row(
+                    "Сравнение групп",
+                    title,
+                    "group",
+                    group.get("label") or group.get("group"),
+                    "n",
+                    group.get("n"),
+                    "mean",
+                    group.get("mean"),
+                    "median",
+                    group.get("median"),
+                    "std",
+                    group.get("std"),
+                    "min",
+                    group.get("min"),
+                    "max",
+                    group.get("max"),
+                )
+            for warning in result.get("warnings") or []:
+                row("Сравнение групп", title, "warning", warning)
+
     csv_text = output.getvalue()
     return ("\ufeff" + csv_text).encode("utf-8")

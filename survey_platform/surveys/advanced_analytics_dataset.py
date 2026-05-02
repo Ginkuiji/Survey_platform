@@ -18,6 +18,7 @@ class AnalysisVariable:
     qtype: str
     measure: str
     encoding: str
+    value_labels: dict[Any, str] | None = None
 
 
 @dataclass
@@ -50,6 +51,25 @@ def _unsupported(question: Question, encoding: str) -> ValueError:
     )
 
 
+def _value_labels_for_question(question: Question, encoding: str) -> dict[Any, str] | None:
+    if question.qtype == Question.YESNO and encoding == "binary":
+        options = _ordered_options(question)
+        if len(options) >= 2:
+            return {
+                1: options[0].text,
+                0: options[1].text,
+            }
+        return None
+
+    if question.qtype in (Question.SINGLE, Question.DROPDOWN) and encoding == "ordinal":
+        return {
+            index: option.text
+            for index, option in enumerate(_ordered_options(question), start=1)
+        }
+
+    return None
+
+
 def _variables_for_spec(question: Question, encoding: str, measure: str) -> list[AnalysisVariable]:
     base_label = _question_label(question)
 
@@ -57,11 +77,31 @@ def _variables_for_spec(question: Question, encoding: str, measure: str) -> list
         return [AnalysisVariable(f"q_{question.id}", base_label, question.id, question.qtype, measure, encoding)]
 
     if question.qtype == Question.YESNO and encoding == "binary":
-        return [AnalysisVariable(f"q_{question.id}", base_label, question.id, question.qtype, measure, encoding)]
+        return [
+            AnalysisVariable(
+                f"q_{question.id}",
+                base_label,
+                question.id,
+                question.qtype,
+                measure,
+                encoding,
+                _value_labels_for_question(question, encoding),
+            )
+        ]
 
     if question.qtype in (Question.SINGLE, Question.DROPDOWN):
         if encoding == "ordinal":
-            return [AnalysisVariable(f"q_{question.id}", base_label, question.id, question.qtype, measure, encoding)]
+            return [
+                AnalysisVariable(
+                    f"q_{question.id}",
+                    base_label,
+                    question.id,
+                    question.qtype,
+                    measure,
+                    encoding,
+                    _value_labels_for_question(question, encoding),
+                )
+            ]
         if encoding == "one_hot":
             return [
                 AnalysisVariable(

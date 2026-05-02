@@ -392,6 +392,44 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
                     ])
                 story.append(Spacer(1, 0.15 * cm))
                 story.append(table([header, *rows]))
+        elif section_type == "group_comparison":
+            test = result.get("test") or {}
+            effect_size = result.get("effect_size") or {}
+            story.append(key_value_table([
+                ["method", result.get("method_name") or result.get("method")],
+                ["group variable", (result.get("group_variable") or {}).get("label")],
+                ["value variable", (result.get("value_variable") or {}).get("label")],
+                ["n", result.get("n")],
+                ["n_groups", result.get("n_groups")],
+                ["statistic", test.get("statistic")],
+                ["p_value", _format_p_value(test.get("p_value"))],
+                ["significant", test.get("significant")],
+                ["interpretation", test.get("interpretation")],
+                ["effect size", effect_size.get("type")],
+                ["effect size value", effect_size.get("value")],
+                ["effect size interpretation", effect_size.get("interpretation")],
+            ]))
+            groups = result.get("groups") or []
+            if groups:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table(
+                    [["Group", "n", "Mean", "Median", "Std", "Min", "Max"], *[
+                        [
+                            group.get("label") or group.get("group"),
+                            group.get("n"),
+                            group.get("mean"),
+                            group.get("median"),
+                            group.get("std"),
+                            group.get("min"),
+                            group.get("max"),
+                        ]
+                        for group in groups
+                    ]],
+                ))
+            warnings = result.get("warnings") or []
+            if warnings:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table([["Warnings"], *[[warning] for warning in warnings]], [16 * cm]))
         elif section_type == "regression":
             story.append(key_value_table([
                 ["target", _variable_label(result, result.get("target"))],

@@ -45,6 +45,12 @@ export const runClusterAnalysis = (payload) =>
     body: JSON.stringify(payload),
   });
 
+export const runGroupComparisonAnalysis = (payload) =>
+  apiFetch("/analytics/advanced/group-comparison/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
 export const fetchAnalysisReports = () =>
   apiFetch("/analytics/reports/");
 

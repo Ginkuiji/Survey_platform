@@ -374,6 +374,40 @@ def _add_report_sheet(ws, analysis_report):
             warnings = result.get("warnings") or []
             if warnings:
                 _append_table(ws, ["Warnings"], [[warning] for warning in warnings])
+        elif section_type == "group_comparison":
+            test = result.get("test") or {}
+            effect_size = result.get("effect_size") or {}
+            append_key_value(ws, "method", result.get("method_name") or result.get("method"))
+            append_key_value(ws, "group variable", (result.get("group_variable") or {}).get("label"))
+            append_key_value(ws, "value variable", (result.get("value_variable") or {}).get("label"))
+            append_key_value(ws, "n", result.get("n"))
+            append_key_value(ws, "n_groups", result.get("n_groups"))
+            append_key_value(ws, "statistic", format_number(test.get("statistic")))
+            append_key_value(ws, "p_value", format_p_value(test.get("p_value")))
+            append_key_value(ws, "significant", test.get("significant"))
+            append_key_value(ws, "interpretation", test.get("interpretation"))
+            append_key_value(ws, "effect_size_type", effect_size.get("type"))
+            append_key_value(ws, "effect_size_value", format_number(effect_size.get("value")))
+            append_key_value(ws, "effect_size_interpretation", effect_size.get("interpretation"))
+            _append_table(
+                ws,
+                ["Group", "n", "Mean", "Median", "Std", "Min", "Max"],
+                [
+                    [
+                        group.get("label") or group.get("group"),
+                        group.get("n"),
+                        format_number(group.get("mean")),
+                        format_number(group.get("median")),
+                        format_number(group.get("std")),
+                        format_number(group.get("min")),
+                        format_number(group.get("max")),
+                    ]
+                    for group in result.get("groups") or []
+                ],
+            )
+            warnings = result.get("warnings") or []
+            if warnings:
+                _append_table(ws, ["Warnings"], [[warning] for warning in warnings])
         elif section_type == "regression":
             append_key_value(ws, "target", get_variable_label(result, result.get("target")))
             append_key_value(ws, "features", ", ".join(get_variable_label(result, code) for code in (result.get("features") or [])))

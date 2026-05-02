@@ -41,6 +41,7 @@ from .advanced_analytics_serializers import (
     CorrelationAnalysisSer,
     CrosstabAnalysisSer,
     FactorAnalysisSer,
+    GroupComparisonSer,
     RegressionAnalysisSer,
 )
 from .advanced_analytics_services import (
@@ -49,6 +50,7 @@ from .advanced_analytics_services import (
     run_correlation_analysis,
     run_crosstab_analysis,
     run_factor_analysis,
+    run_group_comparison,
     run_regression_analysis,
 )
 from .pdf_export import build_analytics_pdf
@@ -588,6 +590,10 @@ class AdvancedAnalyticsViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="cluster-analysis")
     def cluster_analysis(self, request):
         return self._run(request, ClusterAnalysisSer, run_cluster_analysis)
+
+    @action(detail=False, methods=["post"], url_path="group-comparison")
+    def group_comparison(self, request):
+        return self._run(request, GroupComparisonSer, run_group_comparison)
 
 
 class AnalyticsExportViewSet(viewsets.ViewSet):

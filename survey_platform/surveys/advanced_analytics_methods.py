@@ -491,6 +491,208 @@ def compute_kmeans_clustering(
     }
 
 
+def interpret_p_value(p_value, alpha):
+    if p_value is None:
+        return "Недостаточно данных для интерпретации."
+    if p_value < alpha:
+        return "Различия между группами статистически значимы."
+    return "Статистически значимых различий между группами не выявлено."
+
+
+def _sample_std(values):
+    n = len(values)
+    if n < 2:
+        return None
+    mean = sum(values) / n
+    return math.sqrt(sum((value - mean) ** 2 for value in values) / (n - 1))
+
+
+def _describe_group(group_value, values, value_labels=None):
+    ordered = sorted(values)
+    n = len(values)
+    mean = sum(values) / n
+    middle = n // 2
+    median = ordered[middle] if n % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+    label = None
+    if value_labels:
+        label = value_labels.get(group_value)
+        if label is None:
+            try:
+                label = value_labels.get(int(group_value))
+            except (TypeError, ValueError):
+                label = None
+    return {
+        "group": group_value,
+        "label": label or str(group_value),
+        "n": n,
+        "mean": float(mean),
+        "median": float(median),
+        "std": _sample_std(values),
+        "min": float(min(values)),
+        "max": float(max(values)),
+    }
+
+
+def _cohens_d(group_values):
+    first, second = group_values
+    n1 = len(first)
+    n2 = len(second)
+    std1 = _sample_std(first)
+    std2 = _sample_std(second)
+    if std1 is None or std2 is None or n1 + n2 <= 2:
+        return None
+    pooled_variance = ((n1 - 1) * std1 ** 2 + (n2 - 1) * std2 ** 2) / (n1 + n2 - 2)
+    if pooled_variance <= 0:
+        return None
+    return ((sum(first) / n1) - (sum(second) / n2)) / math.sqrt(pooled_variance)
+
+
+def _interpret_cohens_d(value):
+    absolute = abs(value)
+    if absolute < 0.2:
+        return "Очень малый эффект"
+    if absolute < 0.5:
+        return "Малый эффект"
+    if absolute < 0.8:
+        return "Средний эффект"
+    return "Большой эффект"
+
+
+def _eta_squared(groups):
+    all_values = [value for values in groups for value in values]
+    grand_mean = sum(all_values) / len(all_values)
+    ss_total = sum((value - grand_mean) ** 2 for value in all_values)
+    if ss_total <= 0:
+        return None
+    ss_between = sum(
+        len(values) * ((sum(values) / len(values)) - grand_mean) ** 2
+        for values in groups
+    )
+    return ss_between / ss_total
+
+
+def _interpret_eta_squared(value):
+    if value < 0.01:
+        return "Очень малый эффект"
+    if value < 0.06:
+        return "Малый эффект"
+    if value < 0.14:
+        return "Средний эффект"
+    return "Большой эффект"
+
+
+def _finite_or_none(value):
+    if value is None:
+        return None
+    value = float(value)
+    return value if math.isfinite(value) else None
+
+
+def compute_group_comparison(rows, group_var, value_var, method="anova", alpha=0.05) -> dict:
+    if stats is None:
+        raise ValueError("Group comparison requires scipy to be installed.")
+    if method not in ("t_test", "anova", "mann_whitney", "kruskal_wallis"):
+        raise ValueError("Unsupported group comparison method.")
+
+    groups = defaultdict(list)
+    warnings = []
+    for row in rows:
+        group_value = row.get(group_var.code)
+        value = row.get(value_var.code)
+        if _is_missing(group_value) or _is_missing(value):
+            continue
+        if not _is_numeric(value):
+            raise ValueError("Group comparison value variable must contain numeric values.")
+        groups[group_value].append(_as_float(value))
+
+    ordered_group_keys = _sort_values(groups.keys())
+    group_values = [groups[key] for key in ordered_group_keys]
+    n_groups = len(group_values)
+    n = sum(len(values) for values in group_values)
+
+    if n_groups < 2:
+        raise ValueError("Group comparison requires at least two groups with complete data.")
+    if any(len(values) < 2 for values in group_values):
+        raise ValueError("Each group must contain at least two observations.")
+    if method in ("t_test", "mann_whitney") and n_groups != 2:
+        raise ValueError("Selected method requires exactly two groups.")
+    if method in ("anova", "kruskal_wallis") and n_groups < 2:
+        raise ValueError("Selected method requires at least two groups.")
+    if n <= n_groups:
+        raise ValueError("Group comparison requires more observations than groups.")
+
+    if method == "t_test":
+        result = stats.ttest_ind(group_values[0], group_values[1], equal_var=False, nan_policy="omit")
+        method_name = "Welch t-test"
+        groups_compared = [ordered_group_keys[0], ordered_group_keys[1]]
+        effect_value = _cohens_d(group_values)
+        effect_size = None if effect_value is None else {
+            "type": "cohens_d",
+            "value": float(effect_value),
+            "interpretation": _interpret_cohens_d(effect_value),
+        }
+    elif method == "anova":
+        result = stats.f_oneway(*group_values)
+        method_name = "One-way ANOVA"
+        groups_compared = ordered_group_keys
+        effect_value = _eta_squared(group_values)
+        effect_size = None if effect_value is None else {
+            "type": "eta_squared",
+            "value": float(effect_value),
+            "interpretation": _interpret_eta_squared(effect_value),
+        }
+    elif method == "mann_whitney":
+        result = stats.mannwhitneyu(group_values[0], group_values[1], alternative="two-sided")
+        method_name = "Mann-Whitney U"
+        groups_compared = [ordered_group_keys[0], ordered_group_keys[1]]
+        effect_size = None
+        warnings.append("Effect size is not returned for Mann-Whitney U in MVP.")
+    else:
+        result = stats.kruskal(*group_values)
+        method_name = "Kruskal-Wallis"
+        groups_compared = ordered_group_keys
+        statistic = _finite_or_none(result.statistic)
+        denominator = n - n_groups
+        effect_value = None if statistic is None or denominator <= 0 else (statistic - n_groups + 1) / denominator
+        effect_size = None if effect_value is None else {
+            "type": "epsilon_squared",
+            "value": float(max(0.0, effect_value)),
+            "interpretation": _interpret_eta_squared(max(0.0, effect_value)),
+        }
+
+    statistic = _finite_or_none(result.statistic)
+    p_value = _finite_or_none(result.pvalue)
+
+    return {
+        "method": method,
+        "method_name": method_name,
+        "alpha": alpha,
+        "n": n,
+        "n_groups": n_groups,
+        "group_variable": {
+            "code": group_var.code,
+            "label": group_var.label,
+        },
+        "value_variable": {
+            "code": value_var.code,
+            "label": value_var.label,
+        },
+        "groups": [
+            _describe_group(group_key, groups[group_key], group_var.value_labels)
+            for group_key in ordered_group_keys
+        ],
+        "test": {
+            "statistic": statistic,
+            "p_value": p_value,
+            "significant": bool(p_value is not None and p_value < alpha),
+            "interpretation": interpret_p_value(p_value, alpha),
+            "groups_compared": groups_compared,
+        },
+        "effect_size": effect_size,
+        "warnings": warnings,
+    }
+
+
 def _varimax(loadings, gamma=1.0, q=20, tol=1e-6):
     p, k = loadings.shape
     rotation = np.eye(k)

@@ -58,6 +58,16 @@ export function isQuestionSupportedForAnalysis(question, analysisType, role = "v
     return ["scale", "number", "yesno", "single", "dropdown", "ranking", "matrix_single", "matrix_multi"].includes(question.qtype);
   }
 
+  if (analysisType === "group_comparison") {
+    if (role === "group") {
+      return ["single", "dropdown", "yesno"].includes(question.qtype);
+    }
+    if (role === "value") {
+      return ["scale", "number", "yesno", "single", "dropdown"].includes(question.qtype);
+    }
+    return false;
+  }
+
   return false;
 }
 
@@ -75,6 +85,14 @@ export function getDefaultVariableSpec(question, analysisType, role = "variable"
   }
 
   if (["single", "dropdown"].includes(question.qtype)) {
+    if (analysisType === "group_comparison" && role === "group") {
+      return { question_id: question.id, encoding: "ordinal", measure: "nominal" };
+    }
+
+    if (analysisType === "group_comparison" && role === "value") {
+      return { question_id: question.id, encoding: "ordinal", measure: "ordinal" };
+    }
+
     if (analysisType === "correlation" || analysisType === "factor_analysis" || analysisType === "cluster_analysis") {
       return { question_id: question.id, encoding: "ordinal", measure: "ordinal" };
     }
@@ -216,6 +234,27 @@ export function buildSectionPayload(surveyId, section, questionsById) {
       n_clusters: section.n_clusters || 3,
       standardize: section.standardize ?? true,
       max_iter: section.max_iter || 300,
+    };
+  }
+
+  if (section.type === "group_comparison") {
+    if (!section.groupQuestionId || !section.valueQuestionId) {
+      throw new Error("Выберите группирующий вопрос и анализируемый показатель.");
+    }
+
+    if (Number(section.groupQuestionId) === Number(section.valueQuestionId)) {
+      throw new Error("Группирующий вопрос и показатель должны отличаться.");
+    }
+
+    const groupQuestion = getQuestion(questionsById, section.groupQuestionId, "Группирующая переменная");
+    const valueQuestion = getQuestion(questionsById, section.valueQuestionId, "Показатель");
+
+    return {
+      survey_id: Number(surveyId),
+      group: getSpec(groupQuestion, "group_comparison", "group", "Группирующая переменная"),
+      value: getSpec(valueQuestion, "group_comparison", "value", "Показатель"),
+      method: section.method || "anova",
+      alpha: section.alpha ?? 0.05,
     };
   }
 
