@@ -221,6 +221,7 @@ function renderExpectedTable(expected) {
 
 function renderChiSquareSection(section) {
   const chiSquare = section.result?.chi_square;
+  const cramersV = section.result?.cramers_v;
 
   return (
     <Stack spacing={3}>
@@ -230,7 +231,15 @@ function renderChiSquareSection(section) {
         <Chip label={`χ²: ${formatNumber(chiSquare?.chi2)}`} />
         <Chip label={`p-value: ${formatNumber(chiSquare?.p_value)}`} />
         <Chip label={`dof: ${formatNumber(chiSquare?.dof)}`} />
+        <Chip label={`Cramér’s V: ${formatNumber(cramersV?.cramers_v)}`} />
+        <Chip label={`Сила связи: ${cramersV?.interpretation || "—"}`} />
+        <Chip label={`n: ${formatNumber(cramersV?.n)}`} />
+        <Chip label={`${formatNumber(cramersV?.rows)}×${formatNumber(cramersV?.columns)}`} />
       </Stack>
+
+      <Typography color="text.secondary" variant="body2">
+        Cramér’s V показывает силу связи между категориальными переменными от 0 до 1.
+      </Typography>
 
       <Box>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>

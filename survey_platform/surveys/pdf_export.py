@@ -301,10 +301,16 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
         elif section_type == "chi_square":
             add_crosstab(story, result.get("crosstab") or {})
             chi = result.get("chi_square") or {}
+            cramers_v = result.get("cramers_v") or {}
             story.append(key_value_table([
                 ["chi2", chi.get("chi2")],
                 ["p_value", _format_p_value(chi.get("p_value"))],
                 ["dof", chi.get("dof")],
+                ["Cramer's V", cramers_v.get("cramers_v")],
+                ["Interpretation", cramers_v.get("interpretation")],
+                ["n", cramers_v.get("n")],
+                ["rows", cramers_v.get("rows")],
+                ["columns", cramers_v.get("columns")],
             ]))
             add_matrix_table(story, "Expected values", chi.get("expected") or [])
         elif section_type == "factor_analysis":

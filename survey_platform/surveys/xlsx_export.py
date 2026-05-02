@@ -294,9 +294,15 @@ def _add_report_sheet(ws, analysis_report):
             _append_crosstab(ws, result.get("crosstab") or {})
         elif section_type == "chi_square":
             chi = result.get("chi_square") or {}
+            cramers_v = result.get("cramers_v") or {}
             append_key_value(ws, "chi2", format_number(chi.get("chi2")))
             append_key_value(ws, "p_value", format_p_value(chi.get("p_value")))
             append_key_value(ws, "dof", chi.get("dof"))
+            append_key_value(ws, "Cramer's V", format_number(cramers_v.get("cramers_v")))
+            append_key_value(ws, "Интерпретация", cramers_v.get("interpretation"))
+            append_key_value(ws, "N", cramers_v.get("n"))
+            append_key_value(ws, "Число строк", cramers_v.get("rows"))
+            append_key_value(ws, "Число столбцов", cramers_v.get("columns"))
             _append_crosstab(ws, result.get("crosstab") or {})
             _append_matrix(ws, "Expected values", [], chi.get("expected") or [])
         elif section_type == "factor_analysis":

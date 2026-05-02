@@ -260,9 +260,15 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
         elif section_type == "chi_square":
             crosstab = result.get("crosstab") or {}
             chi = result.get("chi_square") or {}
+            cramers_v = result.get("cramers_v") or {}
             row("χ²", title, "chi2", chi.get("chi2"))
             row("χ²", title, "p_value", _format_p_value(chi.get("p_value")))
             row("χ²", title, "dof", chi.get("dof"))
+            row("χ²", title, "cramers_v", cramers_v.get("cramers_v"))
+            row("χ²", title, "cramers_v_interpretation", cramers_v.get("interpretation"))
+            row("χ²", title, "n", cramers_v.get("n"))
+            row("χ²", title, "rows", cramers_v.get("rows"))
+            row("χ²", title, "columns", cramers_v.get("columns"))
             for crosstab_row in crosstab.get("rows") or []:
                 for column in crosstab_row.get("columns") or []:
                     row("χ²", title, crosstab_row.get("value"), column.get("value"), "count", column.get("count"), "percent_row", column.get("percent_row"), "percent_total", column.get("percent_total"))

@@ -237,6 +237,51 @@ def compute_chi_square(crosstab_result) -> dict:
     }
 
 
+def interpret_cramers_v(value: float) -> str:
+    if value < 0.10:
+        return "Очень слабая связь"
+    if value < 0.30:
+        return "Слабая связь"
+    if value < 0.50:
+        return "Умеренная связь"
+    if value < 0.70:
+        return "Заметная связь"
+    return "Сильная связь"
+
+
+def compute_cramers_v(crosstab_result, chi_square_result=None) -> dict:
+    observed = _contingency_from_crosstab(crosstab_result)
+    if not observed or not observed[0]:
+        raise ValueError("Cramer's V requires a non-empty crosstab.")
+
+    n = sum(sum(row) for row in observed)
+    rows = len(observed)
+    columns = len(observed[0])
+    min_dimension = min(rows - 1, columns - 1)
+
+    if n == 0:
+        raise ValueError("Cramer's V requires non-empty crosstab counts.")
+    if min_dimension == 0:
+        raise ValueError("Cramer's V requires at least a 2x2 crosstab.")
+
+    if chi_square_result is None:
+        chi_square_result = compute_chi_square(crosstab_result)
+    chi2 = chi_square_result.get("chi2")
+    if chi2 is None:
+        raise ValueError("Cramer's V requires chi-square value.")
+
+    value = math.sqrt(float(chi2) / (n * min_dimension))
+    value = max(0.0, min(1.0, value))
+
+    return {
+        "cramers_v": value,
+        "n": n,
+        "rows": rows,
+        "columns": columns,
+        "interpretation": interpret_cramers_v(value),
+    }
+
+
 def _complete_regression_cases(rows, target_code, feature_codes):
     y_values = []
     x_values = []

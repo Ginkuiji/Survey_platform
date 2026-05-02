@@ -2,6 +2,7 @@ from .advanced_analytics_dataset import build_analysis_dataset
 from .advanced_analytics_methods import (
     compute_chi_square,
     compute_correlation_matrix,
+    compute_cramers_v,
     compute_crosstab,
     compute_factor_analysis,
     compute_kmeans_clustering,
@@ -64,6 +65,7 @@ def run_chi_square_analysis(payload: dict) -> dict:
     row_variable, column_variable = dataset.variables
     crosstab = compute_crosstab(dataset.rows, row_variable.code, column_variable.code)
     chi_square = compute_chi_square(crosstab)
+    cramers_v = compute_cramers_v(crosstab, chi_square)
     return _with_metadata(
         survey_id,
         "chi_square",
@@ -71,6 +73,7 @@ def run_chi_square_analysis(payload: dict) -> dict:
         {
             "crosstab": crosstab,
             "chi_square": chi_square,
+            "cramers_v": cramers_v,
         },
     )
 
