@@ -108,3 +108,26 @@ class GroupComparisonSer(serializers.Serializer):
         if attrs["group"]["question_id"] == attrs["value"]["question_id"]:
             raise serializers.ValidationError("Group and value variables must be different questions.")
         return attrs
+
+
+class ReliabilityAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    variables = AdvancedVariableSer(many=True, allow_empty=False)
+    standardize = serializers.BooleanField(default=False)
+
+    def validate_variables(self, value):
+        if len(value) < 2:
+            raise serializers.ValidationError("Cronbach's alpha requires at least two variables.")
+        return value
+
+
+class CorrespondenceAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    row = AdvancedVariableSer()
+    column = AdvancedVariableSer()
+    n_dimensions = serializers.IntegerField(min_value=1, max_value=5, required=False, default=2)
+
+    def validate(self, attrs):
+        if attrs["row"]["question_id"] == attrs["column"]["question_id"]:
+            raise serializers.ValidationError("Row and column variables must be different questions.")
+        return attrs

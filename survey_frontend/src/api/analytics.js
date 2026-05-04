@@ -27,6 +27,12 @@ export const runChiSquareAnalysis = (payload) =>
     body: JSON.stringify(payload),
   });
 
+export const runCorrespondenceAnalysis = (payload) =>
+  apiFetch("/analytics/advanced/correspondence-analysis/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
 export const runRegressionAnalysis = (payload) =>
   apiFetch("/analytics/advanced/regression/", {
     method: "POST",
@@ -47,6 +53,12 @@ export const runClusterAnalysis = (payload) =>
 
 export const runGroupComparisonAnalysis = (payload) =>
   apiFetch("/analytics/advanced/group-comparison/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const runReliabilityAnalysis = (payload) =>
+  apiFetch("/analytics/advanced/reliability/", {
     method: "POST",
     body: JSON.stringify(payload),
   });

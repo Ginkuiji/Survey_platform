@@ -38,19 +38,23 @@ from .analytics import question_distribution, survey_distribution
 from .advanced_analytics_serializers import (
     ChiSquareAnalysisSer,
     ClusterAnalysisSer,
+    CorrespondenceAnalysisSer,
     CorrelationAnalysisSer,
     CrosstabAnalysisSer,
     FactorAnalysisSer,
     GroupComparisonSer,
+    ReliabilityAnalysisSer,
     RegressionAnalysisSer,
 )
 from .advanced_analytics_services import (
     run_chi_square_analysis,
     run_cluster_analysis,
+    run_correspondence_analysis,
     run_correlation_analysis,
     run_crosstab_analysis,
     run_factor_analysis,
     run_group_comparison,
+    run_reliability_analysis,
     run_regression_analysis,
 )
 from .pdf_export import build_analytics_pdf
@@ -579,6 +583,10 @@ class AdvancedAnalyticsViewSet(viewsets.ViewSet):
     def chi_square(self, request):
         return self._run(request, ChiSquareAnalysisSer, run_chi_square_analysis)
 
+    @action(detail=False, methods=["post"], url_path="correspondence-analysis")
+    def correspondence_analysis(self, request):
+        return self._run(request, CorrespondenceAnalysisSer, run_correspondence_analysis)
+
     @action(detail=False, methods=["post"], url_path="regression")
     def regression(self, request):
         return self._run(request, RegressionAnalysisSer, run_regression_analysis)
@@ -594,6 +602,10 @@ class AdvancedAnalyticsViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="group-comparison")
     def group_comparison(self, request):
         return self._run(request, GroupComparisonSer, run_group_comparison)
+
+    @action(detail=False, methods=["post"], url_path="reliability")
+    def reliability(self, request):
+        return self._run(request, ReliabilityAnalysisSer, run_reliability_analysis)
 
 
 class AnalyticsExportViewSet(viewsets.ViewSet):

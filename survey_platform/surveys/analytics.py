@@ -774,7 +774,7 @@ def analyze_survey(survey_id: int, save: bool = False) -> Dict[str, Any]:
     if save:
         AnalyticResults.objects.create(
             survey=survey,
-            atype="survey",
+            title=f"Срез аналитики опроса {survey.id}",
             total_responses=result["summary"]["total_finished"],
             data=result,
         )
@@ -813,7 +813,7 @@ def question_distribution(question_id: int, save: bool = False) -> Dict[str, Any
     if save:
         AnalyticResults.objects.create(
             survey=question.survey,
-            atype=question.qtype,
+            title=f"Аналитика вопроса {question.id}",
             total_responses=result["base"]["answered_count"],
             data=result,
         )

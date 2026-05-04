@@ -191,11 +191,151 @@ def compute_crosstab(rows, row_var_code, col_var_code) -> dict:
     }
 
 
+def _label_for_value(value, value_labels):
+    if not value_labels:
+        return str(value)
+    if value in value_labels:
+        return value_labels[value]
+    try:
+        int_value = int(value)
+        if int_value in value_labels:
+            return value_labels[int_value]
+    except (TypeError, ValueError):
+        pass
+    return str(value)
+
+
 def _contingency_from_crosstab(crosstab_result):
     return [
         [column["count"] for column in row["columns"]]
         for row in crosstab_result["rows"]
     ]
+
+
+def compute_correspondence_analysis(crosstab_result, row_variable=None, column_variable=None, n_dimensions=2) -> dict:
+    if np is None:
+        raise ValueError("Correspondence analysis requires numpy to be installed.")
+
+    observed = _contingency_from_crosstab(crosstab_result)
+    if len(observed) < 2 or not observed or len(observed[0]) < 2:
+        raise ValueError("Correspondence analysis requires at least a 2x2 crosstab.")
+
+    matrix = np.array(observed, dtype=float)
+    n_rows, n_columns = matrix.shape
+    grand_total = float(np.sum(matrix))
+    if grand_total <= 0:
+        raise ValueError("Correspondence analysis requires non-empty crosstab counts.")
+
+    row_sums = np.sum(matrix, axis=1)
+    col_sums = np.sum(matrix, axis=0)
+    if np.any(row_sums == 0):
+        raise ValueError("Correspondence analysis cannot use crosstab rows with zero total.")
+    if np.any(col_sums == 0):
+        raise ValueError("Correspondence analysis cannot use crosstab columns with zero total.")
+
+    max_dimensions = min(n_rows - 1, n_columns - 1)
+    warnings = []
+    dims = n_dimensions
+    if dims > max_dimensions:
+        dims = max_dimensions
+        warnings.append("n_dimensions was reduced to maximum available dimensions.")
+
+    p_matrix = matrix / grand_total
+    row_masses = np.sum(p_matrix, axis=1)
+    col_masses = np.sum(p_matrix, axis=0)
+    expected = np.outer(row_masses, col_masses)
+    standardized_residuals = (p_matrix - expected) / np.sqrt(expected)
+
+    u_matrix, singular_values, vt_matrix = np.linalg.svd(standardized_residuals, full_matrices=False)
+    eigenvalues = singular_values ** 2
+    total_inertia = float(np.sum(eigenvalues))
+    if total_inertia == 0:
+        raise ValueError("No association structure detected; correspondence analysis inertia is zero.")
+
+    row_coordinates_all = (u_matrix * singular_values) / np.sqrt(row_masses[:, None])
+    column_coordinates_all = (vt_matrix.T * singular_values) / np.sqrt(col_masses[:, None])
+    selected_eigenvalues = eigenvalues[:dims]
+    dimension_names = [f"Dim {index + 1}" for index in range(dims)]
+
+    row_values = [row.get("value") for row in crosstab_result.get("rows") or []]
+    column_values = []
+    if crosstab_result.get("rows"):
+        column_values = [
+            column.get("value")
+            for column in crosstab_result["rows"][0].get("columns") or []
+        ]
+
+    def contribution_items(masses, coordinates, index):
+        items = []
+        for dim_index, dimension in enumerate(dimension_names):
+            eigenvalue = selected_eigenvalues[dim_index]
+            value = 0.0 if eigenvalue == 0 else float(masses[index] * coordinates[index, dim_index] ** 2 / eigenvalue)
+            items.append({"dimension": dimension, "value": value})
+        return items
+
+    def coordinate_items(coordinates, index):
+        return [
+            {"dimension": dimension, "value": float(coordinates[index, dim_index])}
+            for dim_index, dimension in enumerate(dimension_names)
+        ]
+
+    def cos2(coordinates, index):
+        total = float(np.sum(coordinates[index, :] ** 2))
+        if total <= 0:
+            return None
+        selected = float(np.sum(coordinates[index, :dims] ** 2))
+        return selected / total
+
+    dimensions = [
+        {
+            "dimension": dimension,
+            "eigenvalue": float(selected_eigenvalues[index]),
+            "explained_inertia": float(selected_eigenvalues[index] / total_inertia),
+        }
+        for index, dimension in enumerate(dimension_names)
+    ]
+
+    return {
+        "method": "correspondence_analysis",
+        "n": int(grand_total),
+        "n_rows": n_rows,
+        "n_columns": n_columns,
+        "n_dimensions": dims,
+        "total_inertia": total_inertia,
+        "row_variable": {
+            "code": row_variable.code if row_variable else crosstab_result.get("row_variable"),
+            "label": row_variable.label if row_variable else crosstab_result.get("row_variable"),
+        },
+        "column_variable": {
+            "code": column_variable.code if column_variable else crosstab_result.get("column_variable"),
+            "label": column_variable.label if column_variable else crosstab_result.get("column_variable"),
+        },
+        "dimensions": dimensions,
+        "row_coordinates": [
+            {
+                "value": value,
+                "label": _label_for_value(value, getattr(row_variable, "value_labels", None)),
+                "mass": float(row_masses[index]),
+                "coordinates": coordinate_items(row_coordinates_all, index),
+                "contributions": contribution_items(row_masses, row_coordinates_all, index),
+                "cos2": cos2(row_coordinates_all, index),
+            }
+            for index, value in enumerate(row_values)
+        ],
+        "column_coordinates": [
+            {
+                "value": value,
+                "label": _label_for_value(value, getattr(column_variable, "value_labels", None)),
+                "mass": float(col_masses[index]),
+                "coordinates": coordinate_items(column_coordinates_all, index),
+                "contributions": contribution_items(col_masses, column_coordinates_all, index),
+                "cos2": cos2(column_coordinates_all, index),
+            }
+            for index, value in enumerate(column_values)
+        ],
+        "crosstab": crosstab_result,
+        "warnings": warnings,
+    }
 
 
 def compute_chi_square(crosstab_result) -> dict:
@@ -689,6 +829,161 @@ def compute_group_comparison(rows, group_var, value_var, method="anova", alpha=0
             "groups_compared": groups_compared,
         },
         "effect_size": effect_size,
+        "warnings": warnings,
+    }
+
+
+def interpret_cronbach_alpha(alpha):
+    if alpha is None:
+        return "Недостаточно данных для интерпретации."
+    if alpha < 0.5:
+        return "Низкая согласованность шкалы"
+    if alpha < 0.6:
+        return "Слабая согласованность шкалы"
+    if alpha < 0.7:
+        return "Приемлемая согласованность шкалы"
+    if alpha < 0.8:
+        return "Хорошая согласованность шкалы"
+    if alpha < 0.9:
+        return "Высокая согласованность шкалы"
+    return "Очень высокая согласованность; возможна избыточность пунктов"
+
+
+def _complete_numeric_matrix(rows, variables, analysis_name):
+    matrix = []
+    codes = [variable.code for variable in variables]
+    for row in rows:
+        values = [row.get(code) for code in codes]
+        if any(_is_missing(value) for value in values):
+            continue
+        if not all(_is_numeric(value) for value in values):
+            raise ValueError(f"{analysis_name} requires all selected values to be numeric.")
+        matrix.append([_as_float(value) for value in values])
+    return matrix
+
+
+def _cronbach_alpha_from_matrix(x_matrix):
+    k = x_matrix.shape[1]
+    if k < 2:
+        return None
+    item_variances = np.var(x_matrix, axis=0, ddof=1)
+    total_scores = np.sum(x_matrix, axis=1)
+    total_variance = float(np.var(total_scores, ddof=1))
+    if total_variance <= 0:
+        return None
+    return float((k / (k - 1)) * (1 - float(np.sum(item_variances)) / total_variance))
+
+
+def _standardized_cronbach_alpha(correlation_matrix):
+    k = correlation_matrix.shape[0]
+    if k < 2:
+        return None, None
+    upper_indexes = np.triu_indices(k, k=1)
+    inter_item_values = correlation_matrix[upper_indexes]
+    mean_inter_item_correlation = float(np.mean(inter_item_values))
+    denominator = 1 + (k - 1) * mean_inter_item_correlation
+    if denominator == 0:
+        return None, mean_inter_item_correlation
+    alpha = float((k * mean_inter_item_correlation) / denominator)
+    return alpha, mean_inter_item_correlation
+
+
+def _safe_corr(left, right):
+    if len(left) < 2:
+        return None
+    if float(np.var(left, ddof=1)) <= 0 or float(np.var(right, ddof=1)) <= 0:
+        return None
+    value = float(np.corrcoef(left, right)[0, 1])
+    return value if math.isfinite(value) else None
+
+
+def compute_cronbach_alpha(rows, variables, standardize=False) -> dict:
+    if np is None:
+        raise ValueError("Cronbach's alpha requires numpy to be installed.")
+
+    k = len(variables)
+    if k < 2:
+        raise ValueError("Cronbach's alpha requires at least two variables.")
+
+    complete_cases = _complete_numeric_matrix(rows, variables, "Cronbach's alpha")
+    n = len(complete_cases)
+    if n < 2:
+        raise ValueError("Cronbach's alpha requires at least two complete cases.")
+
+    x_matrix = np.array(complete_cases, dtype=float)
+    if not np.all(np.isfinite(x_matrix)):
+        raise ValueError("Cronbach's alpha data contains non-finite numeric values.")
+
+    item_variances = np.var(x_matrix, axis=0, ddof=1)
+    zero_variance_indexes = np.where(item_variances == 0)[0]
+    if len(zero_variance_indexes):
+        labels = [variables[index].label for index in zero_variance_indexes]
+        raise ValueError(f"Cronbach's alpha cannot use variables with zero variance: {', '.join(labels)}.")
+
+    alpha = _cronbach_alpha_from_matrix(x_matrix)
+    if alpha is None:
+        raise ValueError("Total score variance is zero; Cronbach's alpha cannot be computed.")
+
+    correlation_matrix = np.corrcoef(x_matrix, rowvar=False)
+    if not np.all(np.isfinite(correlation_matrix)):
+        raise ValueError("Inter-item correlation matrix contains non-finite values.")
+    standardized_alpha, mean_inter_item_correlation = _standardized_cronbach_alpha(correlation_matrix)
+
+    selected_alpha = standardized_alpha if standardize else alpha
+    item_means = np.mean(x_matrix, axis=0)
+    item_stds = np.std(x_matrix, axis=0, ddof=1)
+    item_statistics = []
+    negative_item_total = False
+
+    for index, variable in enumerate(variables):
+        item_values = x_matrix[:, index]
+        item_total_correlation = None
+        if k > 2:
+            total_without_item = np.sum(np.delete(x_matrix, index, axis=1), axis=1)
+            item_total_correlation = _safe_corr(item_values, total_without_item)
+            if item_total_correlation is not None and item_total_correlation < 0:
+                negative_item_total = True
+
+        alpha_if_deleted = None
+        if k > 2:
+            reduced_matrix = np.delete(x_matrix, index, axis=1)
+            alpha_if_deleted = _cronbach_alpha_from_matrix(reduced_matrix)
+
+        item_statistics.append({
+            "code": variable.code,
+            "label": variable.label,
+            "mean": float(item_means[index]),
+            "variance": float(item_variances[index]),
+            "std": float(item_stds[index]),
+            "item_total_correlation": item_total_correlation,
+            "alpha_if_deleted": alpha_if_deleted,
+        })
+
+    warnings = []
+    if n < 30:
+        warnings.append("Small sample size for reliability analysis; interpret Cronbach's alpha cautiously.")
+    if selected_alpha is not None and selected_alpha > 0.95:
+        warnings.append("Very high alpha may indicate redundant items.")
+    if mean_inter_item_correlation is not None and mean_inter_item_correlation < 0:
+        warnings.append("Negative average inter-item correlation; selected items may not measure the same construct.")
+    if negative_item_total:
+        warnings.append("Some items have negative item-total correlation and may need reverse coding or removal.")
+
+    return {
+        "method": "cronbach_alpha",
+        "n": n,
+        "n_items": k,
+        "standardize": standardize,
+        "alpha": float(alpha),
+        "standardized_alpha": standardized_alpha,
+        "interpretation": interpret_cronbach_alpha(selected_alpha),
+        "variables": [
+            {"code": variable.code, "label": variable.label}
+            for variable in variables
+        ],
+        "item_statistics": item_statistics,
+        "inter_item_correlation_matrix": correlation_matrix.tolist(),
+        "mean_inter_item_correlation": mean_inter_item_correlation,
         "warnings": warnings,
     }
 

@@ -43,6 +43,10 @@ export function isQuestionSupportedForAnalysis(question, analysisType, role = "v
     return ["single", "dropdown", "yesno"].includes(question.qtype);
   }
 
+  if (analysisType === "correspondence_analysis") {
+    return ["single", "dropdown", "yesno"].includes(question.qtype);
+  }
+
   if (analysisType === "regression") {
     if (role === "target") {
       return ["scale", "number"].includes(question.qtype);
@@ -66,6 +70,10 @@ export function isQuestionSupportedForAnalysis(question, analysisType, role = "v
       return ["scale", "number", "yesno", "single", "dropdown"].includes(question.qtype);
     }
     return false;
+  }
+
+  if (analysisType === "reliability_analysis") {
+    return ["scale", "number", "yesno", "single", "dropdown", "ranking", "matrix_single"].includes(question.qtype);
   }
 
   return false;
@@ -93,7 +101,11 @@ export function getDefaultVariableSpec(question, analysisType, role = "variable"
       return { question_id: question.id, encoding: "ordinal", measure: "ordinal" };
     }
 
-    if (analysisType === "correlation" || analysisType === "factor_analysis" || analysisType === "cluster_analysis") {
+    if (analysisType === "correspondence_analysis") {
+      return { question_id: question.id, encoding: "ordinal", measure: "nominal" };
+    }
+
+    if (analysisType === "correlation" || analysisType === "factor_analysis" || analysisType === "cluster_analysis" || analysisType === "reliability_analysis") {
       return { question_id: question.id, encoding: "ordinal", measure: "ordinal" };
     }
 
@@ -179,6 +191,25 @@ export function buildSectionPayload(surveyId, section, questionsById) {
     };
   }
 
+  if (section.type === "correspondence_analysis") {
+    if (!section.rowQuestionId || !section.columnQuestionId) {
+      throw new Error("Выберите вопросы для строк и столбцов.");
+    }
+    if (Number(section.rowQuestionId) === Number(section.columnQuestionId)) {
+      throw new Error("Вопросы для строк и столбцов должны отличаться.");
+    }
+
+    const rowQuestion = getQuestion(questionsById, section.rowQuestionId, "Строки");
+    const columnQuestion = getQuestion(questionsById, section.columnQuestionId, "Столбцы");
+
+    return {
+      survey_id: Number(surveyId),
+      row: getSpec(rowQuestion, "correspondence_analysis", "row", "Строки"),
+      column: getSpec(columnQuestion, "correspondence_analysis", "column", "Столбцы"),
+      n_dimensions: section.n_dimensions || 2,
+    };
+  }
+
   if (section.type === "regression") {
     if (!section.targetQuestionId) {
       throw new Error("Выберите целевой вопрос для регрессии.");
@@ -255,6 +286,21 @@ export function buildSectionPayload(surveyId, section, questionsById) {
       value: getSpec(valueQuestion, "group_comparison", "value", "Показатель"),
       method: section.method || "anova",
       alpha: section.alpha ?? 0.05,
+    };
+  }
+
+  if (section.type === "reliability_analysis") {
+    if ((section.questionIds || []).length < 2) {
+      throw new Error("Для расчёта Cronbach’s alpha выберите минимум два вопроса.");
+    }
+
+    return {
+      survey_id: Number(surveyId),
+      variables: section.questionIds.map((questionId) => {
+        const question = getQuestion(questionsById, questionId, "Переменные шкалы");
+        return getSpec(question, "reliability_analysis", "variable", "Переменные шкалы");
+      }),
+      standardize: section.standardize ?? false,
     };
   }
 

@@ -305,6 +305,54 @@ def _add_report_sheet(ws, analysis_report):
             append_key_value(ws, "Число столбцов", cramers_v.get("columns"))
             _append_crosstab(ws, result.get("crosstab") or {})
             _append_matrix(ws, "Expected values", [], chi.get("expected") or [])
+        elif section_type == "correspondence_analysis":
+            append_key_value(ws, "method", result.get("method"))
+            append_key_value(ws, "n", result.get("n"))
+            append_key_value(ws, "n_rows", result.get("n_rows"))
+            append_key_value(ws, "n_columns", result.get("n_columns"))
+            append_key_value(ws, "n_dimensions", result.get("n_dimensions"))
+            append_key_value(ws, "total_inertia", format_number(result.get("total_inertia")))
+            warnings = result.get("warnings") or []
+            if warnings:
+                _append_table(ws, ["Warnings"], [[warning] for warning in warnings])
+            _append_crosstab(ws, result.get("crosstab") or {})
+            _append_table(
+                ws,
+                ["Dimension", "Eigenvalue", "Explained inertia", "Percent"],
+                [
+                    [
+                        item.get("dimension"),
+                        format_number(item.get("eigenvalue")),
+                        format_number(item.get("explained_inertia")),
+                        f"{float(item.get('explained_inertia') or 0) * 100:.2f}%",
+                    ]
+                    for item in result.get("dimensions") or []
+                ],
+            )
+
+            def append_ca_coordinates(title_text, points):
+                dimensions = [item.get("dimension") for item in result.get("dimensions") or []]
+                rows = []
+                for point in points:
+                    coordinates = {item.get("dimension"): item.get("value") for item in point.get("coordinates") or []}
+                    contributions = {item.get("dimension"): item.get("value") for item in point.get("contributions") or []}
+                    rows.append([
+                        point.get("label") or point.get("value"),
+                        format_number(point.get("mass")),
+                        *[format_number(coordinates.get(dimension)) for dimension in dimensions],
+                        *[format_number(contributions.get(dimension)) for dimension in dimensions],
+                        format_number(point.get("cos2")),
+                    ])
+                _append_table(
+                    ws,
+                    ["Category", "Mass", *dimensions, *[f"Contribution {dimension}" for dimension in dimensions], "Cos2"],
+                    rows,
+                )
+
+            append_section_title(ws, "Row coordinates")
+            append_ca_coordinates("Row coordinates", result.get("row_coordinates") or [])
+            append_section_title(ws, "Column coordinates")
+            append_ca_coordinates("Column coordinates", result.get("column_coordinates") or [])
         elif section_type == "factor_analysis":
             append_key_value(ws, "method", result.get("method"))
             append_key_value(ws, "n", result.get("n"))
@@ -408,6 +456,50 @@ def _add_report_sheet(ws, analysis_report):
             warnings = result.get("warnings") or []
             if warnings:
                 _append_table(ws, ["Warnings"], [[warning] for warning in warnings])
+        elif section_type == "reliability_analysis":
+            append_key_value(ws, "method", result.get("method"))
+            append_key_value(ws, "n", result.get("n"))
+            append_key_value(ws, "n_items", result.get("n_items"))
+            append_key_value(ws, "alpha", format_number(result.get("alpha")))
+            append_key_value(ws, "standardized_alpha", format_number(result.get("standardized_alpha")))
+            append_key_value(ws, "mean_inter_item_correlation", format_number(result.get("mean_inter_item_correlation")))
+            append_key_value(ws, "interpretation", result.get("interpretation"))
+            warnings = result.get("warnings") or []
+            if warnings:
+                _append_table(ws, ["Warnings"], [[warning] for warning in warnings])
+            _append_table(
+                ws,
+                ["Item", "Mean", "Variance", "Std", "Item-total correlation", "Alpha if deleted"],
+                [
+                    [
+                        item.get("label") or item.get("code"),
+                        format_number(item.get("mean")),
+                        format_number(item.get("variance")),
+                        format_number(item.get("std")),
+                        format_number(item.get("item_total_correlation")),
+                        format_number(item.get("alpha_if_deleted")),
+                    ]
+                    for item in result.get("item_statistics") or []
+                ],
+            )
+            variables = result.get("variables") or []
+            matrix = result.get("inter_item_correlation_matrix") or []
+            if variables and matrix:
+                labels = [variable.get("label") or variable.get("code") for variable in variables]
+                _append_table(
+                    ws,
+                    ["Item", *labels],
+                    [
+                        [
+                            labels[row_index],
+                            *[
+                                format_number(value)
+                                for value in (matrix[row_index] if row_index < len(matrix) else [])
+                            ],
+                        ]
+                        for row_index in range(len(labels))
+                    ],
+                )
         elif section_type == "regression":
             append_key_value(ws, "target", get_variable_label(result, result.get("target")))
             append_key_value(ws, "features", ", ".join(get_variable_label(result, code) for code in (result.get("features") or [])))

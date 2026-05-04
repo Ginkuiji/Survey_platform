@@ -28,10 +28,12 @@ import {
   createAnalysisReport,
   runChiSquareAnalysis,
   runClusterAnalysis,
+  runCorrespondenceAnalysis,
   runCorrelationAnalysis,
   runCrosstabAnalysis,
   runFactorAnalysis,
   runGroupComparisonAnalysis,
+  runReliabilityAnalysis,
   runRegressionAnalysis,
 } from "../../api/analytics";
 import {
@@ -45,20 +47,24 @@ const ANALYSIS_TYPES = [
   { value: "correlation", label: "Корреляционный анализ" },
   { value: "crosstab", label: "Таблица сопряжённости" },
   { value: "chi_square", label: "χ²-критерий" },
+  { value: "correspondence_analysis", label: "Анализ соответствий" },
   { value: "regression", label: "Линейная регрессия" },
   { value: "factor_analysis", label: "Факторный анализ" },
   { value: "cluster_analysis", label: "Кластерный анализ" },
   { value: "group_comparison", label: "Сравнение групп" },
+  { value: "reliability_analysis", label: "Надёжность шкалы" },
 ];
 
 const API_BY_TYPE = {
   correlation: runCorrelationAnalysis,
   crosstab: runCrosstabAnalysis,
   chi_square: runChiSquareAnalysis,
+  correspondence_analysis: runCorrespondenceAnalysis,
   regression: runRegressionAnalysis,
   factor_analysis: runFactorAnalysis,
   cluster_analysis: runClusterAnalysis,
   group_comparison: runGroupComparisonAnalysis,
+  reliability_analysis: runReliabilityAnalysis,
 };
 
 function createSection(type) {
@@ -74,6 +80,17 @@ function createSection(type) {
 
   if (type === "chi_square") {
     return { id, type, title: "χ²-критерий", rowQuestionId: "", columnQuestionId: "" };
+  }
+
+  if (type === "correspondence_analysis") {
+    return {
+      id,
+      type,
+      title: "Анализ соответствий",
+      rowQuestionId: "",
+      columnQuestionId: "",
+      n_dimensions: 2,
+    };
   }
 
   if (type === "factor_analysis") {
@@ -109,6 +126,16 @@ function createSection(type) {
       valueQuestionId: "",
       method: "anova",
       alpha: 0.05,
+    };
+  }
+
+  if (type === "reliability_analysis") {
+    return {
+      id,
+      type,
+      title: "Надёжность шкалы",
+      questionIds: [],
+      standardize: false,
     };
   }
 
@@ -223,6 +250,59 @@ function SectionFields({ section, questions, updateSection }) {
             ))}
           </Select>
         </FormControl>
+      </Stack>
+    );
+  }
+
+  if (section.type === "correspondence_analysis") {
+    const availableQuestions = questions.filter((question) => isQuestionSupportedForAnalysis(question, "correspondence_analysis"));
+
+    return (
+      <Stack spacing={2}>
+        <Alert severity="info">
+          Анализ соответствий применяется к таблице сопряжённости двух категориальных переменных.
+        </Alert>
+
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <FormControl fullWidth>
+            <InputLabel>Строки</InputLabel>
+            <Select
+              label="Строки"
+              value={section.rowQuestionId}
+              onChange={(event) => updateSection(section.id, { rowQuestionId: event.target.value })}
+            >
+              {availableQuestions.map((question) => (
+                <MenuItem key={question.id} value={question.id}>
+                  <QuestionOption question={question} />
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl fullWidth>
+            <InputLabel>Столбцы</InputLabel>
+            <Select
+              label="Столбцы"
+              value={section.columnQuestionId}
+              onChange={(event) => updateSection(section.id, { columnQuestionId: event.target.value })}
+            >
+              {availableQuestions.map((question) => (
+                <MenuItem key={question.id} value={question.id}>
+                  <QuestionOption question={question} />
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <TextField
+            fullWidth
+            type="number"
+            label="Количество измерений"
+            inputProps={{ min: 1, max: 5 }}
+            value={section.n_dimensions}
+            onChange={(event) => updateSection(section.id, { n_dimensions: Number(event.target.value) })}
+          />
+        </Stack>
       </Stack>
     );
   }
@@ -437,6 +517,46 @@ function SectionFields({ section, questions, updateSection }) {
             onChange={(event) => updateSection(section.id, { alpha: Number(event.target.value) })}
           />
         </Stack>
+      </Stack>
+    );
+  }
+
+  if (section.type === "reliability_analysis") {
+    const availableQuestions = questions.filter((question) => isQuestionSupportedForAnalysis(question, "reliability_analysis"));
+
+    return (
+      <Stack spacing={2}>
+        <Alert severity="info">
+          Cronbach’s alpha используется для оценки внутренней согласованности набора вопросов, измеряющих одну шкалу. Выберите минимум два вопроса.
+        </Alert>
+
+        <FormControl fullWidth>
+          <InputLabel>Переменные шкалы</InputLabel>
+          <Select
+            multiple
+            label="Переменные шкалы"
+            value={section.questionIds}
+            renderValue={(selected) => `${selected.length} выбрано`}
+            onChange={(event) => updateSection(section.id, { questionIds: event.target.value })}
+          >
+            {availableQuestions.map((question) => (
+              <MenuItem key={question.id} value={question.id}>
+                <Checkbox checked={section.questionIds.includes(question.id)} />
+                <ListItemText primary={<QuestionOption question={question} />} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={section.standardize}
+              onChange={(event) => updateSection(section.id, { standardize: event.target.checked })}
+            />
+          }
+          label="Использовать стандартизированную alpha"
+        />
       </Stack>
     );
   }

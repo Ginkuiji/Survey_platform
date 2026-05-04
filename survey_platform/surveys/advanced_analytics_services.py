@@ -2,7 +2,9 @@ from .advanced_analytics_dataset import build_analysis_dataset
 from .advanced_analytics_methods import (
     compute_chi_square,
     compute_correlation_matrix,
+    compute_correspondence_analysis,
     compute_cramers_v,
+    compute_cronbach_alpha,
     compute_crosstab,
     compute_factor_analysis,
     compute_group_comparison,
@@ -77,6 +79,25 @@ def run_chi_square_analysis(payload: dict) -> dict:
             "cramers_v": cramers_v,
         },
     )
+
+
+def run_correspondence_analysis(payload: dict) -> dict:
+    survey_id = payload["survey_id"]
+    dataset = build_analysis_dataset(survey_id, [payload["row"], payload["column"]])
+    if len(dataset.variables) != 2:
+        raise ValueError(
+            "Correspondence analysis row and column must each produce exactly one dataset column."
+        )
+
+    row_variable, column_variable = dataset.variables
+    crosstab = compute_crosstab(dataset.rows, row_variable.code, column_variable.code)
+    result = compute_correspondence_analysis(
+        crosstab,
+        row_variable=row_variable,
+        column_variable=column_variable,
+        n_dimensions=payload.get("n_dimensions", 2),
+    )
+    return _with_metadata(survey_id, "correspondence_analysis", dataset, result)
 
 
 def run_regression_analysis(payload: dict) -> dict:
@@ -189,3 +210,27 @@ def run_group_comparison(payload: dict) -> dict:
         alpha=payload.get("alpha", 0.05),
     )
     return _with_metadata(survey_id, "group_comparison", dataset, result)
+
+
+def run_reliability_analysis(payload: dict) -> dict:
+    survey_id = payload["survey_id"]
+    variable_specs = payload["variables"]
+    unsupported_encodings = {"one_hot", "matrix_multi_binary"}
+    invalid_specs = [
+        spec.get("encoding")
+        for spec in variable_specs
+        if spec.get("encoding") in unsupported_encodings
+    ]
+    if invalid_specs:
+        raise ValueError("Reliability analysis does not support one_hot or matrix_multi encodings in MVP.")
+
+    dataset = build_analysis_dataset(survey_id, variable_specs)
+    if len(dataset.variables) < 2:
+        raise ValueError("Cronbach's alpha requires at least two expanded variables.")
+
+    result = compute_cronbach_alpha(
+        dataset.rows,
+        dataset.variables,
+        standardize=payload.get("standardize", False),
+    )
+    return _with_metadata(survey_id, "reliability_analysis", dataset, result)

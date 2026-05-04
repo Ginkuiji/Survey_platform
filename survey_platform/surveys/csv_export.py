@@ -275,6 +275,48 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
             for row_index, expected_row in enumerate(chi.get("expected") or []):
                 for col_index, value in enumerate(expected_row):
                     row("χ²", title, "expected", f"R{row_index + 1}", f"C{col_index + 1}", value)
+        elif section_type == "correspondence_analysis":
+            row("Анализ соответствий", title, "method", result.get("method"))
+            row("Анализ соответствий", title, "n", result.get("n"))
+            row("Анализ соответствий", title, "n_rows", result.get("n_rows"))
+            row("Анализ соответствий", title, "n_columns", result.get("n_columns"))
+            row("Анализ соответствий", title, "n_dimensions", result.get("n_dimensions"))
+            row("Анализ соответствий", title, "total_inertia", result.get("total_inertia"))
+            for dimension in result.get("dimensions") or []:
+                row(
+                    "Анализ соответствий",
+                    title,
+                    "dimension",
+                    dimension.get("dimension"),
+                    "eigenvalue",
+                    dimension.get("eigenvalue"),
+                    "explained_inertia",
+                    dimension.get("explained_inertia"),
+                )
+            crosstab = result.get("crosstab") or {}
+            for crosstab_row in crosstab.get("rows") or []:
+                for column in crosstab_row.get("columns") or []:
+                    row(
+                        "Анализ соответствий",
+                        title,
+                        "crosstab",
+                        crosstab_row.get("value"),
+                        column.get("value"),
+                        "count",
+                        column.get("count"),
+                    )
+            for point in result.get("row_coordinates") or []:
+                for coord in point.get("coordinates") or []:
+                    row("Анализ соответствий", title, "row_coordinate", point.get("label"), coord.get("dimension"), coord.get("value"), "cos2", point.get("cos2"))
+                for contribution in point.get("contributions") or []:
+                    row("Анализ соответствий", title, "row_contribution", point.get("label"), contribution.get("dimension"), contribution.get("value"))
+            for point in result.get("column_coordinates") or []:
+                for coord in point.get("coordinates") or []:
+                    row("Анализ соответствий", title, "column_coordinate", point.get("label"), coord.get("dimension"), coord.get("value"), "cos2", point.get("cos2"))
+                for contribution in point.get("contributions") or []:
+                    row("Анализ соответствий", title, "column_contribution", point.get("label"), contribution.get("dimension"), contribution.get("value"))
+            for warning in result.get("warnings") or []:
+                row("Анализ соответствий", title, "warning", warning)
         elif section_type == "regression":
             row("Регрессия", title, "target", _variable_label(result, result.get("target")))
             row("Регрессия", title, "features", ", ".join(_variable_label(result, code) for code in (result.get("features") or [])))
@@ -371,6 +413,41 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
                 )
             for warning in result.get("warnings") or []:
                 row("Сравнение групп", title, "warning", warning)
+
+        elif section_type == "reliability_analysis":
+            row("Надёжность шкалы", title, "method", result.get("method"))
+            row("Надёжность шкалы", title, "n", result.get("n"))
+            row("Надёжность шкалы", title, "n_items", result.get("n_items"))
+            row("Надёжность шкалы", title, "alpha", result.get("alpha"))
+            row("Надёжность шкалы", title, "standardized_alpha", result.get("standardized_alpha"))
+            row("Надёжность шкалы", title, "mean_inter_item_correlation", result.get("mean_inter_item_correlation"))
+            row("Надёжность шкалы", title, "interpretation", result.get("interpretation"))
+            for item in result.get("item_statistics") or []:
+                row(
+                    "Надёжность шкалы",
+                    title,
+                    "item",
+                    item.get("label") or item.get("code"),
+                    "mean",
+                    item.get("mean"),
+                    "variance",
+                    item.get("variance"),
+                    "std",
+                    item.get("std"),
+                    "item_total_correlation",
+                    item.get("item_total_correlation"),
+                    "alpha_if_deleted",
+                    item.get("alpha_if_deleted"),
+                )
+            variables = result.get("variables") or []
+            matrix = result.get("inter_item_correlation_matrix") or []
+            for row_index, matrix_row in enumerate(matrix):
+                for col_index, value in enumerate(matrix_row):
+                    row_label = variables[row_index].get("label") if row_index < len(variables) else f"R{row_index + 1}"
+                    col_label = variables[col_index].get("label") if col_index < len(variables) else f"C{col_index + 1}"
+                    row("Надёжность шкалы", title, "correlation", row_label, col_label, value)
+            for warning in result.get("warnings") or []:
+                row("Надёжность шкалы", title, "warning", warning)
 
     csv_text = output.getvalue()
     return ("\ufeff" + csv_text).encode("utf-8")

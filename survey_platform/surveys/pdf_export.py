@@ -313,6 +313,57 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
                 ["columns", cramers_v.get("columns")],
             ]))
             add_matrix_table(story, "Expected values", chi.get("expected") or [])
+        elif section_type == "correspondence_analysis":
+            story.append(key_value_table([
+                ["method", result.get("method")],
+                ["n", result.get("n")],
+                ["n_rows", result.get("n_rows")],
+                ["n_columns", result.get("n_columns")],
+                ["n_dimensions", result.get("n_dimensions")],
+                ["total_inertia", result.get("total_inertia")],
+            ]))
+            warnings = result.get("warnings") or []
+            if warnings:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table([["Warnings"], *[[warning] for warning in warnings]], [16 * cm]))
+            story.append(Spacer(1, 0.15 * cm))
+            add_crosstab(story, result.get("crosstab") or {})
+            dimensions = result.get("dimensions") or []
+            if dimensions:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table(
+                    [["Dimension", "Eigenvalue", "Explained inertia", "%"], *[
+                        [
+                            item.get("dimension"),
+                            item.get("eigenvalue"),
+                            item.get("explained_inertia"),
+                            f"{float(item.get('explained_inertia') or 0) * 100:.2f}%",
+                        ]
+                        for item in dimensions
+                    ]],
+                ))
+
+            def add_ca_coordinates(title_text, points):
+                if not points:
+                    return
+                dimension_names = [item.get("dimension") for item in dimensions]
+                rows = [["Category", "Mass", *dimension_names, *[f"Contribution {name}" for name in dimension_names], "Cos2"]]
+                for point in points:
+                    coordinates = {item.get("dimension"): item.get("value") for item in point.get("coordinates") or []}
+                    contributions = {item.get("dimension"): item.get("value") for item in point.get("contributions") or []}
+                    rows.append([
+                        point.get("label") or point.get("value"),
+                        point.get("mass"),
+                        *[coordinates.get(name) for name in dimension_names],
+                        *[contributions.get(name) for name in dimension_names],
+                        point.get("cos2"),
+                    ])
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(p(title_text, "AnalyticsHeading"))
+                story.append(table(rows))
+
+            add_ca_coordinates("Row coordinates", result.get("row_coordinates") or [])
+            add_ca_coordinates("Column coordinates", result.get("column_coordinates") or [])
         elif section_type == "factor_analysis":
             story.append(key_value_table([
                 ["method", result.get("method")],
@@ -430,6 +481,55 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
             if warnings:
                 story.append(Spacer(1, 0.15 * cm))
                 story.append(table([["Warnings"], *[[warning] for warning in warnings]], [16 * cm]))
+        elif section_type == "reliability_analysis":
+            story.append(key_value_table([
+                ["method", result.get("method")],
+                ["n", result.get("n")],
+                ["n_items", result.get("n_items")],
+                ["alpha", result.get("alpha")],
+                ["standardized_alpha", result.get("standardized_alpha")],
+                ["mean_inter_item_correlation", result.get("mean_inter_item_correlation")],
+                ["interpretation", result.get("interpretation")],
+            ]))
+            warnings = result.get("warnings") or []
+            if warnings:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table([["Warnings"], *[[warning] for warning in warnings]], [16 * cm]))
+            items = result.get("item_statistics") or []
+            if items:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table(
+                    [["Item", "Mean", "Variance", "Std", "Item-total", "Alpha deleted"], *[
+                        [
+                            item.get("label") or item.get("code"),
+                            item.get("mean"),
+                            item.get("variance"),
+                            item.get("std"),
+                            item.get("item_total_correlation"),
+                            item.get("alpha_if_deleted"),
+                        ]
+                        for item in items
+                    ]],
+                ))
+            variables = (result.get("variables") or [])[:8]
+            matrix = result.get("inter_item_correlation_matrix") or []
+            if variables and matrix:
+                story.append(Spacer(1, 0.15 * cm))
+                if len(result.get("variables") or []) > len(variables):
+                    story.append(p("Inter-item correlation matrix is truncated for readability."))
+                header = ["Item", *[variable.get("label") or variable.get("code") for variable in variables]]
+                rows = []
+                for row_index, variable in enumerate(variables):
+                    rows.append([
+                        variable.get("label") or variable.get("code"),
+                        *[
+                            matrix[row_index][col_index]
+                            if row_index < len(matrix) and col_index < len(matrix[row_index])
+                            else None
+                            for col_index in range(len(variables))
+                        ],
+                    ])
+                story.append(table([header, *rows]))
         elif section_type == "regression":
             story.append(key_value_table([
                 ["target", _variable_label(result, result.get("target"))],

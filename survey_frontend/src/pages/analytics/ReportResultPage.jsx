@@ -25,10 +25,12 @@ const SECTION_LABELS = {
   correlation: "Корреляционный анализ",
   crosstab: "Таблица сопряжённости",
   chi_square: "χ²-критерий",
+  correspondence_analysis: "Анализ соответствий",
   regression: "Линейная регрессия",
   factor_analysis: "Факторный анализ",
   cluster_analysis: "Кластерный анализ",
   group_comparison: "Сравнение групп",
+  reliability_analysis: "Надёжность шкалы",
 };
 
 function formatNumber(value) {
@@ -38,7 +40,7 @@ function formatNumber(value) {
 }
 
 function formatPercent(value) {
-  if (value === null || value === undefined || Number.isNaN(value)) return "вЂ”";
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
   return `${(Number(value) * 100).toFixed(2)}%`;
 }
 
@@ -248,6 +250,114 @@ function renderChiSquareSection(section) {
         </Typography>
         {renderExpectedTable(chiSquare?.expected)}
       </Box>
+    </Stack>
+  );
+}
+
+function valuesByDimension(items = []) {
+  return new Map(items.map((item) => [item.dimension, item.value]));
+}
+
+function renderCorrespondenceCoordinatesTable(title, dimensions, points) {
+  const dimensionNames = dimensions.map((dimension) => dimension.dimension);
+
+  return (
+    <Box sx={{ width: "100%", overflowX: "auto" }}>
+      <Typography variant="subtitle1" sx={{ mb: 1 }}>
+        {title}
+      </Typography>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Категория</TableCell>
+            <TableCell align="right">Mass</TableCell>
+            {dimensionNames.map((dimension) => (
+              <TableCell key={dimension} align="right">{dimension}</TableCell>
+            ))}
+            {dimensionNames.map((dimension) => (
+              <TableCell key={`${dimension}-contribution`} align="right">Contribution {dimension}</TableCell>
+            ))}
+            <TableCell align="right">Cos²</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {points.map((point) => {
+            const coordinates = valuesByDimension(point.coordinates);
+            const contributions = valuesByDimension(point.contributions);
+            return (
+              <TableRow key={`${title}-${point.value}`}>
+                <TableCell>{point.label || point.value}</TableCell>
+                <TableCell align="right">{formatNumber(point.mass)}</TableCell>
+                {dimensionNames.map((dimension) => (
+                  <TableCell key={dimension} align="right">{formatNumber(coordinates.get(dimension))}</TableCell>
+                ))}
+                {dimensionNames.map((dimension) => (
+                  <TableCell key={`${dimension}-contribution`} align="right">{formatNumber(contributions.get(dimension))}</TableCell>
+                ))}
+                <TableCell align="right">{formatNumber(point.cos2)}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </Box>
+  );
+}
+
+function renderCorrespondenceAnalysisSection(section) {
+  const result = section.result || {};
+  const dimensions = result.dimensions || [];
+
+  return (
+    <Stack spacing={3}>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Chip label="Метод: анализ соответствий" />
+        <Chip label={`n: ${formatNumber(result.n)}`} />
+        <Chip label={`Строк: ${formatNumber(result.n_rows)}`} />
+        <Chip label={`Столбцов: ${formatNumber(result.n_columns)}`} />
+        <Chip label={`Измерений: ${formatNumber(result.n_dimensions)}`} />
+        <Chip label={`Total inertia: ${formatNumber(result.total_inertia)}`} />
+      </Stack>
+
+      {(result.warnings || []).map((warning) => (
+        <Alert key={warning} severity="warning">{warning}</Alert>
+      ))}
+
+      <Box>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Таблица сопряжённости
+        </Typography>
+        {renderCrosstabTable(result.crosstab)}
+      </Box>
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Инерция по измерениям
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Измерение</TableCell>
+              <TableCell align="right">Eigenvalue</TableCell>
+              <TableCell align="right">Explained inertia</TableCell>
+              <TableCell align="right">%</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {dimensions.map((dimension) => (
+              <TableRow key={dimension.dimension}>
+                <TableCell>{dimension.dimension}</TableCell>
+                <TableCell align="right">{formatNumber(dimension.eigenvalue)}</TableCell>
+                <TableCell align="right">{formatNumber(dimension.explained_inertia)}</TableCell>
+                <TableCell align="right">{formatPercent(dimension.explained_inertia)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+
+      {renderCorrespondenceCoordinatesTable("Координаты строк", dimensions, result.row_coordinates || [])}
+      {renderCorrespondenceCoordinatesTable("Координаты столбцов", dimensions, result.column_coordinates || [])}
     </Stack>
   );
 }
@@ -520,6 +630,89 @@ function renderGroupComparisonSection(section) {
   );
 }
 
+function renderReliabilityAnalysisSection(section) {
+  const result = section.result || {};
+  const variables = result.variables || [];
+  const matrix = result.inter_item_correlation_matrix || [];
+
+  return (
+    <Stack spacing={3}>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Chip label="Метод: Cronbach’s alpha" />
+        <Chip label={`n: ${formatNumber(result.n)}`} />
+        <Chip label={`items: ${formatNumber(result.n_items)}`} />
+        <Chip label={`alpha: ${formatNumber(result.alpha)}`} />
+        <Chip label={`standardized alpha: ${formatNumber(result.standardized_alpha)}`} />
+        <Chip label={result.interpretation || "—"} />
+      </Stack>
+
+      {(result.warnings || []).map((warning) => (
+        <Alert key={warning} severity="warning">{warning}</Alert>
+      ))}
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Item statistics
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Пункт</TableCell>
+              <TableCell align="right">Mean</TableCell>
+              <TableCell align="right">Variance</TableCell>
+              <TableCell align="right">Std</TableCell>
+              <TableCell align="right">Item-total correlation</TableCell>
+              <TableCell align="right">Alpha if deleted</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {(result.item_statistics || []).map((item) => (
+              <TableRow key={item.code}>
+                <TableCell>{item.label || item.code}</TableCell>
+                <TableCell align="right">{formatNumber(item.mean)}</TableCell>
+                <TableCell align="right">{formatNumber(item.variance)}</TableCell>
+                <TableCell align="right">{formatNumber(item.std)}</TableCell>
+                <TableCell align="right">{formatNumber(item.item_total_correlation)}</TableCell>
+                <TableCell align="right">{formatNumber(item.alpha_if_deleted)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Inter-item correlations
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Пункт</TableCell>
+              {variables.map((variable) => (
+                <TableCell key={variable.code} align="right">
+                  {variable.label || variable.code}
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {variables.map((variable, rowIndex) => (
+              <TableRow key={variable.code}>
+                <TableCell>{variable.label || variable.code}</TableCell>
+                {variables.map((column, columnIndex) => (
+                  <TableCell key={column.code} align="right">
+                    {formatNumber(matrix[rowIndex]?.[columnIndex])}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+    </Stack>
+  );
+}
+
 function renderSection(section) {
   if (section.error) {
     return <Alert severity="error">{section.error}</Alert>;
@@ -528,10 +721,12 @@ function renderSection(section) {
   if (section.type === "correlation") return renderCorrelationSection(section);
   if (section.type === "crosstab") return renderCrosstabSection(section);
   if (section.type === "chi_square") return renderChiSquareSection(section);
+  if (section.type === "correspondence_analysis") return renderCorrespondenceAnalysisSection(section);
   if (section.type === "regression") return renderRegressionSection(section);
   if (section.type === "factor_analysis") return renderFactorAnalysisSection(section);
   if (section.type === "cluster_analysis") return renderClusterAnalysisSection(section);
   if (section.type === "group_comparison") return renderGroupComparisonSection(section);
+  if (section.type === "reliability_analysis") return renderReliabilityAnalysisSection(section);
 
   return <Typography color="text.secondary">Неизвестный тип секции.</Typography>;
 }
