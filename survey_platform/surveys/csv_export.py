@@ -326,6 +326,51 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
             for coefficient in result.get("coefficients") or []:
                 row("Регрессия", title, "coefficient", _variable_label(result, coefficient.get("name")), "value", coefficient.get("value"))
 
+        elif section_type == "logistic_regression":
+            metrics = result.get("metrics") or {}
+            confusion = result.get("confusion_matrix") or {}
+            row("Логистическая регрессия", title, "method", result.get("method"))
+            row("Логистическая регрессия", title, "target", _variable_label(result, result.get("target")))
+            row("Логистическая регрессия", title, "features", ", ".join(_variable_label(result, code) for code in (result.get("features") or [])))
+            row("Логистическая регрессия", title, "n", result.get("n"))
+            row("Логистическая регрессия", title, "positive_class_count", result.get("positive_class_count"))
+            row("Логистическая регрессия", title, "negative_class_count", result.get("negative_class_count"))
+            row("Логистическая регрессия", title, "base_rate", result.get("base_rate"))
+            row("Логистическая регрессия", title, "threshold", result.get("threshold"))
+            row("Логистическая регрессия", title, "accuracy", metrics.get("accuracy"))
+            row("Логистическая регрессия", title, "precision", metrics.get("precision"))
+            row("Логистическая регрессия", title, "recall", metrics.get("recall"))
+            row("Логистическая регрессия", title, "f1", metrics.get("f1"))
+            row("Логистическая регрессия", title, "mcfadden_r2", metrics.get("mcfadden_r2"))
+            row(
+                "Логистическая регрессия",
+                title,
+                "confusion_matrix",
+                "tp",
+                confusion.get("tp"),
+                "tn",
+                confusion.get("tn"),
+                "fp",
+                confusion.get("fp"),
+                "fn",
+                confusion.get("fn"),
+            )
+            for coefficient in result.get("coefficients") or []:
+                row(
+                    "Логистическая регрессия",
+                    title,
+                    "coefficient",
+                    _variable_label(result, coefficient.get("name")),
+                    "value",
+                    coefficient.get("coefficient"),
+                    "odds_ratio",
+                    coefficient.get("odds_ratio"),
+                    "interpretation",
+                    coefficient.get("interpretation"),
+                )
+            for warning in result.get("warnings") or []:
+                row("Логистическая регрессия", title, "warning", warning)
+
         elif section_type == "factor_analysis":
             row("Factor analysis", title, "method", result.get("method"))
             row("Factor analysis", title, "n", result.get("n"))

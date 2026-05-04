@@ -54,6 +54,16 @@ export function isQuestionSupportedForAnalysis(question, analysisType, role = "v
     return ["scale", "number", "yesno", "single", "dropdown", "multi", "ranking", "matrix_single", "matrix_multi"].includes(question.qtype);
   }
 
+  if (analysisType === "logistic_regression") {
+    if (role === "target") {
+      return ["yesno"].includes(question.qtype);
+    }
+    if (role === "feature") {
+      return ["scale", "number", "yesno", "single", "dropdown", "multi", "ranking", "matrix_single", "matrix_multi"].includes(question.qtype);
+    }
+    return false;
+  }
+
   if (analysisType === "factor_analysis") {
     return ["scale", "number", "yesno", "single", "dropdown", "ranking", "matrix_single"].includes(question.qtype);
   }
@@ -82,6 +92,34 @@ export function isQuestionSupportedForAnalysis(question, analysisType, role = "v
 export function getDefaultVariableSpec(question, analysisType, role = "variable") {
   if (!isQuestionSupportedForAnalysis(question, analysisType, role)) {
     return null;
+  }
+
+  if (analysisType === "logistic_regression" && role === "target" && question.qtype === "yesno") {
+    return { question_id: question.id, encoding: "binary", measure: "binary" };
+  }
+
+  if (analysisType === "logistic_regression" && role === "feature") {
+    if (["number", "scale"].includes(question.qtype)) {
+      return { question_id: question.id, encoding: "numeric", measure: "interval" };
+    }
+    if (question.qtype === "yesno") {
+      return { question_id: question.id, encoding: "binary", measure: "binary" };
+    }
+    if (["single", "dropdown"].includes(question.qtype)) {
+      return { question_id: question.id, encoding: "one_hot", measure: "nominal" };
+    }
+    if (question.qtype === "multi") {
+      return { question_id: question.id, encoding: "one_hot", measure: "nominal" };
+    }
+    if (question.qtype === "ranking") {
+      return { question_id: question.id, encoding: "rank", measure: "ordinal" };
+    }
+    if (question.qtype === "matrix_single") {
+      return { question_id: question.id, encoding: "matrix_ordinal", measure: "ordinal" };
+    }
+    if (question.qtype === "matrix_multi") {
+      return { question_id: question.id, encoding: "matrix_multi_binary", measure: "binary" };
+    }
   }
 
   if (["number", "scale"].includes(question.qtype)) {
@@ -231,6 +269,37 @@ export function buildSectionPayload(surveyId, section, questionsById) {
         return getSpec(question, "regression", "feature", "Факторы");
       }),
       include_intercept: section.include_intercept ?? true,
+    };
+  }
+
+  if (section.type === "logistic_regression") {
+    if (!section.targetQuestionId) {
+      throw new Error("Выберите бинарную целевую переменную для логистической регрессии.");
+    }
+
+    if ((section.featureQuestionIds || []).length < 1) {
+      throw new Error("Для логистической регрессии выберите минимум один фактор.");
+    }
+
+    if ((section.featureQuestionIds || []).some((questionId) => Number(questionId) === Number(section.targetQuestionId))) {
+      throw new Error("Целевая переменная не должна быть среди факторов.");
+    }
+
+    const targetQuestion = getQuestion(questionsById, section.targetQuestionId, "Целевая переменная");
+
+    return {
+      survey_id: Number(surveyId),
+      target: getSpec(targetQuestion, "logistic_regression", "target", "Целевая переменная"),
+      features: section.featureQuestionIds.map((questionId) => {
+        const question = getQuestion(questionsById, questionId, "Факторы");
+        return getSpec(question, "logistic_regression", "feature", "Факторы");
+      }),
+      include_intercept: section.include_intercept ?? true,
+      threshold: section.threshold ?? 0.5,
+      max_iter: section.max_iter ?? 1000,
+      learning_rate: section.learning_rate ?? 0.1,
+      regularization: section.regularization || "l2",
+      lambda_: section.lambda_ ?? 0.01,
     };
   }
 

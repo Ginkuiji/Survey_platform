@@ -27,6 +27,7 @@ const SECTION_LABELS = {
   chi_square: "χ²-критерий",
   correspondence_analysis: "Анализ соответствий",
   regression: "Линейная регрессия",
+  logistic_regression: "Логистическая регрессия",
   factor_analysis: "Факторный анализ",
   cluster_analysis: "Кластерный анализ",
   group_comparison: "Сравнение групп",
@@ -402,6 +403,96 @@ function renderRegressionSection(section) {
   );
 }
 
+function renderLogisticRegressionSection(section) {
+  const result = section.result || {};
+  const metrics = result.metrics || {};
+  const confusionMatrix = result.confusion_matrix || {};
+  const featureLabels = (result.features || []).map(code => getVariableLabel(result, code));
+
+  return (
+    <Stack spacing={3}>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Chip label={`Method: ${result.method || "—"}`} />
+        <Chip label={`Target: ${getVariableLabel(result, result.target)}`} />
+        <Chip label={`n: ${formatNumber(result.n)}`} />
+        <Chip label={`Positive: ${formatNumber(result.positive_class_count)}`} />
+        <Chip label={`Negative: ${formatNumber(result.negative_class_count)}`} />
+        <Chip label={`Threshold: ${formatNumber(result.threshold)}`} />
+        <Chip label={`Accuracy: ${formatNumber(metrics.accuracy)}`} />
+        <Chip label={`Precision: ${formatNumber(metrics.precision)}`} />
+        <Chip label={`Recall: ${formatNumber(metrics.recall)}`} />
+        <Chip label={`F1: ${formatNumber(metrics.f1)}`} />
+        <Chip label={`McFadden R²: ${formatNumber(metrics.mcfadden_r2)}`} />
+      </Stack>
+
+      <Typography color="text.secondary" variant="body2">
+        Features: {featureLabels.join(", ") || "—"}
+      </Typography>
+
+      {(result.warnings || []).map((warning) => (
+        <Alert key={warning} severity="warning">{warning}</Alert>
+      ))}
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Confusion matrix
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell />
+              <TableCell align="right">Predicted 0</TableCell>
+              <TableCell align="right">Predicted 1</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            <TableRow>
+              <TableCell>Actual 0</TableCell>
+              <TableCell align="right">{formatNumber(confusionMatrix.tn)}</TableCell>
+              <TableCell align="right">{formatNumber(confusionMatrix.fp)}</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell>Actual 1</TableCell>
+              <TableCell align="right">{formatNumber(confusionMatrix.fn)}</TableCell>
+              <TableCell align="right">{formatNumber(confusionMatrix.tp)}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </Box>
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Coefficients
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Переменная</TableCell>
+              <TableCell align="right">Coefficient</TableCell>
+              <TableCell align="right">Odds ratio</TableCell>
+              <TableCell>Interpretation</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {(result.coefficients || []).map((coefficient) => (
+              <TableRow key={coefficient.name}>
+                <TableCell>{getVariableLabel(result, coefficient.name)}</TableCell>
+                <TableCell align="right">{formatNumber(coefficient.coefficient)}</TableCell>
+                <TableCell align="right">{formatNumber(coefficient.odds_ratio)}</TableCell>
+                <TableCell>{coefficient.interpretation || "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+
+      <Typography color="text.secondary" variant="body2">
+        Predictions are stored in the API result; this view shows model summary only.
+      </Typography>
+    </Stack>
+  );
+}
+
 function renderFactorAnalysisSection(section) {
   const result = section.result || {};
   const explainedVariance = result.explained_variance || [];
@@ -723,6 +814,7 @@ function renderSection(section) {
   if (section.type === "chi_square") return renderChiSquareSection(section);
   if (section.type === "correspondence_analysis") return renderCorrespondenceAnalysisSection(section);
   if (section.type === "regression") return renderRegressionSection(section);
+  if (section.type === "logistic_regression") return renderLogisticRegressionSection(section);
   if (section.type === "factor_analysis") return renderFactorAnalysisSection(section);
   if (section.type === "cluster_analysis") return renderClusterAnalysisSection(section);
   if (section.type === "group_comparison") return renderGroupComparisonSection(section);

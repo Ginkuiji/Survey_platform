@@ -541,6 +541,45 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
             coefficients = result.get("coefficients") or []
             if coefficients:
                 story.append(table([["Name", "Value"], *[[_variable_label(result, item.get("name")), item.get("value")] for item in coefficients]], [9 * cm, 5 * cm]))
+        elif section_type == "logistic_regression":
+            metrics = result.get("metrics") or {}
+            confusion = result.get("confusion_matrix") or {}
+            story.append(key_value_table([
+                ["method", result.get("method")],
+                ["target", _variable_label(result, result.get("target"))],
+                ["features", ", ".join(_variable_label(result, code) for code in (result.get("features") or []))],
+                ["n", result.get("n")],
+                ["positive_class_count", result.get("positive_class_count")],
+                ["negative_class_count", result.get("negative_class_count")],
+                ["base_rate", result.get("base_rate")],
+                ["threshold", result.get("threshold")],
+                ["accuracy", metrics.get("accuracy")],
+                ["precision", metrics.get("precision")],
+                ["recall", metrics.get("recall")],
+                ["f1", metrics.get("f1")],
+                ["mcfadden_r2", metrics.get("mcfadden_r2")],
+            ]))
+            story.append(table([
+                ["", "Predicted 0", "Predicted 1"],
+                ["Actual 0", confusion.get("tn"), confusion.get("fp")],
+                ["Actual 1", confusion.get("fn"), confusion.get("tp")],
+            ], [5 * cm, 5 * cm, 5 * cm]))
+            coefficients = result.get("coefficients") or []
+            if coefficients:
+                story.append(table(
+                    [["Name", "Coefficient", "Odds ratio", "Interpretation"], *[
+                        [
+                            _variable_label(result, item.get("name")),
+                            item.get("coefficient"),
+                            item.get("odds_ratio"),
+                            item.get("interpretation"),
+                        ]
+                        for item in coefficients
+                    ]],
+                    [5 * cm, 3 * cm, 3 * cm, 5 * cm],
+                ))
+            for warning in result.get("warnings") or []:
+                story.append(p(f"Warning: {warning}"))
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1.4 * cm, leftMargin=1.4 * cm, topMargin=1.4 * cm, bottomMargin=1.4 * cm)

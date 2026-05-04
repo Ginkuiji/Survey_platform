@@ -478,6 +478,264 @@ def compute_linear_regression(rows, target_code, feature_codes, include_intercep
     }
 
 
+def _complete_logistic_cases(rows, target_code, feature_codes):
+    y_values = []
+    x_values = []
+    response_ids = []
+
+    for row in rows:
+        values = [row.get(target_code)] + [row.get(code) for code in feature_codes]
+        if any(_is_missing(value) for value in values):
+            continue
+        if not all(_is_numeric(value) for value in values):
+            raise ValueError("Logistic regression requires numeric target and feature values.")
+
+        y_values.append(_as_float(values[0]))
+        x_values.append([_as_float(value) for value in values[1:]])
+        response_ids.append(row.get("response_id"))
+
+    return response_ids, y_values, x_values
+
+
+def _sigmoid(values):
+    clipped = np.clip(values, -500, 500)
+    return 1 / (1 + np.exp(-clipped))
+
+
+def _safe_odds_ratio(coefficient):
+    try:
+        value = math.exp(float(coefficient))
+    except (OverflowError, TypeError, ValueError):
+        return None
+    if not math.isfinite(value):
+        return None
+    return value
+
+
+def _interpret_odds_ratio(value):
+    if value is None:
+        return "—"
+    if value > 1:
+        return "Увеличивает шансы события"
+    if value < 1:
+        return "Уменьшает шансы события"
+    return "Не меняет шансы события"
+
+
+def _fit_sklearn_logistic(
+    x_matrix,
+    y_vector,
+    include_intercept,
+    max_iter,
+    regularization,
+    lambda_,
+):
+    from sklearn.linear_model import LogisticRegression
+
+    if regularization == "l2":
+        model = LogisticRegression(
+            penalty="l2",
+            C=(1 / lambda_) if lambda_ > 0 else 1e12,
+            fit_intercept=include_intercept,
+            max_iter=max_iter,
+            solver="lbfgs",
+        )
+        model.fit(x_matrix, y_vector)
+    else:
+        try:
+            model = LogisticRegression(
+                penalty=None,
+                fit_intercept=include_intercept,
+                max_iter=max_iter,
+                solver="lbfgs",
+            )
+            model.fit(x_matrix, y_vector)
+        except (TypeError, ValueError):
+            model = LogisticRegression(
+                penalty="none",
+                fit_intercept=include_intercept,
+                max_iter=max_iter,
+                solver="lbfgs",
+            )
+            model.fit(x_matrix, y_vector)
+
+    coefficient_values = []
+    if include_intercept:
+        coefficient_values.append(float(model.intercept_[0]))
+    coefficient_values.extend(float(value) for value in model.coef_[0])
+    probabilities = model.predict_proba(x_matrix)[:, 1]
+    return coefficient_values, probabilities
+
+
+def _fit_numpy_logistic(
+    x_matrix,
+    y_vector,
+    include_intercept,
+    max_iter,
+    learning_rate,
+    regularization,
+    lambda_,
+):
+    n = x_matrix.shape[0]
+    design_matrix = x_matrix
+    if include_intercept:
+        design_matrix = np.column_stack([np.ones(n), x_matrix])
+
+    beta = np.zeros(design_matrix.shape[1], dtype=float)
+    for _ in range(max_iter):
+        probabilities = _sigmoid(design_matrix @ beta)
+        gradient = (design_matrix.T @ (probabilities - y_vector)) / n
+        if regularization == "l2" and lambda_ > 0:
+            penalty = (lambda_ * beta) / n
+            if include_intercept:
+                penalty[0] = 0.0
+            gradient = gradient + penalty
+
+        beta -= learning_rate * gradient
+        if float(np.linalg.norm(gradient)) < 1e-6:
+            break
+
+    return [float(value) for value in beta], _sigmoid(design_matrix @ beta)
+
+
+def compute_logistic_regression(
+    rows,
+    target_code,
+    feature_codes,
+    include_intercept=True,
+    threshold=0.5,
+    max_iter=1000,
+    learning_rate=0.1,
+    regularization="l2",
+    lambda_=0.01,
+) -> dict:
+    if np is None:
+        raise ValueError("Logistic regression requires numpy to be installed.")
+    if not feature_codes:
+        raise ValueError("Logistic regression requires at least one feature.")
+    if regularization not in ("none", "l2"):
+        raise ValueError("regularization must be either 'none' or 'l2'.")
+
+    response_ids, y_values, x_values = _complete_logistic_cases(rows, target_code, feature_codes)
+    n = len(y_values)
+    feature_count = len(feature_codes)
+    parameter_count = feature_count + (1 if include_intercept else 0)
+    if n <= parameter_count:
+        raise ValueError("Not enough complete cases for logistic regression.")
+
+    unique_y = sorted(set(y_values))
+    if unique_y != [0.0, 1.0]:
+        raise ValueError("Logistic regression target must be binary (0/1) and contain both classes.")
+
+    x_matrix = np.array(x_values, dtype=float)
+    y_vector = np.array(y_values, dtype=float)
+    if not np.all(np.isfinite(x_matrix)) or not np.all(np.isfinite(y_vector)):
+        raise ValueError("Logistic regression data contains non-finite numeric values.")
+
+    feature_std = np.std(x_matrix, axis=0, ddof=1)
+    zero_variance_indexes = np.where(feature_std == 0)[0]
+    if len(zero_variance_indexes):
+        labels = [feature_codes[index] for index in zero_variance_indexes]
+        raise ValueError(f"Logistic regression cannot use features with zero variance: {', '.join(labels)}.")
+
+    warnings = []
+    try:
+        coefficient_values, probabilities = _fit_sklearn_logistic(
+            x_matrix,
+            y_vector,
+            include_intercept,
+            max_iter,
+            regularization,
+            lambda_,
+        )
+        method = "sklearn_logistic_regression"
+    except ImportError:
+        coefficient_values, probabilities = _fit_numpy_logistic(
+            x_matrix,
+            y_vector,
+            include_intercept,
+            max_iter,
+            learning_rate,
+            regularization,
+            lambda_,
+        )
+        method = "numpy_logistic_regression"
+        warnings.append("sklearn is not installed; numpy gradient descent fallback was used.")
+
+    probabilities = np.array(probabilities, dtype=float)
+    predicted = probabilities >= threshold
+    actual = y_vector.astype(int)
+
+    tp = int(np.sum((predicted == 1) & (actual == 1)))
+    tn = int(np.sum((predicted == 0) & (actual == 0)))
+    fp = int(np.sum((predicted == 1) & (actual == 0)))
+    fn = int(np.sum((predicted == 0) & (actual == 1)))
+    accuracy = (tp + tn) / n
+    precision = tp / (tp + fp) if (tp + fp) else None
+    recall = tp / (tp + fn) if (tp + fn) else None
+    f1 = (2 * precision * recall / (precision + recall)) if precision is not None and recall is not None and (precision + recall) else None
+
+    eps = 1e-15
+    clipped_probabilities = np.clip(probabilities, eps, 1 - eps)
+    log_loss_model = float(-np.sum(y_vector * np.log(clipped_probabilities) + (1 - y_vector) * np.log(1 - clipped_probabilities)))
+    base_rate = float(np.mean(y_vector))
+    null_probabilities = np.clip(np.full(n, base_rate), eps, 1 - eps)
+    log_loss_null = float(-np.sum(y_vector * np.log(null_probabilities) + (1 - y_vector) * np.log(1 - null_probabilities)))
+    pseudo_r2 = 1 - (log_loss_model / log_loss_null) if log_loss_null > 0 else None
+
+    names = ["intercept"] + feature_codes if include_intercept else feature_codes
+    coefficients = []
+    for name, coefficient in zip(names, coefficient_values):
+        odds_ratio = _safe_odds_ratio(coefficient)
+        coefficients.append({
+            "name": name,
+            "coefficient": float(coefficient),
+            "odds_ratio": odds_ratio,
+            "interpretation": _interpret_odds_ratio(odds_ratio),
+        })
+
+    return {
+        "model": "logistic",
+        "method": method,
+        "target": target_code,
+        "features": feature_codes,
+        "include_intercept": include_intercept,
+        "threshold": threshold,
+        "regularization": regularization,
+        "lambda_": lambda_,
+        "coefficients": coefficients,
+        "n": n,
+        "positive_class_count": int(np.sum(actual == 1)),
+        "negative_class_count": int(np.sum(actual == 0)),
+        "base_rate": base_rate,
+        "metrics": {
+            "accuracy": float(accuracy),
+            "precision": float(precision) if precision is not None else None,
+            "recall": float(recall) if recall is not None else None,
+            "f1": float(f1) if f1 is not None else None,
+            "log_loss": log_loss_model,
+            "null_log_loss": log_loss_null,
+            "mcfadden_r2": float(pseudo_r2) if pseudo_r2 is not None else None,
+        },
+        "confusion_matrix": {
+            "tp": tp,
+            "tn": tn,
+            "fp": fp,
+            "fn": fn,
+        },
+        "predictions": [
+            {
+                "response_id": response_id,
+                "actual": int(actual_value),
+                "probability": float(probability),
+                "predicted": int(predicted_value),
+            }
+            for response_id, actual_value, probability, predicted_value in zip(response_ids, actual, probabilities, predicted.astype(int))
+        ],
+        "warnings": warnings,
+    }
+
+
 def _complete_factor_cases(rows, variables):
     matrix = []
     codes = [variable.code for variable in variables]

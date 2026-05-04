@@ -131,3 +131,31 @@ class CorrespondenceAnalysisSer(serializers.Serializer):
         if attrs["row"]["question_id"] == attrs["column"]["question_id"]:
             raise serializers.ValidationError("Row and column variables must be different questions.")
         return attrs
+
+
+class LogisticRegressionSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    target = AdvancedVariableSer()
+    features = AdvancedVariableSer(many=True, allow_empty=False)
+    include_intercept = serializers.BooleanField(default=True)
+    threshold = serializers.FloatField(default=0.5, min_value=0.01, max_value=0.99)
+    max_iter = serializers.IntegerField(default=1000, min_value=50, max_value=10000)
+    learning_rate = serializers.FloatField(default=0.1, min_value=0.0001, max_value=1.0)
+    regularization = serializers.ChoiceField(
+        choices=("none", "l2"),
+        default="l2",
+        required=False,
+    )
+    lambda_ = serializers.FloatField(default=0.01, min_value=0.0, max_value=10.0, required=False)
+
+    def validate_features(self, value):
+        if len(value) < 1:
+            raise serializers.ValidationError("Logistic regression requires at least one feature.")
+        return value
+
+    def validate(self, attrs):
+        target_question_id = attrs["target"]["question_id"]
+        feature_question_ids = [item["question_id"] for item in attrs["features"]]
+        if target_question_id in feature_question_ids:
+            raise serializers.ValidationError("Target question must not be used as a feature.")
+        return attrs

@@ -10,6 +10,7 @@ from .advanced_analytics_methods import (
     compute_group_comparison,
     compute_kmeans_clustering,
     compute_linear_regression,
+    compute_logistic_regression,
 )
 
 
@@ -137,6 +138,58 @@ def run_regression_analysis(payload: dict) -> dict:
     result["variables_by_code"] = variables_meta
     
     return _with_metadata(survey_id, "regression", dataset, result)
+
+
+def run_logistic_regression_analysis(payload: dict) -> dict:
+    survey_id = payload["survey_id"]
+    target_spec = payload["target"]
+    feature_specs = payload["features"]
+
+    if target_spec.get("encoding") not in ("binary", "ordinal"):
+        raise ValueError("Logistic regression target must use binary encoding or binary ordinal choice encoding.")
+    if target_spec.get("encoding") == "matrix_multi_binary":
+        raise ValueError("matrix_multi is not supported as logistic regression target in MVP.")
+
+    specs = [target_spec, *feature_specs]
+    dataset = build_analysis_dataset(survey_id, specs)
+    target_dataset = build_analysis_dataset(survey_id, [target_spec])
+    target_variable = _single_variable(target_dataset, "Target")
+
+    feature_codes = [
+        variable.code
+        for variable in dataset.variables
+        if variable.code != target_variable.code
+    ]
+    if not feature_codes:
+        raise ValueError("Logistic regression requires at least one feature column.")
+
+    variables_meta = {
+        variable.code: {
+            "code": variable.code,
+            "label": variable.label,
+            "question_id": variable.question_id,
+            "qtype": variable.qtype,
+            "encoding": variable.encoding,
+            "measure": variable.measure,
+        }
+        for variable in dataset.variables
+    }
+
+    result = compute_logistic_regression(
+        dataset.rows,
+        target_variable.code,
+        feature_codes,
+        include_intercept=payload.get("include_intercept", True),
+        threshold=payload.get("threshold", 0.5),
+        max_iter=payload.get("max_iter", 1000),
+        learning_rate=payload.get("learning_rate", 0.1),
+        regularization=payload.get("regularization", "l2"),
+        lambda_=payload.get("lambda_", 0.01),
+    )
+    result["variables"] = list(variables_meta.values())
+    result["variables_by_code"] = variables_meta
+
+    return _with_metadata(survey_id, "logistic_regression", dataset, result)
 
 
 def run_factor_analysis(payload: dict) -> dict:

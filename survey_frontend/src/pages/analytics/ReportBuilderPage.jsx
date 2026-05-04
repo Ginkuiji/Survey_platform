@@ -33,6 +33,7 @@ import {
   runCrosstabAnalysis,
   runFactorAnalysis,
   runGroupComparisonAnalysis,
+  runLogisticRegressionAnalysis,
   runReliabilityAnalysis,
   runRegressionAnalysis,
 } from "../../api/analytics";
@@ -49,6 +50,7 @@ const ANALYSIS_TYPES = [
   { value: "chi_square", label: "χ²-критерий" },
   { value: "correspondence_analysis", label: "Анализ соответствий" },
   { value: "regression", label: "Линейная регрессия" },
+  { value: "logistic_regression", label: "Логистическая регрессия" },
   { value: "factor_analysis", label: "Факторный анализ" },
   { value: "cluster_analysis", label: "Кластерный анализ" },
   { value: "group_comparison", label: "Сравнение групп" },
@@ -61,6 +63,7 @@ const API_BY_TYPE = {
   chi_square: runChiSquareAnalysis,
   correspondence_analysis: runCorrespondenceAnalysis,
   regression: runRegressionAnalysis,
+  logistic_regression: runLogisticRegressionAnalysis,
   factor_analysis: runFactorAnalysis,
   cluster_analysis: runClusterAnalysis,
   group_comparison: runGroupComparisonAnalysis,
@@ -102,6 +105,22 @@ function createSection(type) {
       n_factors: 2,
       rotation: "varimax",
       standardize: true,
+    };
+  }
+
+  if (type === "logistic_regression") {
+    return {
+      id,
+      type,
+      title: "Логистическая регрессия",
+      targetQuestionId: "",
+      featureQuestionIds: [],
+      include_intercept: true,
+      threshold: 0.5,
+      max_iter: 1000,
+      learning_rate: 0.1,
+      regularization: "l2",
+      lambda_: 0.01,
     };
   }
 
@@ -172,6 +191,13 @@ function QuestionOption({ question }) {
 function isRegressionFeatureQuestion(question, targetQuestionId) {
   return (
     isQuestionSupportedForAnalysis(question, "regression", "feature")
+    && Number(question.id) !== Number(targetQuestionId)
+  );
+}
+
+function isLogisticFeatureQuestion(question, targetQuestionId) {
+  return (
+    isQuestionSupportedForAnalysis(question, "logistic_regression", "feature")
     && Number(question.id) !== Number(targetQuestionId)
   );
 }
@@ -301,6 +327,117 @@ function SectionFields({ section, questions, updateSection }) {
             inputProps={{ min: 1, max: 5 }}
             value={section.n_dimensions}
             onChange={(event) => updateSection(section.id, { n_dimensions: Number(event.target.value) })}
+          />
+        </Stack>
+      </Stack>
+    );
+  }
+
+  if (section.type === "logistic_regression") {
+    const targets = questions.filter((question) => isQuestionSupportedForAnalysis(question, "logistic_regression", "target"));
+    const features = questions.filter((question) => isLogisticFeatureQuestion(question, section.targetQuestionId));
+
+    return (
+      <Stack spacing={2}>
+        <Alert severity="info">
+          Логистическая регрессия анализирует бинарный исход. В MVP целевая переменная должна быть вопросом Да/Нет.
+        </Alert>
+
+        <FormControl fullWidth>
+          <InputLabel>Целевая переменная</InputLabel>
+          <Select
+            label="Целевая переменная"
+            value={section.targetQuestionId}
+            onChange={(event) => updateSection(section.id, {
+              targetQuestionId: event.target.value,
+              featureQuestionIds: section.featureQuestionIds.filter((id) => Number(id) !== Number(event.target.value)),
+            })}
+          >
+            {targets.map((question) => (
+              <MenuItem key={question.id} value={question.id}>
+                <QuestionOption question={question} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControl fullWidth>
+          <InputLabel>Факторы</InputLabel>
+          <Select
+            multiple
+            label="Факторы"
+            value={section.featureQuestionIds}
+            renderValue={(selected) => `${selected.length} выбрано`}
+            onChange={(event) => updateSection(section.id, { featureQuestionIds: event.target.value })}
+          >
+            {features.map((question) => (
+              <MenuItem key={question.id} value={question.id}>
+                <Checkbox checked={section.featureQuestionIds.includes(question.id)} />
+                <ListItemText primary={<QuestionOption question={question} />} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={section.include_intercept}
+              onChange={(event) => updateSection(section.id, { include_intercept: event.target.checked })}
+            />
+          }
+          label="Включить intercept"
+        />
+
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <TextField
+            fullWidth
+            type="number"
+            label="threshold"
+            inputProps={{ min: 0.01, max: 0.99, step: 0.01 }}
+            value={section.threshold}
+            onChange={(event) => updateSection(section.id, { threshold: Number(event.target.value) })}
+          />
+
+          <FormControl fullWidth>
+            <InputLabel>regularization</InputLabel>
+            <Select
+              label="regularization"
+              value={section.regularization}
+              onChange={(event) => updateSection(section.id, { regularization: event.target.value })}
+            >
+              <MenuItem value="l2">l2</MenuItem>
+              <MenuItem value="none">none</MenuItem>
+            </Select>
+          </FormControl>
+
+          <TextField
+            fullWidth
+            type="number"
+            label="lambda"
+            inputProps={{ min: 0, max: 10, step: 0.01 }}
+            value={section.lambda_}
+            onChange={(event) => updateSection(section.id, { lambda_: Number(event.target.value) })}
+          />
+        </Stack>
+
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <TextField
+            fullWidth
+            type="number"
+            label="max_iter"
+            inputProps={{ min: 50, max: 10000 }}
+            value={section.max_iter}
+            onChange={(event) => updateSection(section.id, { max_iter: Number(event.target.value) })}
+          />
+
+          <TextField
+            fullWidth
+            type="number"
+            label="learning_rate"
+            inputProps={{ min: 0.0001, max: 1, step: 0.01 }}
+            value={section.learning_rate}
+            onChange={(event) => updateSection(section.id, { learning_rate: Number(event.target.value) })}
           />
         </Stack>
       </Stack>

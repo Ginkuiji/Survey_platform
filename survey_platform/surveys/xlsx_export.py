@@ -514,6 +514,45 @@ def _add_report_sheet(ws, analysis_report):
                     for coefficient in result.get("coefficients") or []
                 ],
             )
+        elif section_type == "logistic_regression":
+            metrics = result.get("metrics") or {}
+            confusion = result.get("confusion_matrix") or {}
+            append_key_value(ws, "method", result.get("method"))
+            append_key_value(ws, "target", get_variable_label(result, result.get("target")))
+            append_key_value(ws, "features", ", ".join(get_variable_label(result, code) for code in (result.get("features") or [])))
+            append_key_value(ws, "n", result.get("n"))
+            append_key_value(ws, "positive_class_count", result.get("positive_class_count"))
+            append_key_value(ws, "negative_class_count", result.get("negative_class_count"))
+            append_key_value(ws, "base_rate", format_number(result.get("base_rate")))
+            append_key_value(ws, "threshold", format_number(result.get("threshold")))
+            append_key_value(ws, "accuracy", format_number(metrics.get("accuracy")))
+            append_key_value(ws, "precision", format_number(metrics.get("precision")))
+            append_key_value(ws, "recall", format_number(metrics.get("recall")))
+            append_key_value(ws, "f1", format_number(metrics.get("f1")))
+            append_key_value(ws, "mcfadden_r2", format_number(metrics.get("mcfadden_r2")))
+            _append_table(
+                ws,
+                ["", "Predicted 0", "Predicted 1"],
+                [
+                    ["Actual 0", confusion.get("tn"), confusion.get("fp")],
+                    ["Actual 1", confusion.get("fn"), confusion.get("tp")],
+                ],
+            )
+            _append_table(
+                ws,
+                ["Variable", "Coefficient", "Odds ratio", "Interpretation"],
+                [
+                    [
+                        get_variable_label(result, coefficient.get("name")),
+                        format_number(coefficient.get("coefficient")),
+                        format_number(coefficient.get("odds_ratio")),
+                        coefficient.get("interpretation"),
+                    ]
+                    for coefficient in result.get("coefficients") or []
+                ],
+            )
+            for warning in result.get("warnings") or []:
+                append_key_value(ws, "warning", warning)
         ws.append([])
 
 
