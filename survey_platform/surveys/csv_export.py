@@ -421,6 +421,50 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
                         variables_by_code.get(code, code),
                         value,
                     )
+            for profile in result.get("cluster_profiles") or []:
+                cluster = profile.get("cluster")
+                row(
+                    "Кластеризация",
+                    title,
+                    "profile",
+                    "cluster",
+                    cluster,
+                    "size",
+                    profile.get("size"),
+                    "percent",
+                    profile.get("percent"),
+                    "interpretation",
+                    profile.get("interpretation"),
+                )
+                for feature in profile.get("top_distinguishing_features") or []:
+                    row(
+                        "Кластеризация",
+                        title,
+                        "top_feature",
+                        "cluster",
+                        cluster,
+                        "label",
+                        feature.get("label"),
+                        "type",
+                        feature.get("type"),
+                        "cluster_value",
+                        feature.get("cluster_value"),
+                        "overall_value",
+                        feature.get("overall_value"),
+                        "difference",
+                        feature.get("difference"),
+                        "score",
+                        feature.get("score"),
+                        "interpretation",
+                        feature.get("interpretation"),
+                    )
+                for item in profile.get("numeric_summary") or []:
+                    row("Кластеризация", title, "numeric_profile", "cluster", cluster, "label", item.get("label"), "cluster_mean", item.get("cluster_mean"), "overall_mean", item.get("overall_mean"), "difference", item.get("difference"), "z_difference", item.get("z_difference"), "interpretation", item.get("interpretation"))
+                for item in profile.get("binary_summary") or []:
+                    row("Кластеризация", title, "binary_profile", "cluster", cluster, "label", item.get("label"), "cluster_percent", item.get("cluster_percent_selected"), "overall_percent", item.get("overall_percent_selected"), "difference_pp", item.get("difference_pp"), "interpretation", item.get("interpretation"))
+                for item in profile.get("categorical_summary") or []:
+                    for category in item.get("categories") or []:
+                        row("Кластеризация", title, "categorical_profile", "cluster", cluster, "variable", item.get("label"), "category", category.get("label"), "cluster_percent", category.get("cluster_percent"), "overall_percent", category.get("overall_percent"), "difference_pp", category.get("difference_pp"))
             for warning in result.get("warnings") or []:
                 row("Cluster analysis", title, "warning", warning)
 

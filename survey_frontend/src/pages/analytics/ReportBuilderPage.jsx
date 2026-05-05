@@ -130,9 +130,11 @@ function createSection(type) {
       type,
       title: "Кластерный анализ",
       questionIds: [],
+      profileQuestionIds: [],
       n_clusters: 3,
       standardize: true,
       max_iter: 300,
+      max_profile_features: 5,
     };
   }
 
@@ -525,18 +527,23 @@ function SectionFields({ section, questions, updateSection }) {
 
   if (section.type === "cluster_analysis") {
     const availableQuestions = questions.filter((question) => isQuestionSupportedForAnalysis(question, "cluster_analysis"));
+    const profileQuestions = questions.filter((question) => isQuestionSupportedForAnalysis(question, "cluster_analysis", "profile"));
 
     return (
       <Stack spacing={2}>
+        <Alert severity="info">
+          Профили кластеров помогают интерпретировать сегменты: система сравнит каждый кластер с общей выборкой и покажет наиболее отличающиеся признаки.
+        </Alert>
+
         {(section.questionIds || []).length < 2 && (
           <Alert severity="info">Для кластерного анализа требуется минимум две переменные.</Alert>
         )}
 
         <FormControl fullWidth>
-          <InputLabel>Переменные</InputLabel>
+          <InputLabel>Переменные для кластеризации</InputLabel>
           <Select
             multiple
-            label="Переменные"
+            label="Переменные для кластеризации"
             value={section.questionIds}
             renderValue={(selected) => `${selected.length} выбрано`}
             onChange={(event) => updateSection(section.id, { questionIds: event.target.value })}
@@ -549,6 +556,30 @@ function SectionFields({ section, questions, updateSection }) {
             ))}
           </Select>
         </FormControl>
+
+        <FormControl fullWidth>
+          <InputLabel>Переменные для описания кластеров</InputLabel>
+          <Select
+            multiple
+            label="Переменные для описания кластеров"
+            value={section.profileQuestionIds || []}
+            renderValue={(selected) => selected.length ? `${selected.length} выбрано` : "Используются переменные кластеризации"}
+            onChange={(event) => updateSection(section.id, { profileQuestionIds: event.target.value })}
+          >
+            {profileQuestions.map((question) => (
+              <MenuItem key={question.id} value={question.id}>
+                <Checkbox checked={(section.profileQuestionIds || []).includes(question.id)} />
+                <ListItemText primary={<QuestionOption question={question} />} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {!(section.profileQuestionIds || []).length && (
+          <Alert severity="info">
+            Если не выбрать переменные профиля, будут использованы переменные кластеризации.
+          </Alert>
+        )}
 
         <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
           <TextField
@@ -566,6 +597,14 @@ function SectionFields({ section, questions, updateSection }) {
             inputProps={{ min: 10, max: 1000 }}
             value={section.max_iter}
             onChange={(event) => updateSection(section.id, { max_iter: Number(event.target.value) })}
+          />
+          <TextField
+            fullWidth
+            type="number"
+            label="Количество ключевых отличий"
+            inputProps={{ min: 1, max: 20 }}
+            value={section.max_profile_features}
+            onChange={(event) => updateSection(section.id, { max_profile_features: Number(event.target.value) })}
           />
         </Stack>
 

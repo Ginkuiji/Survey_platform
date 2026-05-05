@@ -69,6 +69,9 @@ export function isQuestionSupportedForAnalysis(question, analysisType, role = "v
   }
 
   if (analysisType === "cluster_analysis") {
+    if (role === "profile") {
+      return ["scale", "number", "yesno", "single", "dropdown", "multi", "ranking", "matrix_single", "matrix_multi"].includes(question.qtype);
+    }
     return ["scale", "number", "yesno", "single", "dropdown", "ranking", "matrix_single", "matrix_multi"].includes(question.qtype);
   }
 
@@ -107,6 +110,30 @@ export function getDefaultVariableSpec(question, analysisType, role = "variable"
     }
     if (["single", "dropdown"].includes(question.qtype)) {
       return { question_id: question.id, encoding: "one_hot", measure: "nominal" };
+    }
+    if (question.qtype === "multi") {
+      return { question_id: question.id, encoding: "one_hot", measure: "nominal" };
+    }
+    if (question.qtype === "ranking") {
+      return { question_id: question.id, encoding: "rank", measure: "ordinal" };
+    }
+    if (question.qtype === "matrix_single") {
+      return { question_id: question.id, encoding: "matrix_ordinal", measure: "ordinal" };
+    }
+    if (question.qtype === "matrix_multi") {
+      return { question_id: question.id, encoding: "matrix_multi_binary", measure: "binary" };
+    }
+  }
+
+  if (analysisType === "cluster_analysis" && role === "profile") {
+    if (["number", "scale"].includes(question.qtype)) {
+      return { question_id: question.id, encoding: "numeric", measure: "interval" };
+    }
+    if (question.qtype === "yesno") {
+      return { question_id: question.id, encoding: "binary", measure: "binary" };
+    }
+    if (["single", "dropdown"].includes(question.qtype)) {
+      return { question_id: question.id, encoding: "ordinal", measure: "nominal" };
     }
     if (question.qtype === "multi") {
       return { question_id: question.id, encoding: "one_hot", measure: "nominal" };
@@ -325,7 +352,7 @@ export function buildSectionPayload(surveyId, section, questionsById) {
       throw new Error("Для кластерного анализа выберите минимум две переменные.");
     }
 
-    return {
+    const payload = {
       survey_id: Number(surveyId),
       variables: section.questionIds.map((questionId) => {
         const question = getQuestion(questionsById, questionId, "Переменные");
@@ -334,7 +361,15 @@ export function buildSectionPayload(surveyId, section, questionsById) {
       n_clusters: section.n_clusters || 3,
       standardize: section.standardize ?? true,
       max_iter: section.max_iter || 300,
+      max_profile_features: section.max_profile_features || 5,
     };
+    if ((section.profileQuestionIds || []).length) {
+      payload.profile_variables = section.profileQuestionIds.map((questionId) => {
+        const question = getQuestion(questionsById, questionId, "Переменные профиля");
+        return getSpec(question, "cluster_analysis", "profile", "Переменные профиля");
+      });
+    }
+    return payload;
   }
 
   if (section.type === "group_comparison") {

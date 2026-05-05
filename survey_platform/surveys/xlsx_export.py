@@ -419,6 +419,68 @@ def _add_report_sheet(ws, analysis_report):
                     for cluster in result.get("clusters") or []
                 ],
             )
+            for profile in result.get("cluster_profiles") or []:
+                cluster = profile.get("cluster")
+                append_section_title(ws, f"Cluster {cluster} profile")
+                append_key_value(ws, "size", profile.get("size"))
+                append_key_value(ws, "percent", format_number(profile.get("percent")))
+                append_key_value(ws, "interpretation", profile.get("interpretation"))
+                _append_table(
+                    ws,
+                    ["Feature", "Type", "Cluster value", "Overall value", "Difference", "Score", "Interpretation"],
+                    [
+                        [
+                            feature.get("label"),
+                            feature.get("type"),
+                            format_number(feature.get("cluster_value")),
+                            format_number(feature.get("overall_value")),
+                            format_number(feature.get("difference")),
+                            format_number(feature.get("score")),
+                            feature.get("interpretation"),
+                        ]
+                        for feature in profile.get("top_distinguishing_features") or []
+                    ],
+                )
+                _append_table(
+                    ws,
+                    ["Variable", "Cluster mean", "Overall mean", "Difference", "z_difference", "Interpretation"],
+                    [
+                        [
+                            item.get("label"),
+                            format_number(item.get("cluster_mean")),
+                            format_number(item.get("overall_mean")),
+                            format_number(item.get("difference")),
+                            format_number(item.get("z_difference")),
+                            item.get("interpretation"),
+                        ]
+                        for item in profile.get("numeric_summary") or []
+                    ],
+                )
+                _append_table(
+                    ws,
+                    ["Variable", "Cluster %", "Overall %", "Difference pp", "Interpretation"],
+                    [
+                        [
+                            item.get("label"),
+                            format_number(item.get("cluster_percent_selected")),
+                            format_number(item.get("overall_percent_selected")),
+                            format_number(item.get("difference_pp")),
+                            item.get("interpretation"),
+                        ]
+                        for item in profile.get("binary_summary") or []
+                    ],
+                )
+                categorical_rows = []
+                for item in profile.get("categorical_summary") or []:
+                    for category in item.get("categories") or []:
+                        categorical_rows.append([
+                            item.get("label"),
+                            category.get("label"),
+                            format_number(category.get("cluster_percent")),
+                            format_number(category.get("overall_percent")),
+                            format_number(category.get("difference_pp")),
+                        ])
+                _append_table(ws, ["Variable", "Category", "Cluster %", "Overall %", "Difference pp"], categorical_rows)
             warnings = result.get("warnings") or []
             if warnings:
                 _append_table(ws, ["Warnings"], [[warning] for warning in warnings])

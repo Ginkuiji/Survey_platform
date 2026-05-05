@@ -84,9 +84,11 @@ class FactorAnalysisSer(serializers.Serializer):
 class ClusterAnalysisSer(serializers.Serializer):
     survey_id = serializers.IntegerField()
     variables = AdvancedVariableSer(many=True, allow_empty=False)
+    profile_variables = AdvancedVariableSer(many=True, required=False, allow_empty=True)
     n_clusters = serializers.IntegerField(min_value=2, max_value=10, required=False, default=3)
     standardize = serializers.BooleanField(default=True)
     max_iter = serializers.IntegerField(min_value=10, max_value=1000, required=False, default=300)
+    max_profile_features = serializers.IntegerField(min_value=1, max_value=20, required=False, default=5)
 
     def validate_variables(self, value):
         if len(value) < 2:

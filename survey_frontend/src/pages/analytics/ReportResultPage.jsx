@@ -595,10 +595,119 @@ function renderFactorAnalysisSection(section) {
   );
 }
 
+function renderClusterProfileTable(title, headers, rows) {
+  if (!rows.length) return null;
+  return (
+    <Box sx={{ width: "100%", overflowX: "auto" }}>
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>
+        {title}
+      </Typography>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            {headers.map((header) => (
+              <TableCell key={header.key} align={header.align || "left"}>{header.label}</TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((row, index) => (
+            <TableRow key={row.key || index}>
+              {headers.map((header) => (
+                <TableCell key={header.key} align={header.align || "left"}>
+                  {header.render ? header.render(row) : row[header.key]}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Box>
+  );
+}
+
+function renderClusterProfiles(profiles) {
+  if (!profiles.length) return null;
+
+  const topHeaders = [
+    { key: "label", label: "Признак" },
+    { key: "type", label: "Тип" },
+    { key: "cluster_value", label: "В кластере", align: "right", render: (row) => formatNumber(row.cluster_value) },
+    { key: "overall_value", label: "В выборке", align: "right", render: (row) => formatNumber(row.overall_value) },
+    { key: "difference", label: "Отличие", align: "right", render: (row) => formatNumber(row.difference) },
+    { key: "interpretation", label: "Интерпретация" },
+  ];
+  const numericHeaders = [
+    { key: "label", label: "Переменная" },
+    { key: "cluster_mean", label: "Среднее в кластере", align: "right", render: (row) => formatNumber(row.cluster_mean) },
+    { key: "overall_mean", label: "Среднее по выборке", align: "right", render: (row) => formatNumber(row.overall_mean) },
+    { key: "difference", label: "Разница", align: "right", render: (row) => formatNumber(row.difference) },
+    { key: "z_difference", label: "z-разница", align: "right", render: (row) => formatNumber(row.z_difference) },
+    { key: "interpretation", label: "Интерпретация" },
+  ];
+  const binaryHeaders = [
+    { key: "label", label: "Признак" },
+    { key: "cluster_percent_selected", label: "% в кластере", align: "right", render: (row) => `${formatNumber(row.cluster_percent_selected)}%` },
+    { key: "overall_percent_selected", label: "% в выборке", align: "right", render: (row) => `${formatNumber(row.overall_percent_selected)}%` },
+    { key: "difference_pp", label: "Разница, п.п.", align: "right", render: (row) => formatNumber(row.difference_pp) },
+    { key: "interpretation", label: "Интерпретация" },
+  ];
+  const categoryHeaders = [
+    { key: "variable_label", label: "Переменная" },
+    { key: "label", label: "Категория" },
+    { key: "cluster_percent", label: "% в кластере", align: "right", render: (row) => `${formatNumber(row.cluster_percent)}%` },
+    { key: "overall_percent", label: "% в выборке", align: "right", render: (row) => `${formatNumber(row.overall_percent)}%` },
+    { key: "difference_pp", label: "Разница, п.п.", align: "right", render: (row) => formatNumber(row.difference_pp) },
+  ];
+
+  return (
+    <Stack spacing={2}>
+      <Typography variant="subtitle1">Профили кластеров</Typography>
+      {profiles.map((profile) => {
+        const categoryRows = (profile.categorical_summary || []).flatMap((summary) => (
+          (summary.categories || []).map((category) => ({
+            ...category,
+            variable_label: summary.label || summary.variable,
+          }))
+        ));
+
+        return (
+          <Box
+            key={profile.cluster}
+            sx={{
+              border: 1,
+              borderColor: "divider",
+              borderRadius: 1,
+              p: 2,
+            }}
+          >
+            <Stack spacing={2}>
+              <Box>
+                <Typography variant="subtitle1">
+                  Кластер {profile.cluster}: {formatNumber(profile.size)} респондентов ({formatNumber(profile.percent)}%)
+                </Typography>
+                <Typography color="text.secondary" variant="body2">
+                  {profile.interpretation || "—"}
+                </Typography>
+              </Box>
+
+              {renderClusterProfileTable("Ключевые отличия", topHeaders, profile.top_distinguishing_features || [])}
+              {renderClusterProfileTable("Числовой профиль", numericHeaders, profile.numeric_summary || [])}
+              {renderClusterProfileTable("Бинарный профиль", binaryHeaders, profile.binary_summary || [])}
+              {renderClusterProfileTable("Категориальный профиль", categoryHeaders, categoryRows)}
+            </Stack>
+          </Box>
+        );
+      })}
+    </Stack>
+  );
+}
+
 function renderClusterAnalysisSection(section) {
   const result = section.result || {};
   const variables = result.variables || [];
   const clusters = result.clusters || [];
+  const profiles = result.cluster_profiles || [];
 
   return (
     <Stack spacing={3}>
@@ -649,6 +758,8 @@ function renderClusterAnalysisSection(section) {
       <Typography color="text.secondary" variant="body2">
         Assignments are stored in the result for export/API use; this view shows cluster summary only.
       </Typography>
+
+      {renderClusterProfiles(profiles)}
     </Stack>
   );
 }

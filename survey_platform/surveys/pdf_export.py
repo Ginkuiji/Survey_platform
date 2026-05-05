@@ -443,6 +443,29 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
                     ])
                 story.append(Spacer(1, 0.15 * cm))
                 story.append(table([header, *rows]))
+            for profile in result.get("cluster_profiles") or []:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(p(
+                    f"Кластер {profile.get('cluster')} — {profile.get('size')} респондентов ({_format_value(profile.get('percent'))}%)",
+                    "AnalyticsHeading",
+                ))
+                story.append(p(profile.get("interpretation") or "—"))
+                features = (profile.get("top_distinguishing_features") or [])[:5]
+                if features:
+                    story.append(table(
+                        [["Feature", "Type", "Cluster", "Overall", "Difference", "Interpretation"], *[
+                            [
+                                item.get("label"),
+                                item.get("type"),
+                                item.get("cluster_value"),
+                                item.get("overall_value"),
+                                item.get("difference"),
+                                item.get("interpretation"),
+                            ]
+                            for item in features
+                        ]],
+                        [4 * cm, 2 * cm, 2.5 * cm, 2.5 * cm, 2.5 * cm, 4 * cm],
+                    ))
         elif section_type == "group_comparison":
             test = result.get("test") or {}
             effect_size = result.get("effect_size") or {}

@@ -226,13 +226,30 @@ def run_cluster_analysis(payload: dict) -> dict:
     if len(dataset.variables) < 2:
         raise ValueError("Cluster analysis requires at least two expanded variables.")
 
+    profile_specs = payload.get("profile_variables") or payload["variables"]
+    profile_dataset = build_analysis_dataset(survey_id, profile_specs)
+
     result = compute_kmeans_clustering(
         dataset.rows,
         dataset.variables,
         n_clusters=payload.get("n_clusters", 3),
         standardize=payload.get("standardize", True),
         max_iter=payload.get("max_iter", 300),
+        profile_rows=profile_dataset.rows,
+        profile_variables=profile_dataset.variables,
+        max_profile_features=payload.get("max_profile_features", 5),
     )
+    result["profile_variables"] = [
+        {
+            "code": variable.code,
+            "label": variable.label,
+            "question_id": variable.question_id,
+            "qtype": variable.qtype,
+            "encoding": variable.encoding,
+            "measure": variable.measure,
+        }
+        for variable in profile_dataset.variables
+    ]
     return _with_metadata(survey_id, "cluster_analysis", dataset, result)
 
 

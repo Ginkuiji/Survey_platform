@@ -793,6 +793,275 @@ def _run_numpy_kmeans(x_matrix, n_clusters, max_iter, random_state):
     return labels, centers, inertia
 
 
+def _profile_label_for_value(value, value_labels):
+    if not value_labels:
+        return str(value)
+    if value in value_labels:
+        return value_labels[value]
+    try:
+        int_value = int(float(value))
+        if int_value in value_labels:
+            return value_labels[int_value]
+        if str(int_value) in value_labels:
+            return value_labels[str(int_value)]
+    except (TypeError, ValueError):
+        pass
+    if str(value) in value_labels:
+        return value_labels[str(value)]
+    return str(value)
+
+
+def _profile_value_key(value):
+    try:
+        numeric = float(value)
+        if numeric.is_integer():
+            return int(numeric)
+        return numeric
+    except (TypeError, ValueError):
+        return value
+
+
+def _profile_median(values):
+    ordered = sorted(values)
+    n = len(ordered)
+    middle = n // 2
+    return ordered[middle] if n % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+
+
+def _numeric_profile_summary(variable, all_values, cluster_values):
+    if not all_values or not cluster_values:
+        return None
+    overall_mean = sum(all_values) / len(all_values)
+    cluster_mean = sum(cluster_values) / len(cluster_values)
+    overall_std = _sample_std(all_values) if len(all_values) > 1 else None
+    cluster_std = _sample_std(cluster_values) if len(cluster_values) > 1 else None
+    difference = cluster_mean - overall_mean
+    z_difference = difference / overall_std if overall_std and overall_std > 0 else None
+    if z_difference is None:
+        interpretation = "около среднего"
+    elif z_difference >= 0.5:
+        interpretation = "выше среднего"
+    elif z_difference <= -0.5:
+        interpretation = "ниже среднего"
+    else:
+        interpretation = "около среднего"
+    return {
+        "variable": variable.code,
+        "label": variable.label,
+        "encoding": variable.encoding,
+        "cluster_mean": float(cluster_mean),
+        "cluster_median": float(_profile_median(cluster_values)),
+        "cluster_std": float(cluster_std) if cluster_std is not None else None,
+        "cluster_min": float(min(cluster_values)),
+        "cluster_max": float(max(cluster_values)),
+        "overall_mean": float(overall_mean),
+        "overall_std": float(overall_std) if overall_std is not None else None,
+        "difference": float(difference),
+        "z_difference": float(z_difference) if z_difference is not None else None,
+        "interpretation": interpretation,
+    }
+
+
+def _binary_profile_summary(variable, all_values, cluster_values):
+    if not all_values or not cluster_values:
+        return None
+    overall_selected = sum(1 for value in all_values if value > 0)
+    cluster_selected = sum(1 for value in cluster_values if value > 0)
+    overall_percent = overall_selected / len(all_values) * 100
+    cluster_percent = cluster_selected / len(cluster_values) * 100
+    difference_pp = cluster_percent - overall_percent
+    if difference_pp >= 10:
+        interpretation = "чаще, чем в среднем"
+    elif difference_pp <= -10:
+        interpretation = "реже, чем в среднем"
+    else:
+        interpretation = "примерно как в среднем"
+    return {
+        "variable": variable.code,
+        "label": variable.label,
+        "encoding": variable.encoding,
+        "cluster_count_selected": int(cluster_selected),
+        "cluster_percent_selected": float(cluster_percent),
+        "overall_percent_selected": float(overall_percent),
+        "difference_pp": float(difference_pp),
+        "interpretation": interpretation,
+    }
+
+
+def _categorical_distribution_summary(variable, all_values, cluster_values):
+    value_labels = getattr(variable, "value_labels", None)
+    if not value_labels or not all_values or not cluster_values:
+        return None
+
+    overall_counts = Counter(_profile_value_key(value) for value in all_values)
+    cluster_counts = Counter(_profile_value_key(value) for value in cluster_values)
+    categories = []
+    for value in sorted(overall_counts.keys(), key=lambda item: str(item)):
+        cluster_count = cluster_counts.get(value, 0)
+        overall_count = overall_counts.get(value, 0)
+        cluster_percent = cluster_count / len(cluster_values) * 100 if cluster_values else 0
+        overall_percent = overall_count / len(all_values) * 100 if all_values else 0
+        categories.append({
+            "value": value,
+            "label": _profile_label_for_value(value, value_labels),
+            "cluster_count": int(cluster_count),
+            "cluster_percent": float(cluster_percent),
+            "overall_count": int(overall_count),
+            "overall_percent": float(overall_percent),
+            "difference_pp": float(cluster_percent - overall_percent),
+        })
+
+    return {
+        "variable": variable.code,
+        "label": variable.label,
+        "encoding": variable.encoding,
+        "categories": categories,
+    }
+
+
+def _cluster_interpretation(top_features):
+    if not top_features:
+        return "Выраженных отличий от общей выборки не выявлено."
+
+    high = []
+    low = []
+    more = []
+    less = []
+    for feature in top_features[:3]:
+        label = feature.get("label") or feature.get("variable")
+        difference = feature.get("difference") or 0
+        if feature.get("type") == "numeric":
+            (high if difference > 0 else low).append(label)
+        else:
+            (more if difference > 0 else less).append(label)
+
+    parts = []
+    if high:
+        parts.append(f"высокими значениями по признакам: {', '.join(high)}")
+    if low:
+        parts.append(f"низкими значениями по признакам: {', '.join(low)}")
+    if more:
+        parts.append(f"чаще встречается: {', '.join(more)}")
+    if less:
+        parts.append(f"реже встречается: {', '.join(less)}")
+    if not parts:
+        return "Выраженных отличий от общей выборки не выявлено."
+    return f"Кластер характеризуется {'; '.join(parts)}."
+
+
+def _build_cluster_profiles(profile_rows, profile_variables, assignments, max_profile_features=5):
+    if not profile_rows or not profile_variables or not assignments:
+        return []
+
+    cluster_by_response_id = {
+        assignment.get("response_id"): assignment.get("cluster")
+        for assignment in assignments
+        if assignment.get("response_id") is not None
+    }
+    cluster_ids = sorted(set(cluster_by_response_id.values()))
+    total_assigned = len(cluster_by_response_id)
+    rows_by_cluster = defaultdict(list)
+    for row in profile_rows:
+        response_id = row.get("response_id")
+        cluster = cluster_by_response_id.get(response_id)
+        if cluster is not None:
+            rows_by_cluster[cluster].append(row)
+
+    profiles = []
+    numeric_encodings = {"numeric", "ordinal", "rank", "matrix_ordinal"}
+    binary_encodings = {"binary", "one_hot", "matrix_multi_binary"}
+
+    for cluster in cluster_ids:
+        cluster_rows = rows_by_cluster.get(cluster, [])
+        numeric_summary = []
+        binary_summary = []
+        categorical_summary = []
+        top_features = []
+
+        for variable in profile_variables:
+            all_raw_values = [
+                row.get(variable.code)
+                for row in profile_rows
+                if row.get("response_id") in cluster_by_response_id and not _is_missing(row.get(variable.code))
+            ]
+            cluster_raw_values = [
+                row.get(variable.code)
+                for row in cluster_rows
+                if not _is_missing(row.get(variable.code))
+            ]
+            if not all_raw_values or not cluster_raw_values:
+                continue
+
+            if variable.encoding in numeric_encodings and all(_is_numeric(value) for value in all_raw_values + cluster_raw_values):
+                all_values = [_as_float(value) for value in all_raw_values]
+                cluster_values = [_as_float(value) for value in cluster_raw_values]
+                summary = _numeric_profile_summary(variable, all_values, cluster_values)
+                if summary:
+                    numeric_summary.append(summary)
+                    if not (variable.encoding == "ordinal" and getattr(variable, "value_labels", None)):
+                        score = abs(summary["z_difference"]) if summary["z_difference"] is not None else abs(summary["difference"])
+                        top_features.append({
+                            "variable": variable.code,
+                            "label": variable.label,
+                            "type": "numeric",
+                            "cluster_value": summary["cluster_mean"],
+                            "overall_value": summary["overall_mean"],
+                            "difference": summary["difference"],
+                            "score": float(score),
+                            "interpretation": summary["interpretation"],
+                        })
+
+            if variable.encoding in binary_encodings and all(_is_numeric(value) for value in all_raw_values + cluster_raw_values):
+                all_values = [_as_float(value) for value in all_raw_values]
+                cluster_values = [_as_float(value) for value in cluster_raw_values]
+                summary = _binary_profile_summary(variable, all_values, cluster_values)
+                if summary:
+                    binary_summary.append(summary)
+                    top_features.append({
+                        "variable": variable.code,
+                        "label": variable.label,
+                        "type": "binary",
+                        "cluster_value": summary["cluster_percent_selected"],
+                        "overall_value": summary["overall_percent_selected"],
+                        "difference": summary["difference_pp"],
+                        "score": abs(summary["difference_pp"]),
+                        "interpretation": summary["interpretation"],
+                    })
+
+            if variable.encoding == "ordinal" and getattr(variable, "value_labels", None):
+                summary = _categorical_distribution_summary(variable, all_raw_values, cluster_raw_values)
+                if summary:
+                    categorical_summary.append(summary)
+                    categories = summary.get("categories") or []
+                    if categories:
+                        top_category = max(categories, key=lambda item: abs(item.get("difference_pp") or 0))
+                        top_features.append({
+                            "variable": variable.code,
+                            "label": f"{variable.label}: {top_category.get('label')}",
+                            "type": "categorical",
+                            "cluster_value": top_category.get("cluster_percent"),
+                            "overall_value": top_category.get("overall_percent"),
+                            "difference": top_category.get("difference_pp"),
+                            "score": abs(top_category.get("difference_pp") or 0),
+                            "interpretation": "чаще, чем в среднем" if (top_category.get("difference_pp") or 0) >= 10 else ("реже, чем в среднем" if (top_category.get("difference_pp") or 0) <= -10 else "примерно как в среднем"),
+                        })
+
+        top_features = sorted(top_features, key=lambda item: item.get("score") or 0, reverse=True)[:max_profile_features]
+        size = len(cluster_rows)
+        profiles.append({
+            "cluster": cluster,
+            "size": size,
+            "percent": round(size / total_assigned * 100, 2) if total_assigned else 0,
+            "numeric_summary": numeric_summary,
+            "categorical_summary": categorical_summary,
+            "binary_summary": binary_summary,
+            "top_distinguishing_features": top_features,
+            "interpretation": _cluster_interpretation(top_features),
+        })
+
+    return profiles
+
+
 def compute_kmeans_clustering(
     rows,
     variables,
@@ -800,6 +1069,9 @@ def compute_kmeans_clustering(
     standardize=True,
     max_iter=300,
     random_state=42,
+    profile_rows=None,
+    profile_variables=None,
+    max_profile_features=5,
 ) -> dict:
     if np is None:
         raise ValueError("Cluster analysis requires numpy to be installed.")
@@ -866,6 +1138,22 @@ def compute_kmeans_clustering(
             },
         })
 
+    assignments = [
+        {
+            "response_id": response_id,
+            "cluster": cluster_number_by_label[int(label)],
+        }
+        for response_id, label in zip(response_ids, labels)
+    ]
+    profile_rows = profile_rows if profile_rows is not None else rows
+    profile_variables = profile_variables if profile_variables is not None else variables
+    cluster_profiles = _build_cluster_profiles(
+        profile_rows,
+        profile_variables,
+        assignments,
+        max_profile_features=max_profile_features,
+    )
+
     return {
         "method": method,
         "n": n,
@@ -877,13 +1165,8 @@ def compute_kmeans_clustering(
             for variable in variables
         ],
         "clusters": clusters,
-        "assignments": [
-            {
-                "response_id": response_id,
-                "cluster": cluster_number_by_label[int(label)],
-            }
-            for response_id, label in zip(response_ids, labels)
-        ],
+        "assignments": assignments,
+        "cluster_profiles": cluster_profiles,
         "inertia": inertia,
         "warnings": warnings,
     }
