@@ -105,10 +105,31 @@ class GroupComparisonSer(serializers.Serializer):
         default="anova",
     )
     alpha = serializers.FloatField(default=0.05, min_value=0.001, max_value=0.2)
+    post_hoc = serializers.BooleanField(default=False)
+    post_hoc_method = serializers.ChoiceField(
+        choices=("auto", "pairwise_t_test", "pairwise_mann_whitney", "tukey_hsd"),
+        default="auto",
+        required=False,
+    )
+    p_adjust = serializers.ChoiceField(
+        choices=("bonferroni", "holm"),
+        default="bonferroni",
+        required=False,
+    )
 
     def validate(self, attrs):
         if attrs["group"]["question_id"] == attrs["value"]["question_id"]:
             raise serializers.ValidationError("Group and value variables must be different questions.")
+        method = attrs.get("method")
+        post_hoc_method = attrs.get("post_hoc_method", "auto")
+        if not attrs.get("post_hoc", False):
+            return attrs
+        if post_hoc_method == "tukey_hsd" and method != "anova":
+            raise serializers.ValidationError("Tukey HSD can be used only with ANOVA.")
+        if post_hoc_method == "pairwise_t_test" and method != "anova":
+            raise serializers.ValidationError("Pairwise t-tests can be used only with ANOVA.")
+        if post_hoc_method == "pairwise_mann_whitney" and method != "kruskal_wallis":
+            raise serializers.ValidationError("Pairwise Mann-Whitney tests can be used only with Kruskal-Wallis.")
         return attrs
 
 

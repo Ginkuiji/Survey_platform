@@ -278,6 +278,9 @@ def run_group_comparison(payload: dict) -> dict:
         value_var=value_variables[0],
         method=payload.get("method", "anova"),
         alpha=payload.get("alpha", 0.05),
+        post_hoc=payload.get("post_hoc", False),
+        post_hoc_method=payload.get("post_hoc_method", "auto"),
+        p_adjust=payload.get("p_adjust", "bonferroni"),
     )
     return _with_metadata(survey_id, "group_comparison", dataset, result)
 

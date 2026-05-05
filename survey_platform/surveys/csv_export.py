@@ -503,6 +503,38 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
             for warning in result.get("warnings") or []:
                 row("Сравнение групп", title, "warning", warning)
 
+            post_hoc = result.get("post_hoc") or {}
+            row("Сравнение групп", title, "post_hoc_enabled", post_hoc.get("enabled"))
+            row("Сравнение групп", title, "post_hoc_method", post_hoc.get("method"))
+            row("Сравнение групп", title, "p_adjust", post_hoc.get("p_adjust"))
+            for warning in post_hoc.get("warnings") or []:
+                row("Сравнение групп", title, "post_hoc_warning", warning)
+            for comparison in post_hoc.get("comparisons") or []:
+                comparison_effect = comparison.get("effect_size") or {}
+                row(
+                    "Сравнение групп",
+                    title,
+                    "post_hoc_comparison",
+                    comparison.get("group_a_label") or comparison.get("group_a"),
+                    comparison.get("group_b_label") or comparison.get("group_b"),
+                    "test",
+                    comparison.get("test"),
+                    "statistic",
+                    comparison.get("statistic"),
+                    "p_value",
+                    _format_p_value(comparison.get("p_value")),
+                    "p_adjusted",
+                    _format_p_value(comparison.get("p_adjusted")),
+                    "significant",
+                    comparison.get("significant"),
+                    "difference",
+                    comparison.get("difference"),
+                    "effect_size",
+                    comparison_effect.get("value"),
+                    "effect_size_interpretation",
+                    comparison_effect.get("interpretation"),
+                )
+
         elif section_type == "reliability_analysis":
             row("Надёжность шкалы", title, "method", result.get("method"))
             row("Надёжность шкалы", title, "n", result.get("n"))

@@ -518,6 +518,47 @@ def _add_report_sheet(ws, analysis_report):
             warnings = result.get("warnings") or []
             if warnings:
                 _append_table(ws, ["Warnings"], [[warning] for warning in warnings])
+            post_hoc = result.get("post_hoc") or {}
+            if post_hoc.get("enabled"):
+                append_section_title(ws, "Post-hoc comparisons")
+                append_key_value(ws, "post_hoc_method", post_hoc.get("method"))
+                append_key_value(ws, "p_adjust", post_hoc.get("p_adjust"))
+                append_key_value(ws, "comparisons_count", post_hoc.get("comparisons_count"))
+                post_hoc_warnings = post_hoc.get("warnings") or []
+                if post_hoc_warnings:
+                    _append_table(ws, ["Post-hoc warnings"], [[warning] for warning in post_hoc_warnings])
+                _append_table(
+                    ws,
+                    [
+                        "Group A",
+                        "Group B",
+                        "Test",
+                        "Statistic",
+                        "p-value",
+                        "Adjusted p-value",
+                        "Significant",
+                        "Difference",
+                        "Effect size type",
+                        "Effect size value",
+                        "Effect size interpretation",
+                    ],
+                    [
+                        [
+                            comparison.get("group_a_label") or comparison.get("group_a"),
+                            comparison.get("group_b_label") or comparison.get("group_b"),
+                            comparison.get("test"),
+                            format_number(comparison.get("statistic")),
+                            format_p_value(comparison.get("p_value")),
+                            format_p_value(comparison.get("p_adjusted")),
+                            comparison.get("significant"),
+                            format_number(comparison.get("difference")),
+                            (comparison.get("effect_size") or {}).get("type"),
+                            format_number((comparison.get("effect_size") or {}).get("value")),
+                            (comparison.get("effect_size") or {}).get("interpretation"),
+                        ]
+                        for comparison in post_hoc.get("comparisons") or []
+                    ],
+                )
         elif section_type == "reliability_analysis":
             append_key_value(ws, "method", result.get("method"))
             append_key_value(ws, "n", result.get("n"))

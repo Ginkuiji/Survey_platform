@@ -764,6 +764,67 @@ function renderClusterAnalysisSection(section) {
   );
 }
 
+function renderPostHocComparisons(postHoc) {
+  if (!postHoc || !postHoc.enabled) return null;
+  const comparisons = postHoc.comparisons || [];
+
+  return (
+    <Box sx={{ width: "100%", overflowX: "auto" }}>
+      <Typography variant="subtitle1" sx={{ mb: 1 }}>
+        Post-hoc сравнения
+      </Typography>
+
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+        <Chip label={`Метод: ${postHoc.method || "—"}`} />
+        <Chip label={`Поправка: ${postHoc.p_adjust || "—"}`} />
+        <Chip label={`Сравнений: ${postHoc.comparisons_count ?? comparisons.length}`} />
+      </Stack>
+
+      {(postHoc.warnings || []).map((warning) => (
+        <Alert key={warning} severity="warning" sx={{ mb: 1 }}>{warning}</Alert>
+      ))}
+
+      {comparisons.length > 0 && (
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Группа A</TableCell>
+              <TableCell>Группа B</TableCell>
+              <TableCell>Тест</TableCell>
+              <TableCell align="right">Statistic</TableCell>
+              <TableCell align="right">p-value</TableCell>
+              <TableCell align="right">p adjusted</TableCell>
+              <TableCell>Significant</TableCell>
+              <TableCell align="right">Difference</TableCell>
+              <TableCell align="right">Effect size</TableCell>
+              <TableCell>Interpretation</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {comparisons.map((comparison, index) => {
+              const effectSize = comparison.effect_size || {};
+              return (
+                <TableRow key={`${comparison.group_a}-${comparison.group_b}-${index}`}>
+                  <TableCell>{comparison.group_a_label || comparison.group_a}</TableCell>
+                  <TableCell>{comparison.group_b_label || comparison.group_b}</TableCell>
+                  <TableCell>{comparison.test}</TableCell>
+                  <TableCell align="right">{formatNumber(comparison.statistic)}</TableCell>
+                  <TableCell align="right">{formatNumber(comparison.p_value)}</TableCell>
+                  <TableCell align="right">{formatNumber(comparison.p_adjusted)}</TableCell>
+                  <TableCell>{comparison.significant ? "да" : "нет"}</TableCell>
+                  <TableCell align="right">{formatNumber(comparison.difference)}</TableCell>
+                  <TableCell align="right">{formatNumber(effectSize.value)}</TableCell>
+                  <TableCell>{effectSize.interpretation || "—"}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      )}
+    </Box>
+  );
+}
+
 function renderGroupComparisonSection(section) {
   const result = section.result || {};
   const test = result.test || {};
@@ -828,6 +889,8 @@ function renderGroupComparisonSection(section) {
           </TableBody>
         </Table>
       </Box>
+
+      {renderPostHocComparisons(result.post_hoc)}
     </Stack>
   );
 }

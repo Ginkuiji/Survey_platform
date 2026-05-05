@@ -1262,6 +1262,236 @@ def _interpret_eta_squared(value):
     return "Большой эффект"
 
 
+def adjust_p_values(p_values, method="bonferroni"):
+    if method not in ("bonferroni", "holm"):
+        raise ValueError("Unsupported p-value adjustment method.")
+
+    adjusted = [None] * len(p_values)
+    valid = [
+        (index, float(value))
+        for index, value in enumerate(p_values)
+        if value is not None and math.isfinite(float(value))
+    ]
+    m = len(valid)
+    if not m:
+        return adjusted
+
+    if method == "bonferroni":
+        for index, value in valid:
+            adjusted[index] = min(value * m, 1.0)
+        return adjusted
+
+    ordered = sorted(valid, key=lambda item: item[1])
+    previous = 0.0
+    for rank, (index, value) in enumerate(ordered):
+        corrected = min((m - rank) * value, 1.0)
+        corrected = max(corrected, previous)
+        adjusted[index] = corrected
+        previous = corrected
+    return adjusted
+
+
+def _group_label(group_value, group_labels):
+    if group_value in group_labels:
+        return group_labels[group_value]
+    try:
+        int_value = int(group_value)
+        if int_value in group_labels:
+            return group_labels[int_value]
+    except (TypeError, ValueError):
+        pass
+    return str(group_value)
+
+
+def _interpret_rank_biserial(value):
+    absolute = abs(value)
+    if absolute < 0.1:
+        return "Очень малый эффект"
+    if absolute < 0.3:
+        return "Малый эффект"
+    if absolute < 0.5:
+        return "Средний эффект"
+    return "Большой эффект"
+
+
+def _empty_post_hoc(enabled=False, method=None, p_adjust="bonferroni", alpha=0.05, warnings=None):
+    return {
+        "enabled": enabled,
+        "method": method,
+        "p_adjust": p_adjust,
+        "alpha": alpha,
+        "comparisons_count": 0,
+        "comparisons": [],
+        "warnings": warnings or [],
+    }
+
+
+def _compute_tukey_hsd(groups, ordered_group_keys, group_labels, alpha):
+    try:
+        from statsmodels.stats.multicomp import pairwise_tukeyhsd
+    except ImportError as exc:
+        raise ValueError("Tukey HSD requires statsmodels to be installed.") from exc
+
+    values = []
+    labels = []
+    label_to_key = {}
+    for key in ordered_group_keys:
+        label = _group_label(key, group_labels)
+        label_to_key[label] = key
+        for value in groups[key]:
+            values.append(value)
+            labels.append(label)
+
+    result = pairwise_tukeyhsd(values, labels, alpha=alpha)
+    comparisons = []
+    for row in result._results_table.data[1:]:
+        group_a_label, group_b_label, _, p_value, _, _, reject = row[:7]
+        key_a = label_to_key.get(group_a_label, group_a_label)
+        key_b = label_to_key.get(group_b_label, group_b_label)
+        mean_a = sum(groups[key_a]) / len(groups[key_a]) if key_a in groups else None
+        mean_b = sum(groups[key_b]) / len(groups[key_b]) if key_b in groups else None
+        comparisons.append({
+            "group_a": key_a,
+            "group_a_label": group_a_label,
+            "group_b": key_b,
+            "group_b_label": group_b_label,
+            "test": "Tukey HSD",
+            "statistic": None,
+            "p_value": _finite_or_none(p_value),
+            "p_adjusted": _finite_or_none(p_value),
+            "significant": bool(reject),
+            "mean_a": float(mean_a) if mean_a is not None else None,
+            "mean_b": float(mean_b) if mean_b is not None else None,
+            "difference": float(mean_a - mean_b) if mean_a is not None and mean_b is not None else None,
+            "effect_size": None,
+        })
+    return comparisons
+
+
+def compute_post_hoc_comparisons(
+    groups,
+    group_labels=None,
+    method="anova",
+    alpha=0.05,
+    p_adjust="bonferroni",
+    post_hoc_method="auto",
+):
+    group_labels = group_labels or {}
+    ordered_group_keys = _sort_values(groups.keys())
+    n_groups = len(ordered_group_keys)
+
+    if method in ("t_test", "mann_whitney"):
+        return _empty_post_hoc(
+            True,
+            post_hoc_method,
+            p_adjust,
+            alpha,
+            ["Post-hoc comparisons are not needed for two-group tests."],
+        )
+    if n_groups < 3:
+        return _empty_post_hoc(
+            True,
+            post_hoc_method,
+            p_adjust,
+            alpha,
+            ["Post-hoc comparisons are usually needed for three or more groups."],
+        )
+
+    resolved_method = post_hoc_method
+    if resolved_method == "auto":
+        resolved_method = "pairwise_t_test" if method == "anova" else "pairwise_mann_whitney"
+    if resolved_method == "pairwise_t_test" and method != "anova":
+        raise ValueError("Pairwise t-tests can be used only with ANOVA.")
+    if resolved_method == "pairwise_mann_whitney" and method != "kruskal_wallis":
+        raise ValueError("Pairwise Mann-Whitney tests can be used only with Kruskal-Wallis.")
+    if resolved_method == "tukey_hsd" and method != "anova":
+        raise ValueError("Tukey HSD can be used only with ANOVA.")
+
+    if resolved_method == "tukey_hsd":
+        comparisons = _compute_tukey_hsd(groups, ordered_group_keys, group_labels, alpha)
+        return {
+            "enabled": True,
+            "method": resolved_method,
+            "p_adjust": "tukey_hsd",
+            "alpha": alpha,
+            "comparisons_count": len(comparisons),
+            "comparisons": comparisons,
+            "warnings": [],
+        }
+
+    comparisons = []
+    raw_p_values = []
+    for left_index, group_a in enumerate(ordered_group_keys):
+        for group_b in ordered_group_keys[left_index + 1:]:
+            values_a = groups[group_a]
+            values_b = groups[group_b]
+            if resolved_method == "pairwise_t_test":
+                result = stats.ttest_ind(values_a, values_b, equal_var=False, nan_policy="omit")
+                effect_value = _cohens_d([values_a, values_b])
+                effect_size = None if effect_value is None else {
+                    "type": "cohens_d",
+                    "value": float(effect_value),
+                    "interpretation": _interpret_cohens_d(effect_value),
+                }
+                mean_a = sum(values_a) / len(values_a)
+                mean_b = sum(values_b) / len(values_b)
+                comparison = {
+                    "group_a": group_a,
+                    "group_a_label": _group_label(group_a, group_labels),
+                    "group_b": group_b,
+                    "group_b_label": _group_label(group_b, group_labels),
+                    "test": "Welch t-test",
+                    "statistic": _finite_or_none(result.statistic),
+                    "p_value": _finite_or_none(result.pvalue),
+                    "mean_a": float(mean_a),
+                    "mean_b": float(mean_b),
+                    "difference": float(mean_a - mean_b),
+                    "effect_size": effect_size,
+                }
+            else:
+                result = stats.mannwhitneyu(values_a, values_b, alternative="two-sided")
+                statistic = _finite_or_none(result.statistic)
+                denominator = len(values_a) * len(values_b)
+                rbc = None if statistic is None or denominator <= 0 else 1 - (2 * statistic) / denominator
+                median_a = _profile_median(values_a)
+                median_b = _profile_median(values_b)
+                comparison = {
+                    "group_a": group_a,
+                    "group_a_label": _group_label(group_a, group_labels),
+                    "group_b": group_b,
+                    "group_b_label": _group_label(group_b, group_labels),
+                    "test": "Mann-Whitney U",
+                    "statistic": statistic,
+                    "p_value": _finite_or_none(result.pvalue),
+                    "median_a": float(median_a),
+                    "median_b": float(median_b),
+                    "difference": float(median_a - median_b),
+                    "effect_size": None if rbc is None else {
+                        "type": "rank_biserial_correlation",
+                        "value": float(rbc),
+                        "abs_value": float(abs(rbc)),
+                        "interpretation": _interpret_rank_biserial(rbc),
+                    },
+                }
+            comparisons.append(comparison)
+            raw_p_values.append(comparison.get("p_value"))
+
+    adjusted_values = adjust_p_values(raw_p_values, p_adjust)
+    for comparison, adjusted_value in zip(comparisons, adjusted_values):
+        comparison["p_adjusted"] = adjusted_value
+        comparison["significant"] = bool(adjusted_value is not None and adjusted_value < alpha)
+
+    return {
+        "enabled": True,
+        "method": resolved_method,
+        "p_adjust": p_adjust,
+        "alpha": alpha,
+        "comparisons_count": len(comparisons),
+        "comparisons": comparisons,
+        "warnings": [],
+    }
+
+
 def _finite_or_none(value):
     if value is None:
         return None
@@ -1269,7 +1499,16 @@ def _finite_or_none(value):
     return value if math.isfinite(value) else None
 
 
-def compute_group_comparison(rows, group_var, value_var, method="anova", alpha=0.05) -> dict:
+def compute_group_comparison(
+    rows,
+    group_var,
+    value_var,
+    method="anova",
+    alpha=0.05,
+    post_hoc=False,
+    post_hoc_method="auto",
+    p_adjust="bonferroni",
+) -> dict:
     if stats is None:
         raise ValueError("Group comparison requires scipy to be installed.")
     if method not in ("t_test", "anova", "mann_whitney", "kruskal_wallis"):
@@ -1343,6 +1582,20 @@ def compute_group_comparison(rows, group_var, value_var, method="anova", alpha=0
 
     statistic = _finite_or_none(result.statistic)
     p_value = _finite_or_none(result.pvalue)
+    group_labels = {
+        group_key: _describe_group(group_key, groups[group_key], group_var.value_labels)["label"]
+        for group_key in ordered_group_keys
+    }
+    post_hoc_result = _empty_post_hoc(False, None, p_adjust, alpha)
+    if post_hoc:
+        post_hoc_result = compute_post_hoc_comparisons(
+            groups=groups,
+            group_labels=group_labels,
+            method=method,
+            alpha=alpha,
+            p_adjust=p_adjust,
+            post_hoc_method=post_hoc_method,
+        )
 
     return {
         "method": method,
@@ -1370,6 +1623,7 @@ def compute_group_comparison(rows, group_var, value_var, method="anova", alpha=0
             "groups_compared": groups_compared,
         },
         "effect_size": effect_size,
+        "post_hoc": post_hoc_result,
         "warnings": warnings,
     }
 

@@ -504,6 +504,36 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
             if warnings:
                 story.append(Spacer(1, 0.15 * cm))
                 story.append(table([["Warnings"], *[[warning] for warning in warnings]], [16 * cm]))
+            post_hoc = result.get("post_hoc") or {}
+            if post_hoc.get("enabled"):
+                story.extend(heading("Post-hoc сравнения"))
+                story.append(key_value_table([
+                    ["method", post_hoc.get("method")],
+                    ["p_adjust", post_hoc.get("p_adjust")],
+                    ["comparisons", post_hoc.get("comparisons_count")],
+                ]))
+                post_hoc_warnings = post_hoc.get("warnings") or []
+                if post_hoc_warnings:
+                    story.append(table([["Warnings"], *[[warning] for warning in post_hoc_warnings]], [16 * cm]))
+                comparisons = post_hoc.get("comparisons") or []
+                if comparisons:
+                    limited = comparisons[:20]
+                    story.append(table(
+                        [["Group A", "Group B", "Test", "p adjusted", "Significant", "Difference", "Effect size"], *[
+                            [
+                                item.get("group_a_label") or item.get("group_a"),
+                                item.get("group_b_label") or item.get("group_b"),
+                                item.get("test"),
+                                _format_p_value(item.get("p_adjusted")),
+                                item.get("significant"),
+                                item.get("difference"),
+                                (item.get("effect_size") or {}).get("value"),
+                            ]
+                            for item in limited
+                        ]],
+                    ))
+                    if len(comparisons) > 20:
+                        story.append(p("Показаны первые 20 post-hoc сравнений."))
         elif section_type == "reliability_analysis":
             story.append(key_value_table([
                 ["method", result.get("method")],

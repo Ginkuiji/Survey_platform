@@ -147,6 +147,9 @@ function createSection(type) {
       valueQuestionId: "",
       method: "anova",
       alpha: 0.05,
+      post_hoc: false,
+      post_hoc_method: "auto",
+      p_adjust: "bonferroni",
     };
   }
 
@@ -331,6 +334,54 @@ function SectionFields({ section, questions, updateSection }) {
             onChange={(event) => updateSection(section.id, { n_dimensions: Number(event.target.value) })}
           />
         </Stack>
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={section.post_hoc}
+              onChange={(event) => updateSection(section.id, { post_hoc: event.target.checked })}
+            />
+          }
+          label="Выполнить post-hoc сравнения"
+        />
+
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <FormControl fullWidth disabled={!section.post_hoc}>
+            <InputLabel>Post-hoc метод</InputLabel>
+            <Select
+              label="Post-hoc метод"
+              value={section.post_hoc_method}
+              onChange={(event) => updateSection(section.id, { post_hoc_method: event.target.value })}
+            >
+              <MenuItem value="auto">Автоматически</MenuItem>
+              <MenuItem value="pairwise_t_test">Попарные t-tests</MenuItem>
+              <MenuItem value="pairwise_mann_whitney">Попарные Mann-Whitney</MenuItem>
+              <MenuItem value="tukey_hsd">Tukey HSD</MenuItem>
+            </Select>
+          </FormControl>
+
+          <FormControl fullWidth disabled={!section.post_hoc || section.post_hoc_method === "tukey_hsd"}>
+            <InputLabel>Поправка p-value</InputLabel>
+            <Select
+              label="Поправка p-value"
+              value={section.p_adjust}
+              onChange={(event) => updateSection(section.id, { p_adjust: event.target.value })}
+            >
+              <MenuItem value="bonferroni">Bonferroni</MenuItem>
+              <MenuItem value="holm">Holm</MenuItem>
+            </Select>
+          </FormControl>
+        </Stack>
+
+        {section.post_hoc && (
+          <Alert severity="info">
+            {section.method === "anova"
+              ? "Post-hoc сравнения помогут определить, между какими группами есть различия."
+              : section.method === "kruskal_wallis"
+                ? "Для Kruskal-Wallis будут использованы попарные Mann-Whitney U с поправкой p-value."
+                : "Post-hoc обычно не требуется для двухгрупповых тестов."}
+          </Alert>
+        )}
       </Stack>
     );
   }
