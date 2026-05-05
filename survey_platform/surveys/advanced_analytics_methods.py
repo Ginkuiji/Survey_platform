@@ -746,6 +746,301 @@ def _complete_factor_cases(rows, variables):
     return matrix
 
 
+def _mean(values):
+    return sum(values) / len(values) if values else None
+
+
+def _median(values):
+    if not values:
+        return None
+    ordered = sorted(values)
+    n = len(ordered)
+    middle = n // 2
+    return ordered[middle] if n % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+
+
+def _percent(part, whole):
+    return (part / whole * 100) if whole else 0
+
+
+def _duration_seconds(start, end):
+    if not start or not end:
+        return None
+    return (end - start).total_seconds()
+
+
+def _percentile(values, percentile):
+    if not values:
+        return None
+    if np is not None:
+        return float(np.percentile(values, percentile))
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return float(ordered[0])
+    position = (len(ordered) - 1) * percentile / 100
+    lower = int(math.floor(position))
+    upper = int(math.ceil(position))
+    if lower == upper:
+        return float(ordered[lower])
+    return float(ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower))
+
+
+def _describe_durations(values):
+    if not values:
+        return {
+            "count": 0,
+            "average": None,
+            "median": None,
+            "min": None,
+            "max": None,
+            "p25": None,
+            "p75": None,
+            "iqr": None,
+        }
+    p25 = _percentile(values, 25)
+    p75 = _percentile(values, 75)
+    return {
+        "count": len(values),
+        "average": float(_mean(values)),
+        "median": float(_median(values)),
+        "min": float(min(values)),
+        "max": float(max(values)),
+        "p25": p25,
+        "p75": p75,
+        "iqr": float(p75 - p25) if p25 is not None and p75 is not None else None,
+    }
+
+
+def _duration_distribution(values, bucket_size_seconds=60, max_buckets=30):
+    if not values:
+        return [], None
+    bucket_counts = Counter(int(value // bucket_size_seconds) for value in values)
+    max_bucket = max(bucket_counts)
+    truncated = max_bucket + 1 > max_buckets
+    buckets = []
+    total = len(values)
+    limit = max_buckets - 1 if truncated else max_bucket + 1
+    for bucket in range(limit):
+        start = bucket * bucket_size_seconds
+        end = start + bucket_size_seconds
+        count = bucket_counts.get(bucket, 0)
+        buckets.append({
+            "bucket_start_seconds": start,
+            "bucket_end_seconds": end,
+            "label": f"{start}-{end} сек.",
+            "count": count,
+            "percent": _percent(count, total),
+        })
+    if truncated:
+        start = (max_buckets - 1) * bucket_size_seconds
+        count = sum(count for bucket, count in bucket_counts.items() if bucket >= max_buckets - 1)
+        buckets.append({
+            "bucket_start_seconds": start,
+            "bucket_end_seconds": None,
+            "label": f"{start}+ сек.",
+            "count": count,
+            "percent": _percent(count, total),
+        })
+    return buckets, ("Duration distribution was truncated to max_buckets." if truncated else None)
+
+
+def _time_group_label(value, value_labels):
+    if not value_labels:
+        return str(value)
+    if value in value_labels:
+        return value_labels[value]
+    try:
+        int_value = int(float(value))
+        if int_value in value_labels:
+            return value_labels[int_value]
+        if str(int_value) in value_labels:
+            return value_labels[str(int_value)]
+    except (TypeError, ValueError):
+        pass
+    return str(value)
+
+
+def _time_analysis_group_test(group_breakdown, warnings):
+    completion_groups = [
+        item["_completion_values"]
+        for item in group_breakdown
+        if len(item.get("_completion_values") or []) >= 2
+    ]
+    if len(completion_groups) < 2:
+        if group_breakdown:
+            warnings.append("Not enough completion duration data for group time significance test.")
+        return None
+    if stats is None:
+        warnings.append("scipy is not installed; group time significance test is not available.")
+        return {
+            "method": None,
+            "statistic": None,
+            "p_value": None,
+            "significant": None,
+            "interpretation": "p-value недоступен; невозможно оценить различия между группами.",
+        }
+    if len(completion_groups) == 2:
+        result = stats.mannwhitneyu(completion_groups[0], completion_groups[1], alternative="two-sided")
+        method = "Mann-Whitney U"
+    else:
+        result = stats.kruskal(*completion_groups)
+        method = "Kruskal-Wallis"
+    statistic = _finite_or_none(result.statistic)
+    p_value = _finite_or_none(result.pvalue)
+    significant = bool(p_value is not None and p_value < 0.05)
+    return {
+        "method": method,
+        "statistic": statistic,
+        "p_value": p_value,
+        "significant": significant,
+        "interpretation": "Время прохождения статистически различается между группами." if significant else "Статистически значимых различий времени между группами не выявлено.",
+    }
+
+
+def compute_time_analysis(
+    response_items,
+    group_rows=None,
+    group_variable=None,
+    bucket_size_seconds=60,
+    max_buckets=30,
+) -> dict:
+    warnings = []
+    total_started = len(response_items)
+    total_finished = 0
+    total_completed = 0
+    total_screened_out = 0
+    total_active_unfinished = 0
+    completion_durations = []
+    screenout_durations = []
+    screenout_reason_values = defaultdict(list)
+    response_metrics = {}
+
+    for item in response_items:
+        response_id = item.get("response_id")
+        started_at = item.get("started_at")
+        finished_at = item.get("finished_at")
+        screened_out = bool(item.get("screened_out"))
+        is_complete = bool(item.get("is_complete"))
+        complete_reason = item.get("complete_reason")
+        duration = _duration_seconds(started_at, finished_at)
+        if duration is not None and duration < 0:
+            warnings.append(f"Negative duration skipped for response {response_id}.")
+            duration = None
+        if finished_at:
+            total_finished += 1
+        elif not is_complete:
+            total_active_unfinished += 1
+
+        completion_duration = None
+        if is_complete and not screened_out and complete_reason == "completed":
+            total_completed += 1
+            completion_duration = duration
+            if completion_duration is not None:
+                completion_durations.append(completion_duration)
+
+        screenout_duration = None
+        if screened_out:
+            total_screened_out += 1
+            screenout_duration = _duration_seconds(started_at, item.get("screened_out_at")) or duration
+            if screenout_duration is not None and screenout_duration < 0:
+                warnings.append(f"Negative screenout duration skipped for response {response_id}.")
+                screenout_duration = None
+            if screenout_duration is not None:
+                screenout_durations.append(screenout_duration)
+                reason = (item.get("screened_out_reason") or "").strip() or "Без указания причины"
+                screenout_reason_values[reason].append(screenout_duration)
+
+        response_metrics[response_id] = {
+            "finished": bool(finished_at),
+            "completed": bool(completion_duration is not None or (is_complete and not screened_out and complete_reason == "completed")),
+            "screened_out": screened_out,
+            "completion_duration": completion_duration,
+            "screenout_duration": screenout_duration,
+        }
+
+    completion_distribution, completion_warning = _duration_distribution(completion_durations, bucket_size_seconds, max_buckets)
+    screenout_distribution, screenout_warning = _duration_distribution(screenout_durations, bucket_size_seconds, max_buckets)
+    if completion_warning:
+        warnings.append(completion_warning)
+    if screenout_warning:
+        warnings.append(screenout_warning)
+
+    screenout_reasons = [
+        {
+            "reason": reason,
+            "count": len(values),
+            "percent_screened_out": _percent(len(values), total_screened_out),
+            "average_time_to_screenout_seconds": _mean(values),
+        }
+        for reason, values in sorted(screenout_reason_values.items(), key=lambda pair: (-len(pair[1]), pair[0]))
+    ]
+
+    group_breakdown = []
+    if group_rows is not None and group_variable is not None:
+        grouped = defaultdict(list)
+        for row in group_rows:
+            response_id = row.get("response_id")
+            value = row.get(group_variable.code)
+            if response_id in response_metrics and not _is_missing(value):
+                grouped[value].append(response_id)
+        for group_value in _sort_values(grouped.keys()):
+            ids = grouped[group_value]
+            metrics = [response_metrics[response_id] for response_id in ids]
+            completion_values = [item["completion_duration"] for item in metrics if item.get("completion_duration") is not None]
+            screenout_values = [item["screenout_duration"] for item in metrics if item.get("screenout_duration") is not None]
+            completed = sum(1 for item in metrics if item.get("completed"))
+            screened = sum(1 for item in metrics if item.get("screened_out"))
+            finished = sum(1 for item in metrics if item.get("finished"))
+            group_breakdown.append({
+                "group": group_value,
+                "group_label": _time_group_label(group_value, group_variable.value_labels),
+                "total_started": len(ids),
+                "total_finished": finished,
+                "total_completed": completed,
+                "total_screened_out": screened,
+                "completion_rate": _percent(completed, len(ids)),
+                "screenout_rate": _percent(screened, len(ids)),
+                "completion_time": _describe_durations(completion_values),
+                "screenout_time": _describe_durations(screenout_values),
+                "_completion_values": completion_values,
+            })
+
+    group_time_test = _time_analysis_group_test(group_breakdown, warnings) if group_breakdown else None
+    for item in group_breakdown:
+        item.pop("_completion_values", None)
+
+    completion_stats = _describe_durations(completion_durations)
+    screenout_stats = _describe_durations(screenout_durations)
+    return {
+        "method": "time_analysis",
+        "n": total_started,
+        "summary": {
+            "total_started": total_started,
+            "total_finished": total_finished,
+            "total_completed": total_completed,
+            "total_screened_out": total_screened_out,
+            "total_active_unfinished": total_active_unfinished,
+            "completion_rate": _percent(total_completed, total_started),
+            "screenout_rate": _percent(total_screened_out, total_started),
+            "finish_rate": _percent(total_finished, total_started),
+            "average_completion_time_seconds": completion_stats["average"],
+            "median_completion_time_seconds": completion_stats["median"],
+            "min_completion_time_seconds": completion_stats["min"],
+            "max_completion_time_seconds": completion_stats["max"],
+            "average_screenout_time_seconds": screenout_stats["average"],
+            "median_screenout_time_seconds": screenout_stats["median"],
+            "min_screenout_time_seconds": screenout_stats["min"],
+            "max_screenout_time_seconds": screenout_stats["max"],
+        },
+        "completion_time_distribution": completion_distribution,
+        "screenout_time_distribution": screenout_distribution,
+        "screenout_reasons": screenout_reasons,
+        "group_breakdown": group_breakdown,
+        "group_time_test": group_time_test,
+        "warnings": warnings,
+    }
+
+
 def _complete_factor_cases_with_ids(rows, variables):
     matrix = []
     response_ids = []

@@ -11,7 +11,9 @@ from .advanced_analytics_methods import (
     compute_kmeans_clustering,
     compute_linear_regression,
     compute_logistic_regression,
+    compute_time_analysis,
 )
+from .models import Response
 
 
 def _with_metadata(survey_id: int, analysis_type: str, dataset, result: dict) -> dict:
@@ -284,6 +286,50 @@ def run_group_comparison(payload: dict) -> dict:
         p_adjust=payload.get("p_adjust", "bonferroni"),
     )
     return _with_metadata(survey_id, "group_comparison", dataset, result)
+
+
+def run_time_analysis(payload: dict) -> dict:
+    survey_id = payload["survey_id"]
+    responses = Response.objects.filter(
+        survey_id=survey_id,
+        status="active",
+    ).order_by("id")
+    response_items = [
+        {
+            "response_id": response.id,
+            "started_at": response.started_at,
+            "finished_at": response.finished_at,
+            "screened_out": response.screened_out,
+            "screened_out_at": response.screened_out_at,
+            "screened_out_reason": response.screened_out_reason,
+            "complete_reason": response.complete_reason,
+            "is_complete": response.is_complete,
+            "status": response.status,
+        }
+        for response in responses
+    ]
+
+    group_rows = None
+    group_variable = None
+    group_by = payload.get("group_by")
+    if group_by:
+        group_dataset = build_analysis_dataset(survey_id, [group_by])
+        group_variable = _single_variable(group_dataset, "Time analysis group_by")
+        group_rows = group_dataset.rows
+
+    result = compute_time_analysis(
+        response_items=response_items,
+        group_rows=group_rows,
+        group_variable=group_variable,
+        bucket_size_seconds=payload.get("bucket_size_seconds", 60),
+        max_buckets=payload.get("max_buckets", 30),
+    )
+    return {
+        "survey_id": survey_id,
+        "analysis_type": "time_analysis",
+        "dataset_size": result.get("n", len(response_items)),
+        **result,
+    }
 
 
 def run_reliability_analysis(payload: dict) -> dict:

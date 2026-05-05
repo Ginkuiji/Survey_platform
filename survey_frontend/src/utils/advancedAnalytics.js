@@ -85,6 +85,13 @@ export function isQuestionSupportedForAnalysis(question, analysisType, role = "v
     return false;
   }
 
+  if (analysisType === "time_analysis") {
+    if (role === "group") {
+      return ["single", "dropdown", "yesno"].includes(question.qtype);
+    }
+    return false;
+  }
+
   if (analysisType === "reliability_analysis") {
     return ["scale", "number", "yesno", "single", "dropdown", "ranking", "matrix_single"].includes(question.qtype);
   }
@@ -146,6 +153,15 @@ export function getDefaultVariableSpec(question, analysisType, role = "variable"
     }
     if (question.qtype === "matrix_multi") {
       return { question_id: question.id, encoding: "matrix_multi_binary", measure: "binary" };
+    }
+  }
+
+  if (analysisType === "time_analysis" && role === "group") {
+    if (question.qtype === "yesno") {
+      return { question_id: question.id, encoding: "binary", measure: "binary" };
+    }
+    if (["single", "dropdown"].includes(question.qtype)) {
+      return { question_id: question.id, encoding: "ordinal", measure: "nominal" };
     }
   }
 
@@ -394,6 +410,22 @@ export function buildSectionPayload(surveyId, section, questionsById) {
       post_hoc: section.post_hoc ?? false,
       post_hoc_method: section.post_hoc_method || "auto",
       p_adjust: section.p_adjust || "bonferroni",
+    };
+  }
+
+  if (section.type === "time_analysis") {
+    let group_by = null;
+    if (section.groupQuestionId) {
+      const groupQuestion = getQuestion(questionsById, section.groupQuestionId, "Группировка");
+      group_by = getSpec(groupQuestion, "time_analysis", "group", "Группировка");
+    }
+
+    return {
+      survey_id: Number(surveyId),
+      group_by,
+      include_active: section.include_active ?? false,
+      bucket_size_seconds: section.bucket_size_seconds || 60,
+      max_buckets: section.max_buckets || 30,
     };
   }
 

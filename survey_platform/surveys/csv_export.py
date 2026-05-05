@@ -561,6 +561,74 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
                     comparison_effect.get("interpretation"),
                 )
 
+        elif section_type == "time_analysis":
+            summary = result.get("summary") or {}
+            row("Анализ времени", title, "total_started", summary.get("total_started"))
+            row("Анализ времени", title, "total_finished", summary.get("total_finished"))
+            row("Анализ времени", title, "total_completed", summary.get("total_completed"))
+            row("Анализ времени", title, "total_screened_out", summary.get("total_screened_out"))
+            row("Анализ времени", title, "total_active_unfinished", summary.get("total_active_unfinished"))
+            row("Анализ времени", title, "completion_rate", summary.get("completion_rate"))
+            row("Анализ времени", title, "screenout_rate", summary.get("screenout_rate"))
+            row("Анализ времени", title, "finish_rate", summary.get("finish_rate"))
+            row("Анализ времени", title, "average_completion_time_seconds", summary.get("average_completion_time_seconds"))
+            row("Анализ времени", title, "median_completion_time_seconds", summary.get("median_completion_time_seconds"))
+            row("Анализ времени", title, "average_screenout_time_seconds", summary.get("average_screenout_time_seconds"))
+            row("Анализ времени", title, "median_screenout_time_seconds", summary.get("median_screenout_time_seconds"))
+            for item in result.get("completion_time_distribution") or []:
+                row("Анализ времени", title, "completion_distribution", item.get("label"), "count", item.get("count"), "percent", item.get("percent"))
+            for item in result.get("screenout_time_distribution") or []:
+                row("Анализ времени", title, "screenout_distribution", item.get("label"), "count", item.get("count"), "percent", item.get("percent"))
+            for item in result.get("screenout_reasons") or []:
+                row(
+                    "Анализ времени",
+                    title,
+                    "screenout_reason",
+                    item.get("reason"),
+                    "count",
+                    item.get("count"),
+                    "percent_screened_out",
+                    item.get("percent_screened_out"),
+                    "average_time_to_screenout_seconds",
+                    item.get("average_time_to_screenout_seconds"),
+                )
+            for group in result.get("group_breakdown") or []:
+                row(
+                    "Анализ времени",
+                    title,
+                    "group",
+                    group.get("group_label") or group.get("group"),
+                    "started",
+                    group.get("total_started"),
+                    "completed",
+                    group.get("total_completed"),
+                    "screened_out",
+                    group.get("total_screened_out"),
+                    "completion_rate",
+                    group.get("completion_rate"),
+                    "screenout_rate",
+                    group.get("screenout_rate"),
+                    "median_completion_time",
+                    (group.get("completion_time") or {}).get("median"),
+                )
+            group_test = result.get("group_time_test") or {}
+            if group_test:
+                row(
+                    "Анализ времени",
+                    title,
+                    "group_time_test",
+                    "method",
+                    group_test.get("method"),
+                    "statistic",
+                    group_test.get("statistic"),
+                    "p_value",
+                    _format_p_value(group_test.get("p_value")),
+                    "significant",
+                    group_test.get("significant"),
+                )
+            for warning in result.get("warnings") or []:
+                row("Анализ времени", title, "warning", warning)
+
         elif section_type == "reliability_analysis":
             row("Надёжность шкалы", title, "method", result.get("method"))
             row("Надёжность шкалы", title, "n", result.get("n"))

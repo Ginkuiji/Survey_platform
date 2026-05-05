@@ -31,6 +31,7 @@ const SECTION_LABELS = {
   factor_analysis: "Факторный анализ",
   cluster_analysis: "Кластерный анализ",
   group_comparison: "Сравнение групп",
+  time_analysis: "Анализ времени прохождения и отсева",
   reliability_analysis: "Надёжность шкалы",
 };
 
@@ -43,6 +44,15 @@ function formatNumber(value) {
 function formatPercent(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   return `${(Number(value) * 100).toFixed(2)}%`;
+}
+
+function formatDurationSeconds(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  const seconds = Math.round(Number(value));
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  if (minutes <= 0) return `${rest} сек.`;
+  return `${minutes} мин. ${rest} сек.`;
 }
 
 function formatDate(value) {
@@ -1008,6 +1018,181 @@ function renderGroupComparisonSection(section) {
   );
 }
 
+function renderTimeDistributionTable(title, rows) {
+  if (!rows?.length) return null;
+  return (
+    <Box sx={{ width: "100%", overflowX: "auto" }}>
+      <Typography variant="subtitle1" sx={{ mb: 1 }}>
+        {title}
+      </Typography>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Интервал</TableCell>
+            <TableCell align="right">Count</TableCell>
+            <TableCell align="right">Percent</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((item) => (
+            <TableRow key={`${title}-${item.label}`}>
+              <TableCell>{item.label}</TableCell>
+              <TableCell align="right">{formatNumber(item.count)}</TableCell>
+              <TableCell align="right">{formatNumber(item.percent)}%</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Box>
+  );
+}
+
+function renderTimeAnalysisSection(section) {
+  const result = section.result || {};
+  const summary = result.summary || {};
+  const groupTimeTest = result.group_time_test;
+  const summaryRows = [
+    ["total_started", summary.total_started],
+    ["total_finished", summary.total_finished],
+    ["total_completed", summary.total_completed],
+    ["total_screened_out", summary.total_screened_out],
+    ["total_active_unfinished", summary.total_active_unfinished],
+    ["completion_rate", `${formatNumber(summary.completion_rate)}%`],
+    ["screenout_rate", `${formatNumber(summary.screenout_rate)}%`],
+    ["finish_rate", `${formatNumber(summary.finish_rate)}%`],
+    ["average_completion_time_seconds", formatDurationSeconds(summary.average_completion_time_seconds)],
+    ["median_completion_time_seconds", formatDurationSeconds(summary.median_completion_time_seconds)],
+    ["min_completion_time_seconds", formatDurationSeconds(summary.min_completion_time_seconds)],
+    ["max_completion_time_seconds", formatDurationSeconds(summary.max_completion_time_seconds)],
+    ["average_screenout_time_seconds", formatDurationSeconds(summary.average_screenout_time_seconds)],
+    ["median_screenout_time_seconds", formatDurationSeconds(summary.median_screenout_time_seconds)],
+    ["min_screenout_time_seconds", formatDurationSeconds(summary.min_screenout_time_seconds)],
+    ["max_screenout_time_seconds", formatDurationSeconds(summary.max_screenout_time_seconds)],
+  ];
+
+  return (
+    <Stack spacing={3}>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Chip label={`Started: ${formatNumber(summary.total_started)}`} />
+        <Chip label={`Completed: ${formatNumber(summary.total_completed)}`} />
+        <Chip label={`Screened out: ${formatNumber(summary.total_screened_out)}`} />
+        <Chip label={`Completion rate: ${formatNumber(summary.completion_rate)}%`} />
+        <Chip label={`Screenout rate: ${formatNumber(summary.screenout_rate)}%`} />
+        <Chip label={`Avg completion: ${formatDurationSeconds(summary.average_completion_time_seconds)}`} />
+        <Chip label={`Avg screenout: ${formatDurationSeconds(summary.average_screenout_time_seconds)}`} />
+      </Stack>
+
+      {(result.warnings || []).map((warning) => (
+        <Alert key={warning} severity="warning">{warning}</Alert>
+      ))}
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Summary
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Показатель</TableCell>
+              <TableCell align="right">Значение</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {summaryRows.map(([label, value]) => (
+              <TableRow key={label}>
+                <TableCell>{label}</TableCell>
+                <TableCell align="right">{value}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+
+      {renderTimeDistributionTable("Completion time distribution", result.completion_time_distribution || [])}
+      {renderTimeDistributionTable("Screenout time distribution", result.screenout_time_distribution || [])}
+
+      {!!(result.screenout_reasons || []).length && (
+        <Box sx={{ width: "100%", overflowX: "auto" }}>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>
+            Screenout reasons
+          </Typography>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Причина</TableCell>
+                <TableCell align="right">Количество</TableCell>
+                <TableCell align="right">% от screened out</TableCell>
+                <TableCell align="right">Среднее время до отсева</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(result.screenout_reasons || []).map((reason) => (
+                <TableRow key={reason.reason}>
+                  <TableCell>{reason.reason}</TableCell>
+                  <TableCell align="right">{formatNumber(reason.count)}</TableCell>
+                  <TableCell align="right">{formatNumber(reason.percent_screened_out)}%</TableCell>
+                  <TableCell align="right">{formatDurationSeconds(reason.average_time_to_screenout_seconds)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
+
+      {!!(result.group_breakdown || []).length && (
+        <Box sx={{ width: "100%", overflowX: "auto" }}>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>
+            Group breakdown
+          </Typography>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Группа</TableCell>
+                <TableCell align="right">Started</TableCell>
+                <TableCell align="right">Completed</TableCell>
+                <TableCell align="right">Screened out</TableCell>
+                <TableCell align="right">Completion rate</TableCell>
+                <TableCell align="right">Screenout rate</TableCell>
+                <TableCell align="right">Median completion</TableCell>
+                <TableCell align="right">Median screenout</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(result.group_breakdown || []).map((group) => (
+                <TableRow key={String(group.group)}>
+                  <TableCell>{group.group_label || group.group}</TableCell>
+                  <TableCell align="right">{formatNumber(group.total_started)}</TableCell>
+                  <TableCell align="right">{formatNumber(group.total_completed)}</TableCell>
+                  <TableCell align="right">{formatNumber(group.total_screened_out)}</TableCell>
+                  <TableCell align="right">{formatNumber(group.completion_rate)}%</TableCell>
+                  <TableCell align="right">{formatNumber(group.screenout_rate)}%</TableCell>
+                  <TableCell align="right">{formatDurationSeconds(group.completion_time?.median)}</TableCell>
+                  <TableCell align="right">{formatDurationSeconds(group.screenout_time?.median)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
+
+      {groupTimeTest && (
+        <Stack spacing={1}>
+          <Typography variant="subtitle1">Group time test</Typography>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <Chip label={`Method: ${groupTimeTest.method || "—"}`} />
+            <Chip label={`Statistic: ${formatNumber(groupTimeTest.statistic)}`} />
+            <Chip label={`p-value: ${formatNumber(groupTimeTest.p_value)}`} />
+            <Chip label={`Significant: ${groupTimeTest.significant ? "да" : "нет"}`} />
+          </Stack>
+          <Typography color="text.secondary" variant="body2">
+            {groupTimeTest.interpretation || "—"}
+          </Typography>
+        </Stack>
+      )}
+    </Stack>
+  );
+}
+
 function renderReliabilityAnalysisSection(section) {
   const result = section.result || {};
   const variables = result.variables || [];
@@ -1105,6 +1290,7 @@ function renderSection(section) {
   if (section.type === "factor_analysis") return renderFactorAnalysisSection(section);
   if (section.type === "cluster_analysis") return renderClusterAnalysisSection(section);
   if (section.type === "group_comparison") return renderGroupComparisonSection(section);
+  if (section.type === "time_analysis") return renderTimeAnalysisSection(section);
   if (section.type === "reliability_analysis") return renderReliabilityAnalysisSection(section);
 
   return <Typography color="text.secondary">Неизвестный тип секции.</Typography>;

@@ -134,6 +134,33 @@ class GroupComparisonSer(serializers.Serializer):
         return attrs
 
 
+class TimeAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    group_by = AdvancedVariableSer(required=False, allow_null=True)
+    include_active = serializers.BooleanField(default=False)
+    bucket_size_seconds = serializers.IntegerField(
+        min_value=10,
+        max_value=3600,
+        required=False,
+        default=60,
+    )
+    max_buckets = serializers.IntegerField(
+        min_value=5,
+        max_value=100,
+        required=False,
+        default=30,
+    )
+
+    def validate_group_by(self, value):
+        if not value:
+            return value
+        if value.get("encoding") not in ("binary", "ordinal"):
+            raise serializers.ValidationError(
+                "Time analysis group_by supports only binary or ordinal categorical variables."
+            )
+        return value
+
+
 class ReliabilityAnalysisSer(serializers.Serializer):
     survey_id = serializers.IntegerField()
     variables = AdvancedVariableSer(many=True, allow_empty=False)

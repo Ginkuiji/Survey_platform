@@ -46,6 +46,7 @@ from .advanced_analytics_serializers import (
     LogisticRegressionSer,
     ReliabilityAnalysisSer,
     RegressionAnalysisSer,
+    TimeAnalysisSer,
 )
 from .advanced_analytics_services import (
     run_chi_square_analysis,
@@ -58,6 +59,7 @@ from .advanced_analytics_services import (
     run_logistic_regression_analysis,
     run_reliability_analysis,
     run_regression_analysis,
+    run_time_analysis,
 )
 from .pdf_export import build_analytics_pdf
 from .csv_export import build_analytics_csv
@@ -608,6 +610,10 @@ class AdvancedAnalyticsViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="group-comparison")
     def group_comparison(self, request):
         return self._run(request, GroupComparisonSer, run_group_comparison)
+
+    @action(detail=False, methods=["post"], url_path="time-analysis")
+    def time_analysis(self, request):
+        return self._run(request, TimeAnalysisSer, run_time_analysis)
 
     @action(detail=False, methods=["post"], url_path="reliability")
     def reliability(self, request):

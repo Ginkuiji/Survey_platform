@@ -36,6 +36,7 @@ import {
   runLogisticRegressionAnalysis,
   runReliabilityAnalysis,
   runRegressionAnalysis,
+  runTimeAnalysis,
 } from "../../api/analytics";
 import {
   buildSectionPayload,
@@ -54,6 +55,7 @@ const ANALYSIS_TYPES = [
   { value: "factor_analysis", label: "Факторный анализ" },
   { value: "cluster_analysis", label: "Кластерный анализ" },
   { value: "group_comparison", label: "Сравнение групп" },
+  { value: "time_analysis", label: "Анализ времени прохождения и отсева" },
   { value: "reliability_analysis", label: "Надёжность шкалы" },
 ];
 
@@ -67,6 +69,7 @@ const API_BY_TYPE = {
   factor_analysis: runFactorAnalysis,
   cluster_analysis: runClusterAnalysis,
   group_comparison: runGroupComparisonAnalysis,
+  time_analysis: runTimeAnalysis,
   reliability_analysis: runReliabilityAnalysis,
 };
 
@@ -151,6 +154,18 @@ function createSection(type) {
       post_hoc: false,
       post_hoc_method: "auto",
       p_adjust: "bonferroni",
+    };
+  }
+
+  if (type === "time_analysis") {
+    return {
+      id,
+      type,
+      title: "Анализ времени прохождения и отсева",
+      groupQuestionId: "",
+      include_active: false,
+      bucket_size_seconds: 60,
+      max_buckets: 30,
     };
   }
 
@@ -759,6 +774,63 @@ function SectionFields({ section, questions, updateSection }) {
             inputProps={{ min: 0.001, max: 0.2, step: 0.001 }}
             value={section.alpha}
             onChange={(event) => updateSection(section.id, { alpha: Number(event.target.value) })}
+          />
+        </Stack>
+      </Stack>
+    );
+  }
+
+  if (section.type === "time_analysis") {
+    const groupQuestions = questions.filter((question) => isQuestionSupportedForAnalysis(question, "time_analysis", "group"));
+
+    return (
+      <Stack spacing={2}>
+        <Alert severity="info">
+          Анализирует время завершения, время до отсева, причины отсева и различия между группами.
+        </Alert>
+
+        <FormControl fullWidth>
+          <InputLabel>Группировать по вопросу</InputLabel>
+          <Select
+            label="Группировать по вопросу"
+            value={section.groupQuestionId}
+            onChange={(event) => updateSection(section.id, { groupQuestionId: event.target.value })}
+          >
+            <MenuItem value="">Без группировки</MenuItem>
+            {groupQuestions.map((question) => (
+              <MenuItem key={question.id} value={question.id}>
+                <QuestionOption question={question} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={section.include_active}
+              onChange={(event) => updateSection(section.id, { include_active: event.target.checked })}
+            />
+          }
+          label="Учитывать активные незавершённые ответы в общей сводке"
+        />
+
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <TextField
+            fullWidth
+            type="number"
+            label="Размер интервала, сек."
+            inputProps={{ min: 10, max: 3600 }}
+            value={section.bucket_size_seconds}
+            onChange={(event) => updateSection(section.id, { bucket_size_seconds: Number(event.target.value) })}
+          />
+          <TextField
+            fullWidth
+            type="number"
+            label="Максимум интервалов"
+            inputProps={{ min: 5, max: 100 }}
+            value={section.max_buckets}
+            onChange={(event) => updateSection(section.id, { max_buckets: Number(event.target.value) })}
           />
         </Stack>
       </Stack>

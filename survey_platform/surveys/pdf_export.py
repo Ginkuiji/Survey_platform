@@ -577,6 +577,82 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
                     ))
                     if len(comparisons) > 20:
                         story.append(p("Показаны первые 20 post-hoc сравнений."))
+        elif section_type == "time_analysis":
+            summary = result.get("summary") or {}
+            story.append(key_value_table([
+                ["total_started", summary.get("total_started")],
+                ["total_finished", summary.get("total_finished")],
+                ["total_completed", summary.get("total_completed")],
+                ["total_screened_out", summary.get("total_screened_out")],
+                ["total_active_unfinished", summary.get("total_active_unfinished")],
+                ["completion_rate", summary.get("completion_rate")],
+                ["screenout_rate", summary.get("screenout_rate")],
+                ["finish_rate", summary.get("finish_rate")],
+                ["average_completion_time_seconds", summary.get("average_completion_time_seconds")],
+                ["median_completion_time_seconds", summary.get("median_completion_time_seconds")],
+                ["average_screenout_time_seconds", summary.get("average_screenout_time_seconds")],
+                ["median_screenout_time_seconds", summary.get("median_screenout_time_seconds")],
+            ]))
+            for title_text, items in (
+                ("Completion time distribution", result.get("completion_time_distribution") or []),
+                ("Screenout time distribution", result.get("screenout_time_distribution") or []),
+            ):
+                if items:
+                    story.append(Spacer(1, 0.15 * cm))
+                    limited = items[:20]
+                    story.append(table(
+                        [["Bucket", "Count", "Percent"], *[
+                            [item.get("label"), item.get("count"), item.get("percent")]
+                            for item in limited
+                        ]],
+                    ))
+                    if len(items) > 20:
+                        story.append(p(f"{title_text}: показаны первые 20 интервалов распределения времени."))
+            reasons = result.get("screenout_reasons") or []
+            if reasons:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table(
+                    [["Reason", "Count", "% screened out", "Avg time"], *[
+                        [
+                            item.get("reason"),
+                            item.get("count"),
+                            item.get("percent_screened_out"),
+                            item.get("average_time_to_screenout_seconds"),
+                        ]
+                        for item in reasons
+                    ]],
+                ))
+            groups = result.get("group_breakdown") or []
+            if groups:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table(
+                    [["Group", "Started", "Completed", "Screened out", "Completion %", "Screenout %", "Median completion"], *[
+                        [
+                            item.get("group_label") or item.get("group"),
+                            item.get("total_started"),
+                            item.get("total_completed"),
+                            item.get("total_screened_out"),
+                            item.get("completion_rate"),
+                            item.get("screenout_rate"),
+                            (item.get("completion_time") or {}).get("median"),
+                        ]
+                        for item in groups
+                    ]],
+                ))
+            group_test = result.get("group_time_test") or {}
+            if group_test:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(key_value_table([
+                    ["group_time_test_method", group_test.get("method")],
+                    ["statistic", group_test.get("statistic")],
+                    ["p_value", _format_p_value(group_test.get("p_value"))],
+                    ["significant", group_test.get("significant")],
+                    ["interpretation", group_test.get("interpretation")],
+                ]))
+            warnings = result.get("warnings") or []
+            if warnings:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table([["Warnings"], *[[warning] for warning in warnings]], [16 * cm]))
         elif section_type == "reliability_analysis":
             story.append(key_value_table([
                 ["method", result.get("method")],

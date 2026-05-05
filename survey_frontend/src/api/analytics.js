@@ -63,6 +63,12 @@ export const runGroupComparisonAnalysis = (payload) =>
     body: JSON.stringify(payload),
   });
 
+export const runTimeAnalysis = (payload) =>
+  apiFetch("/analytics/advanced/time-analysis/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
 export const runReliabilityAnalysis = (payload) =>
   apiFetch("/analytics/advanced/reliability/", {
     method: "POST",

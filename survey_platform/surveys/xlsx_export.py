@@ -611,6 +611,83 @@ def _add_report_sheet(ws, analysis_report):
                         for comparison in post_hoc.get("comparisons") or []
                     ],
                 )
+        elif section_type == "time_analysis":
+            summary = result.get("summary") or {}
+            for key in (
+                "total_started",
+                "total_finished",
+                "total_completed",
+                "total_screened_out",
+                "total_active_unfinished",
+                "completion_rate",
+                "screenout_rate",
+                "finish_rate",
+                "average_completion_time_seconds",
+                "median_completion_time_seconds",
+                "min_completion_time_seconds",
+                "max_completion_time_seconds",
+                "average_screenout_time_seconds",
+                "median_screenout_time_seconds",
+                "min_screenout_time_seconds",
+                "max_screenout_time_seconds",
+            ):
+                append_key_value(ws, key, format_number(summary.get(key)))
+            _append_table(
+                ws,
+                ["Bucket", "Count", "Percent"],
+                [
+                    [item.get("label"), item.get("count"), format_number(item.get("percent"))]
+                    for item in result.get("completion_time_distribution") or []
+                ],
+            )
+            _append_table(
+                ws,
+                ["Screenout bucket", "Count", "Percent"],
+                [
+                    [item.get("label"), item.get("count"), format_number(item.get("percent"))]
+                    for item in result.get("screenout_time_distribution") or []
+                ],
+            )
+            _append_table(
+                ws,
+                ["Reason", "Count", "% screened out", "Avg time to screenout"],
+                [
+                    [
+                        item.get("reason"),
+                        item.get("count"),
+                        format_number(item.get("percent_screened_out")),
+                        format_number(item.get("average_time_to_screenout_seconds")),
+                    ]
+                    for item in result.get("screenout_reasons") or []
+                ],
+            )
+            _append_table(
+                ws,
+                ["Group", "Started", "Completed", "Screened out", "Completion rate", "Screenout rate", "Median completion", "Median screenout"],
+                [
+                    [
+                        item.get("group_label") or item.get("group"),
+                        item.get("total_started"),
+                        item.get("total_completed"),
+                        item.get("total_screened_out"),
+                        format_number(item.get("completion_rate")),
+                        format_number(item.get("screenout_rate")),
+                        format_number((item.get("completion_time") or {}).get("median")),
+                        format_number((item.get("screenout_time") or {}).get("median")),
+                    ]
+                    for item in result.get("group_breakdown") or []
+                ],
+            )
+            group_test = result.get("group_time_test") or {}
+            if group_test:
+                append_key_value(ws, "group_time_test_method", group_test.get("method"))
+                append_key_value(ws, "group_time_test_statistic", format_number(group_test.get("statistic")))
+                append_key_value(ws, "group_time_test_p_value", format_p_value(group_test.get("p_value")))
+                append_key_value(ws, "group_time_test_significant", group_test.get("significant"))
+                append_key_value(ws, "group_time_test_interpretation", group_test.get("interpretation"))
+            warnings = result.get("warnings") or []
+            if warnings:
+                _append_table(ws, ["Warnings"], [[warning] for warning in warnings])
         elif section_type == "reliability_analysis":
             append_key_value(ws, "method", result.get("method"))
             append_key_value(ws, "n", result.get("n"))
