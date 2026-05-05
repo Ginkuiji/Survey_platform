@@ -67,6 +67,7 @@ class FactorAnalysisSer(serializers.Serializer):
     n_factors = serializers.IntegerField(min_value=1, required=False, default=2)
     rotation = serializers.ChoiceField(choices=("none", "varimax"), required=False, default="varimax")
     standardize = serializers.BooleanField(default=True)
+    include_factor_scores = serializers.BooleanField(default=False)
 
     def validate_variables(self, value):
         if len(value) < 3:

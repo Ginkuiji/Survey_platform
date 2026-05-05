@@ -105,6 +105,7 @@ function createSection(type) {
       n_factors: 2,
       rotation: "varimax",
       standardize: true,
+      include_factor_scores: false,
     };
   }
 
@@ -572,6 +573,22 @@ function SectionFields({ section, questions, updateSection }) {
           }
           label="Стандартизировать переменные"
         />
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={section.include_factor_scores}
+              onChange={(event) => updateSection(section.id, { include_factor_scores: event.target.checked })}
+            />
+          }
+          label="Рассчитать factor scores"
+        />
+
+        {section.include_factor_scores && (
+          <Alert severity="info">
+            Factor scores — значения факторов для каждого респондента. Они могут увеличить размер отчёта и экспортируемых файлов.
+          </Alert>
+        )}
       </Stack>
     );
   }

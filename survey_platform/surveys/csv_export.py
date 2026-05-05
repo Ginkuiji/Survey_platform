@@ -379,6 +379,23 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
             row("Factor analysis", title, "rotation", result.get("rotation"))
             row("Factor analysis", title, "standardize", result.get("standardize"))
             row("Factor analysis", title, "cumulative_explained_variance", result.get("cumulative_explained_variance"))
+            recommendations = result.get("factor_recommendations") or {}
+            row("Факторный анализ", title, "kaiser_n_factors", recommendations.get("kaiser_n_factors"))
+            row("Факторный анализ", title, "selected_n_factors", recommendations.get("selected_n_factors"))
+            row("Факторный анализ", title, "kaiser_message", recommendations.get("message"))
+            kmo = result.get("kmo") or {}
+            row("Факторный анализ", title, "kmo_overall", kmo.get("overall"))
+            row("Факторный анализ", title, "kmo_interpretation", kmo.get("interpretation"))
+            for item in kmo.get("variables") or []:
+                row("Факторный анализ", title, "kmo_variable", item.get("label") or item.get("code"), "kmo", item.get("kmo"), "interpretation", item.get("interpretation"))
+            bartlett = result.get("bartlett") or {}
+            row("Факторный анализ", title, "bartlett_chi_square", bartlett.get("chi_square"))
+            row("Факторный анализ", title, "bartlett_dof", bartlett.get("dof"))
+            row("Факторный анализ", title, "bartlett_p_value", _format_p_value(bartlett.get("p_value")))
+            row("Факторный анализ", title, "bartlett_significant", bartlett.get("significant"))
+            row("Факторный анализ", title, "bartlett_interpretation", bartlett.get("interpretation"))
+            for item in result.get("scree") or []:
+                row("Факторный анализ", title, "scree", "component", item.get("component"), "eigenvalue", item.get("eigenvalue"), "explained_variance", item.get("explained_variance"), "cumulative", item.get("cumulative_explained_variance"))
             for index, value in enumerate(result.get("eigenvalues") or [], start=1):
                 row("Factor analysis", title, "eigenvalue", f"Component {index}", value)
             for item in result.get("explained_variance") or []:
@@ -387,8 +404,17 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
                 for factor in item.get("factors") or []:
                     row("Factor analysis", title, "loading", item.get("label") or item.get("variable"), factor.get("factor"), factor.get("loading"))
                 row("Factor analysis", title, "communality", item.get("label") or item.get("variable"), item.get("communality"))
+            for item in result.get("factor_scores") or []:
+                values = []
+                for score in item.get("scores") or []:
+                    values.extend([score.get("factor"), score.get("value")])
+                row("Факторный анализ", title, "factor_score", "response_id", item.get("response_id"), *values)
             for warning in result.get("warnings") or []:
                 row("Factor analysis", title, "warning", warning)
+            for warning in kmo.get("warnings") or []:
+                row("Факторный анализ", title, "kmo_warning", warning)
+            for warning in bartlett.get("warnings") or []:
+                row("Факторный анализ", title, "bartlett_warning", warning)
 
         elif section_type == "cluster_analysis":
             row("Cluster analysis", title, "method", result.get("method"))

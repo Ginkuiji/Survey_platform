@@ -414,6 +414,49 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
                     ]],
                     [8 * cm, 5 * cm],
                 ))
+            recommendations = result.get("factor_recommendations") or {}
+            kmo = result.get("kmo") or {}
+            bartlett = result.get("bartlett") or {}
+            story.append(Spacer(1, 0.15 * cm))
+            story.append(key_value_table([
+                ["kaiser_n_factors", recommendations.get("kaiser_n_factors")],
+                ["selected_n_factors", recommendations.get("selected_n_factors")],
+                ["kaiser_message", recommendations.get("message")],
+                ["kmo_overall", kmo.get("overall")],
+                ["kmo_interpretation", kmo.get("interpretation")],
+                ["bartlett_chi_square", bartlett.get("chi_square")],
+                ["bartlett_dof", bartlett.get("dof")],
+                ["bartlett_p_value", _format_p_value(bartlett.get("p_value"))],
+                ["bartlett_significant", bartlett.get("significant")],
+                ["bartlett_interpretation", bartlett.get("interpretation")],
+            ]))
+            scree = result.get("scree") or []
+            if scree:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table(
+                    [["Component", "Eigenvalue", "Explained", "Cumulative"], *[
+                        [
+                            item.get("component"),
+                            item.get("eigenvalue"),
+                            item.get("explained_variance"),
+                            item.get("cumulative_explained_variance"),
+                        ]
+                        for item in scree
+                    ]],
+                ))
+            kmo_variables = kmo.get("variables") or []
+            if kmo_variables:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table(
+                    [["Variable", "KMO", "Interpretation"], *[
+                        [item.get("label") or item.get("code"), item.get("kmo"), item.get("interpretation")]
+                        for item in kmo_variables
+                    ]],
+                ))
+            factor_scores = result.get("factor_scores") or []
+            if factor_scores:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(p(f"Factor scores рассчитаны для {len(factor_scores)} респондентов. Полная таблица доступна в CSV/XLSX."))
         elif section_type == "cluster_analysis":
             story.append(key_value_table([
                 ["method", result.get("method")],

@@ -432,7 +432,6 @@ function renderLogisticRegressionSection(section) {
       {(result.warnings || []).map((warning) => (
         <Alert key={warning} severity="warning">{warning}</Alert>
       ))}
-
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
           Confusion matrix
@@ -499,6 +498,11 @@ function renderFactorAnalysisSection(section) {
   const loadings = result.loadings || [];
   const eigenvalues = result.eigenvalues || [];
   const factorNames = explainedVariance.map(item => item.factor);
+  const kmo = result.kmo || {};
+  const bartlett = result.bartlett || {};
+  const recommendations = result.factor_recommendations || {};
+  const scree = result.scree || [];
+  const factorScores = result.factor_scores || [];
 
   return (
     <Stack spacing={3}>
@@ -509,11 +513,92 @@ function renderFactorAnalysisSection(section) {
         <Chip label={`Factors: ${formatNumber(result.n_factors)}`} />
         <Chip label={`Rotation: ${result.rotation || "вЂ”"}`} />
         <Chip label={`Cumulative: ${formatPercent(result.cumulative_explained_variance)}`} />
+        <Chip label={`KMO: ${formatNumber(kmo.overall)}`} />
+        <Chip label={`Bartlett p: ${formatNumber(bartlett.p_value)}`} />
+        <Chip label={`Kaiser: ${formatNumber(recommendations.kaiser_n_factors)}`} />
       </Stack>
 
       {(result.warnings || []).map((warning) => (
         <Alert key={warning} severity="warning">{warning}</Alert>
       ))}
+      {(kmo.warnings || []).map((warning) => (
+        <Alert key={warning} severity="warning">{warning}</Alert>
+      ))}
+      {(bartlett.warnings || []).map((warning) => (
+        <Alert key={warning} severity="warning">{warning}</Alert>
+      ))}
+
+      <Box>
+        <Typography variant="subtitle1">Рекомендация числа факторов</Typography>
+        <Typography color="text.secondary" variant="body2">
+          {recommendations.message || "—"}
+        </Typography>
+      </Box>
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>KMO</Typography>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+          <Chip label={`Overall: ${formatNumber(kmo.overall)}`} />
+          <Chip label={kmo.interpretation || "—"} />
+        </Stack>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Variable</TableCell>
+              <TableCell align="right">KMO</TableCell>
+              <TableCell>Interpretation</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {(kmo.variables || []).map((item) => (
+              <TableRow key={item.code}>
+                <TableCell>{item.label || item.code}</TableCell>
+                <TableCell align="right">{formatNumber(item.kmo)}</TableCell>
+                <TableCell>{item.interpretation || "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+
+      <Box>
+        <Typography variant="subtitle1">Bartlett&apos;s test</Typography>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ my: 1 }}>
+          <Chip label={`chi-square: ${formatNumber(bartlett.chi_square)}`} />
+          <Chip label={`dof: ${formatNumber(bartlett.dof)}`} />
+          <Chip label={`p-value: ${formatNumber(bartlett.p_value)}`} />
+          <Chip label={`Significant: ${bartlett.significant === null || bartlett.significant === undefined ? "—" : (bartlett.significant ? "да" : "нет")}`} />
+        </Stack>
+        <Typography color="text.secondary" variant="body2">
+          {bartlett.interpretation || "—"}
+        </Typography>
+      </Box>
+
+      {scree.length > 0 && (
+        <Box sx={{ width: "100%", overflowX: "auto" }}>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>Scree data</Typography>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Component</TableCell>
+                <TableCell align="right">Eigenvalue</TableCell>
+                <TableCell align="right">Explained variance</TableCell>
+                <TableCell align="right">Cumulative</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {scree.map((item) => (
+                <TableRow key={item.component}>
+                  <TableCell>{item.component}</TableCell>
+                  <TableCell align="right">{formatNumber(item.eigenvalue)}</TableCell>
+                  <TableCell align="right">{formatPercent(item.explained_variance)}</TableCell>
+                  <TableCell align="right">{formatPercent(item.cumulative_explained_variance)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
@@ -591,6 +676,34 @@ function renderFactorAnalysisSection(section) {
           </TableBody>
         </Table>
       </Box>
+
+      {factorScores.length > 0 && (
+        <Box sx={{ width: "100%", overflowX: "auto" }}>
+          <Alert severity="info" sx={{ mb: 1 }}>
+            Factor scores рассчитаны; в интерфейсе показаны первые 20.
+          </Alert>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>response_id</TableCell>
+                {factorScores[0]?.scores?.map((score) => (
+                  <TableCell key={score.factor} align="right">{score.factor}</TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {factorScores.slice(0, 20).map((item, index) => (
+                <TableRow key={item.response_id || index}>
+                  <TableCell>{item.response_id || "—"}</TableCell>
+                  {(item.scores || []).map((score) => (
+                    <TableCell key={score.factor} align="right">{formatNumber(score.value)}</TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
     </Stack>
   );
 }

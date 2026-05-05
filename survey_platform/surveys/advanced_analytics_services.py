@@ -216,6 +216,7 @@ def run_factor_analysis(payload: dict) -> dict:
         n_factors=payload.get("n_factors", 2),
         rotation=payload.get("rotation", "varimax"),
         standardize=payload.get("standardize", True),
+        include_factor_scores=payload.get("include_factor_scores", False),
     )
     return _with_metadata(survey_id, "factor_analysis", dataset, result)
 

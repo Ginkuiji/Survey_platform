@@ -390,9 +390,61 @@ def _add_report_sheet(ws, analysis_report):
                     *[format_number(factors_by_name.get(factor)) for factor in factors],
                 ])
             _append_table(ws, ["Variable", "Communality", *factors], loading_rows)
+            recommendations = result.get("factor_recommendations") or {}
+            append_key_value(ws, "kaiser_n_factors", recommendations.get("kaiser_n_factors"))
+            append_key_value(ws, "selected_n_factors", recommendations.get("selected_n_factors"))
+            append_key_value(ws, "kaiser_message", recommendations.get("message"))
+            kmo = result.get("kmo") or {}
+            append_key_value(ws, "kmo_overall", format_number(kmo.get("overall")))
+            append_key_value(ws, "kmo_interpretation", kmo.get("interpretation"))
+            _append_table(
+                ws,
+                ["Variable", "KMO", "Interpretation"],
+                [
+                    [item.get("label") or item.get("code"), format_number(item.get("kmo")), item.get("interpretation")]
+                    for item in kmo.get("variables") or []
+                ],
+            )
+            bartlett = result.get("bartlett") or {}
+            append_key_value(ws, "bartlett_chi_square", format_number(bartlett.get("chi_square")))
+            append_key_value(ws, "bartlett_dof", bartlett.get("dof"))
+            append_key_value(ws, "bartlett_p_value", format_p_value(bartlett.get("p_value")))
+            append_key_value(ws, "bartlett_significant", bartlett.get("significant"))
+            append_key_value(ws, "bartlett_interpretation", bartlett.get("interpretation"))
+            _append_table(
+                ws,
+                ["Component", "Eigenvalue", "Explained variance", "Cumulative"],
+                [
+                    [
+                        item.get("component"),
+                        format_number(item.get("eigenvalue")),
+                        format_number(item.get("explained_variance")),
+                        format_number(item.get("cumulative_explained_variance")),
+                    ]
+                    for item in result.get("scree") or []
+                ],
+            )
+            factor_scores = result.get("factor_scores") or []
+            if factor_scores:
+                score_factors = [score.get("factor") for score in (factor_scores[0].get("scores") or [])]
+                _append_table(
+                    ws,
+                    ["response_id", *score_factors],
+                    [
+                        [
+                            item.get("response_id"),
+                            *[format_number(score.get("value")) for score in item.get("scores") or []],
+                        ]
+                        for item in factor_scores
+                    ],
+                )
             warnings = result.get("warnings") or []
             if warnings:
                 _append_table(ws, ["Warnings"], [[warning] for warning in warnings])
+            if kmo.get("warnings"):
+                _append_table(ws, ["KMO warnings"], [[warning] for warning in kmo.get("warnings") or []])
+            if bartlett.get("warnings"):
+                _append_table(ws, ["Bartlett warnings"], [[warning] for warning in bartlett.get("warnings") or []])
         elif section_type == "cluster_analysis":
             append_key_value(ws, "method", result.get("method"))
             append_key_value(ws, "n", result.get("n"))

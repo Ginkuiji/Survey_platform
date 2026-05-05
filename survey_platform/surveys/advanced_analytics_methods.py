@@ -746,6 +746,18 @@ def _complete_factor_cases(rows, variables):
     return matrix
 
 
+def _complete_factor_cases_with_ids(rows, variables):
+    matrix = []
+    response_ids = []
+    codes = [variable.code for variable in variables]
+    for row in rows:
+        values = [row.get(code) for code in codes]
+        if all(_is_numeric(value) for value in values):
+            matrix.append([_as_float(value) for value in values])
+            response_ids.append(row.get("response_id"))
+    return response_ids, matrix
+
+
 def _complete_kmeans_cases(rows, variables):
     matrix = []
     response_ids = []
@@ -1803,7 +1815,127 @@ def _varimax(loadings, gamma=1.0, q=20, tol=1e-6):
     return loadings @ rotation
 
 
-def compute_factor_analysis(rows, variables, n_factors=2, rotation="varimax", standardize=True) -> dict:
+def interpret_kmo(value):
+    if value is None:
+        return "Недостаточно данных"
+    if value < 0.5:
+        return "Низкая пригодность"
+    if value < 0.6:
+        return "Слабая пригодность"
+    if value < 0.7:
+        return "Приемлемая пригодность"
+    if value < 0.8:
+        return "Хорошая пригодность"
+    if value < 0.9:
+        return "Очень хорошая пригодность"
+    return "Отличная пригодность"
+
+
+def compute_kmo(correlation_matrix, variables) -> dict:
+    warnings = []
+    try:
+        inverse = np.linalg.inv(correlation_matrix)
+    except np.linalg.LinAlgError:
+        inverse = np.linalg.pinv(correlation_matrix)
+        warnings.append("Correlation matrix is singular; pseudo-inverse was used for KMO.")
+
+    diagonal = np.diag(inverse)
+    denominator = np.sqrt(np.outer(diagonal, diagonal))
+    with np.errstate(divide="ignore", invalid="ignore"):
+        partial = -inverse / denominator
+    np.fill_diagonal(partial, 0.0)
+    partial = np.where(np.isfinite(partial), partial, 0.0)
+
+    r_squared = np.array(correlation_matrix, dtype=float) ** 2
+    p_squared = partial ** 2
+    np.fill_diagonal(r_squared, 0.0)
+    np.fill_diagonal(p_squared, 0.0)
+
+    numerator = float(np.sum(r_squared))
+    denominator_value = numerator + float(np.sum(p_squared))
+    overall = numerator / denominator_value if denominator_value > 0 else None
+
+    variable_results = []
+    for index, variable in enumerate(variables):
+        variable_numerator = float(np.sum(r_squared[index, :]))
+        variable_denominator = variable_numerator + float(np.sum(p_squared[index, :]))
+        value = variable_numerator / variable_denominator if variable_denominator > 0 else None
+        variable_results.append({
+            "code": variable.code,
+            "label": variable.label,
+            "kmo": float(value) if value is not None else None,
+            "interpretation": interpret_kmo(value),
+        })
+
+    return {
+        "overall": float(overall) if overall is not None else None,
+        "interpretation": interpret_kmo(overall),
+        "variables": variable_results,
+        "warnings": warnings,
+    }
+
+
+def compute_bartlett_sphericity(correlation_matrix, n, p) -> dict:
+    warnings = []
+    determinant = float(np.linalg.det(correlation_matrix))
+    if determinant <= 0:
+        determinant = 1e-12
+        warnings.append("Correlation matrix determinant is non-positive; determinant was clipped for Bartlett test.")
+    if n <= p:
+        warnings.append("Sample size is small relative to number of variables; Bartlett test may be unstable.")
+
+    chi_square = float(-(n - 1 - (2 * p + 5) / 6) * math.log(determinant))
+    dof = int(p * (p - 1) / 2)
+    p_value = None
+    if stats is not None:
+        p_value = float(stats.chi2.sf(chi_square, dof))
+    else:
+        warnings.append("scipy is not installed; Bartlett p-value is not available.")
+
+    significant = None if p_value is None else bool(p_value < 0.05)
+    if p_value is None:
+        interpretation = "p-value недоступен; невозможно оценить значимость теста."
+    elif significant:
+        interpretation = "Корреляционная матрица значимо отличается от единичной; факторный анализ применим."
+    else:
+        interpretation = "Корреляционная матрица не отличается значимо от единичной; факторный анализ может быть неуместен."
+
+    return {
+        "chi_square": chi_square,
+        "dof": dof,
+        "p_value": p_value,
+        "significant": significant,
+        "interpretation": interpretation,
+        "warnings": warnings,
+    }
+
+
+def _factor_scores(response_ids, z_matrix, loadings, n_factors):
+    scores = z_matrix @ loadings
+    score_stds = np.std(scores, axis=0, ddof=1)
+    score_means = np.mean(scores, axis=0)
+    nonzero = score_stds > 0
+    scores[:, nonzero] = (scores[:, nonzero] - score_means[nonzero]) / score_stds[nonzero]
+    return [
+        {
+            "response_id": response_id,
+            "scores": [
+                {"factor": f"Factor {index + 1}", "value": float(scores[row_index, index])}
+                for index in range(n_factors)
+            ],
+        }
+        for row_index, response_id in enumerate(response_ids)
+    ]
+
+
+def compute_factor_analysis(
+    rows,
+    variables,
+    n_factors=2,
+    rotation="varimax",
+    standardize=True,
+    include_factor_scores=False,
+) -> dict:
     if np is None:
         raise ValueError("Factor analysis requires numpy to be installed.")
     if rotation not in ("none", "varimax"):
@@ -1817,7 +1949,7 @@ def compute_factor_analysis(rows, variables, n_factors=2, rotation="varimax", st
     if n_factors >= p:
         raise ValueError("n_factors must be less than number of variables.")
 
-    complete_cases = _complete_factor_cases(rows, variables)
+    response_ids, complete_cases = _complete_factor_cases_with_ids(rows, variables)
     n = len(complete_cases)
     if n <= p:
         raise ValueError("Not enough complete cases for factor analysis.")
@@ -1834,8 +1966,9 @@ def compute_factor_analysis(rows, variables, n_factors=2, rotation="varimax", st
         labels = [variables[index].label for index in zero_variance_indexes]
         raise ValueError(f"Factor analysis cannot use variables with zero variance: {', '.join(labels)}.")
 
+    z_matrix = (x_matrix - means) / standard_deviations
     if standardize:
-        x_matrix = (x_matrix - means) / standard_deviations
+        x_matrix = z_matrix
 
     correlation_matrix = np.corrcoef(x_matrix, rowvar=False)
     if not np.all(np.isfinite(correlation_matrix)):
@@ -1856,11 +1989,35 @@ def compute_factor_analysis(rows, variables, n_factors=2, rotation="varimax", st
             warnings.append("Varimax rotation failed; unrotated loadings returned.")
 
     total_eigenvalue = float(np.sum(eigenvalues))
+    scree = []
+    cumulative = 0.0
+    for index, value in enumerate(eigenvalues, start=1):
+        explained_value = float(value / total_eigenvalue) if total_eigenvalue else 0
+        cumulative += explained_value
+        scree.append({
+            "component": index,
+            "eigenvalue": float(value),
+            "explained_variance": explained_value,
+            "cumulative_explained_variance": float(cumulative),
+        })
+    kaiser_n_factors = sum(1 for value in eigenvalues if value > 1.0) or 1
+    if kaiser_n_factors == n_factors:
+        recommendation_message = "Выбранное число факторов совпадает с критерием Кайзера."
+    else:
+        recommendation_message = f"По критерию Кайзера рекомендуется {kaiser_n_factors} факторов; сейчас выбрано {n_factors}."
+
     explained = [
         float(value / total_eigenvalue) if total_eigenvalue else 0
         for value in selected_eigenvalues
     ]
     communalities = np.sum(loadings ** 2, axis=1)
+    kmo = compute_kmo(correlation_matrix, variables)
+    bartlett = compute_bartlett_sphericity(correlation_matrix, n, p)
+    factor_scores = []
+    if include_factor_scores:
+        factor_scores = _factor_scores(response_ids, z_matrix, loadings, n_factors)
+        if n > 500:
+            warnings.append("Factor scores are included for many responses; exports may be large.")
 
     return {
         "method": "pca_factor_extraction",
@@ -1874,6 +2031,12 @@ def compute_factor_analysis(rows, variables, n_factors=2, rotation="varimax", st
             for variable in variables
         ],
         "eigenvalues": [float(value) for value in eigenvalues],
+        "scree": scree,
+        "factor_recommendations": {
+            "kaiser_n_factors": int(kaiser_n_factors),
+            "selected_n_factors": n_factors,
+            "message": recommendation_message,
+        },
         "explained_variance": [
             {"factor": f"Factor {index + 1}", "value": value}
             for index, value in enumerate(explained)
@@ -1892,5 +2055,8 @@ def compute_factor_analysis(rows, variables, n_factors=2, rotation="varimax", st
             for row_index, variable in enumerate(variables)
         ],
         "correlation_matrix": correlation_matrix.tolist(),
+        "kmo": kmo,
+        "bartlett": bartlett,
+        "factor_scores": factor_scores,
         "warnings": warnings,
     }

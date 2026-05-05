@@ -344,6 +344,7 @@ export function buildSectionPayload(surveyId, section, questionsById) {
       n_factors: section.n_factors || 2,
       rotation: section.rotation || "varimax",
       standardize: section.standardize ?? true,
+      include_factor_scores: section.include_factor_scores ?? false,
     };
   }
 
