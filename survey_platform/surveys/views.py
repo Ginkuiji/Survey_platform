@@ -46,6 +46,7 @@ from .advanced_analytics_serializers import (
     LogisticRegressionSer,
     ReliabilityAnalysisSer,
     RegressionAnalysisSer,
+    ScaleIndexSer,
     TimeAnalysisSer,
 )
 from .advanced_analytics_services import (
@@ -59,6 +60,7 @@ from .advanced_analytics_services import (
     run_logistic_regression_analysis,
     run_reliability_analysis,
     run_regression_analysis,
+    run_scale_index_analysis,
     run_time_analysis,
 )
 from .pdf_export import build_analytics_pdf
@@ -618,6 +620,10 @@ class AdvancedAnalyticsViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="reliability")
     def reliability(self, request):
         return self._run(request, ReliabilityAnalysisSer, run_reliability_analysis)
+
+    @action(detail=False, methods=["post"], url_path="scale-index")
+    def scale_index(self, request):
+        return self._run(request, ScaleIndexSer, run_scale_index_analysis)
 
 
 class AnalyticsExportViewSet(viewsets.ViewSet):

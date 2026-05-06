@@ -33,6 +33,7 @@ const SECTION_LABELS = {
   group_comparison: "Сравнение групп",
   time_analysis: "Анализ времени прохождения и отсева",
   reliability_analysis: "Надёжность шкалы",
+  scale_index: "Индекс шкалы",
 };
 
 function formatNumber(value) {
@@ -1276,6 +1277,169 @@ function renderReliabilityAnalysisSection(section) {
   );
 }
 
+function renderScaleIndexSection(section) {
+  const result = section.result || {};
+  const summary = result.score_summary || {};
+  const reliability = result.reliability || {};
+  const summaryRows = [
+    ["n", summary.n],
+    ["mean", summary.mean],
+    ["median", summary.median],
+    ["std", summary.std],
+    ["variance", summary.variance],
+    ["min", summary.min],
+    ["max", summary.max],
+    ["p25", summary.p25],
+    ["p75", summary.p75],
+    ["iqr", summary.iqr],
+  ];
+  const scores = (result.scores || []).slice(0, 20);
+
+  return (
+    <Stack spacing={3}>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Chip label={`Метод: ${result.method || "scale_index"}`} />
+        <Chip label={`n scored: ${formatNumber(result.n_scored)}`} />
+        <Chip label={`items: ${formatNumber(result.n_items)}`} />
+        <Chip label={`calculation: ${result.calculation || "—"}`} />
+        <Chip label={`alpha: ${formatNumber(reliability.alpha)}`} />
+        <Chip label={reliability.interpretation || "—"} />
+      </Stack>
+
+      {(result.warnings || []).map((warning) => (
+        <Alert key={warning} severity="warning">{warning}</Alert>
+      ))}
+      {(reliability.warnings || []).map((warning) => (
+        <Alert key={`reliability-${warning}`} severity="warning">{warning}</Alert>
+      ))}
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Score summary
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Показатель</TableCell>
+              <TableCell align="right">Значение</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {summaryRows.map(([label, value]) => (
+              <TableRow key={label}>
+                <TableCell>{label}</TableCell>
+                <TableCell align="right">{formatNumber(value)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Item statistics
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Пункт</TableCell>
+              <TableCell align="center">Reverse</TableCell>
+              <TableCell align="right">n</TableCell>
+              <TableCell align="right">missing</TableCell>
+              <TableCell align="right">mean</TableCell>
+              <TableCell align="right">std</TableCell>
+              <TableCell align="right">min</TableCell>
+              <TableCell align="right">max</TableCell>
+              <TableCell align="right">item-total correlation</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {(result.item_statistics || []).map((item) => (
+              <TableRow key={item.code}>
+                <TableCell>{item.label || item.code}</TableCell>
+                <TableCell align="center">{item.reverse ? "да" : "нет"}</TableCell>
+                <TableCell align="right">{formatNumber(item.n)}</TableCell>
+                <TableCell align="right">{formatNumber(item.missing)}</TableCell>
+                <TableCell align="right">{formatNumber(item.mean)}</TableCell>
+                <TableCell align="right">{formatNumber(item.std)}</TableCell>
+                <TableCell align="right">{formatNumber(item.min)}</TableCell>
+                <TableCell align="right">{formatNumber(item.max)}</TableCell>
+                <TableCell align="right">{formatNumber(item.item_total_correlation)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+
+      <Box>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Reliability
+        </Typography>
+        {result.reliability ? (
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <Chip label={`alpha: ${formatNumber(reliability.alpha)}`} />
+            <Chip label={`standardized alpha: ${formatNumber(reliability.standardized_alpha)}`} />
+            <Chip label={`mean inter-item correlation: ${formatNumber(reliability.mean_inter_item_correlation)}`} />
+            <Chip label={reliability.interpretation || "—"} />
+          </Stack>
+        ) : (
+          <Typography color="text.secondary">Cronbach’s alpha не рассчитана.</Typography>
+        )}
+      </Box>
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Score distribution
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>bucket</TableCell>
+              <TableCell align="right">count</TableCell>
+              <TableCell align="right">percent</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {(result.score_distribution || []).map((item) => (
+              <TableRow key={item.label}>
+                <TableCell>{item.label}</TableCell>
+                <TableCell align="right">{formatNumber(item.count)}</TableCell>
+                <TableCell align="right">{formatNumber(item.percent)}%</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+
+      <Alert severity="info">
+        В интерфейсе показаны первые 20 индивидуальных значений индекса. Полная таблица доступна в CSV/XLSX.
+      </Alert>
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>response_id</TableCell>
+              <TableCell align="right">score</TableCell>
+              <TableCell align="right">answered_items</TableCell>
+              <TableCell align="right">missing_items</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {scores.map((score) => (
+              <TableRow key={score.response_id}>
+                <TableCell>{score.response_id}</TableCell>
+                <TableCell align="right">{formatNumber(score.score)}</TableCell>
+                <TableCell align="right">{formatNumber(score.answered_items)}</TableCell>
+                <TableCell align="right">{formatNumber(score.missing_items)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+    </Stack>
+  );
+}
+
 function renderSection(section) {
   if (section.error) {
     return <Alert severity="error">{section.error}</Alert>;
@@ -1292,6 +1456,7 @@ function renderSection(section) {
   if (section.type === "group_comparison") return renderGroupComparisonSection(section);
   if (section.type === "time_analysis") return renderTimeAnalysisSection(section);
   if (section.type === "reliability_analysis") return renderReliabilityAnalysisSection(section);
+  if (section.type === "scale_index") return renderScaleIndexSection(section);
 
   return <Typography color="text.secondary">Неизвестный тип секции.</Typography>;
 }

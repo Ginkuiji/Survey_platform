@@ -16,6 +16,11 @@ import {
   MenuItem,
   Select,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from "@mui/material";
@@ -36,6 +41,7 @@ import {
   runLogisticRegressionAnalysis,
   runReliabilityAnalysis,
   runRegressionAnalysis,
+  runScaleIndexAnalysis,
   runTimeAnalysis,
 } from "../../api/analytics";
 import {
@@ -57,6 +63,7 @@ const ANALYSIS_TYPES = [
   { value: "group_comparison", label: "Сравнение групп" },
   { value: "time_analysis", label: "Анализ времени прохождения и отсева" },
   { value: "reliability_analysis", label: "Надёжность шкалы" },
+  { value: "scale_index", label: "Индекс шкалы" },
 ];
 
 const API_BY_TYPE = {
@@ -71,6 +78,7 @@ const API_BY_TYPE = {
   group_comparison: runGroupComparisonAnalysis,
   time_analysis: runTimeAnalysis,
   reliability_analysis: runReliabilityAnalysis,
+  scale_index: runScaleIndexAnalysis,
 };
 
 function createSection(type) {
@@ -179,6 +187,18 @@ function createSection(type) {
     };
   }
 
+  if (type === "scale_index") {
+    return {
+      id,
+      type,
+      title: "Индекс шкалы",
+      items: [],
+      method: "mean",
+      min_answered_items: 1,
+      include_cronbach_alpha: true,
+    };
+  }
+
   return {
     id,
     type: "regression",
@@ -221,6 +241,43 @@ function isLogisticFeatureQuestion(question, targetQuestionId) {
     isQuestionSupportedForAnalysis(question, "logistic_regression", "feature")
     && Number(question.id) !== Number(targetQuestionId)
   );
+}
+
+function getScaleBounds(question) {
+  if (question?.qtype === "yesno") {
+    return { min_value: 0, max_value: 1 };
+  }
+  const settings = question?.qsettings || {};
+  const fallbackMax = question?.qtype === "matrix_single"
+    ? (question?.matrix_columns?.length || 5)
+    : (question?.options?.length || 5);
+  const minValue = Number(settings.min ?? settings.min_value ?? settings.minValue ?? 1);
+  const maxValue = Number(settings.max ?? settings.max_value ?? settings.maxValue ?? fallbackMax);
+  return {
+    min_value: Number.isFinite(minValue) ? minValue : 1,
+    max_value: Number.isFinite(maxValue) ? maxValue : fallbackMax,
+  };
+}
+
+function updateScaleItem(section, question, patch) {
+  const bounds = getScaleBounds(question);
+  const items = section.items || [];
+  const exists = items.some((item) => Number(item.questionId) === Number(question.id));
+  if (!exists) {
+    return [
+      ...items,
+      {
+        questionId: question.id,
+        reverse: false,
+        min_value: bounds.min_value,
+        max_value: bounds.max_value,
+        ...patch,
+      },
+    ];
+  }
+  return items.map((item) => (
+    Number(item.questionId) === Number(question.id) ? { ...item, ...patch } : item
+  ));
 }
 
 function SectionFields({ section, questions, updateSection }) {
@@ -873,6 +930,147 @@ function SectionFields({ section, questions, updateSection }) {
           }
           label="Использовать стандартизированную alpha"
         />
+      </Stack>
+    );
+  }
+
+  if (section.type === "scale_index") {
+    const availableQuestions = questions.filter((question) => isQuestionSupportedForAnalysis(question, "scale_index"));
+    const itemsByQuestionId = new Map((section.items || []).map((item) => [Number(item.questionId), item]));
+    const maxAnsweredItems = Math.max(1, section.items?.length || 1);
+
+    return (
+      <Stack spacing={2}>
+        <Alert severity="info">
+          Индекс шкалы объединяет несколько вопросов в один показатель. Reverse coding используется для обратных пунктов.
+        </Alert>
+
+        <TextField
+          fullWidth
+          label="Название индекса"
+          value={section.title}
+          onChange={(event) => updateSection(section.id, { title: event.target.value })}
+        />
+
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <FormControl fullWidth>
+            <InputLabel>Метод расчёта</InputLabel>
+            <Select
+              label="Метод расчёта"
+              value={section.method}
+              onChange={(event) => updateSection(section.id, { method: event.target.value })}
+            >
+              <MenuItem value="mean">Среднее</MenuItem>
+              <MenuItem value="sum">Сумма</MenuItem>
+              <MenuItem value="standardized_mean">Среднее z-значений</MenuItem>
+            </Select>
+          </FormControl>
+
+          <TextField
+            fullWidth
+            type="number"
+            label="Минимум отвеченных пунктов"
+            inputProps={{ min: 1, max: maxAnsweredItems }}
+            value={section.min_answered_items}
+            onChange={(event) => {
+              const value = Math.max(1, Math.min(Number(event.target.value) || 1, maxAnsweredItems));
+              updateSection(section.id, { min_answered_items: value });
+            }}
+          />
+        </Stack>
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={section.include_cronbach_alpha}
+              onChange={(event) => updateSection(section.id, { include_cronbach_alpha: event.target.checked })}
+            />
+          }
+          label="Рассчитать Cronbach’s alpha"
+        />
+
+        <Box sx={{ width: "100%", overflowX: "auto" }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Вопрос</TableCell>
+                <TableCell>Тип</TableCell>
+                <TableCell align="center">Включён</TableCell>
+                <TableCell align="center">Reverse coding</TableCell>
+                <TableCell align="right">Min</TableCell>
+                <TableCell align="right">Max</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {availableQuestions.map((question) => {
+                const item = itemsByQuestionId.get(Number(question.id));
+                const checked = Boolean(item);
+                const bounds = getScaleBounds(question);
+
+                return (
+                  <TableRow key={question.id}>
+                    <TableCell>{question.text}</TableCell>
+                    <TableCell>{getQuestionTypeLabel(question.qtype)}</TableCell>
+                    <TableCell align="center">
+                      <Checkbox
+                        checked={checked}
+                        onChange={(event) => {
+                          if (event.target.checked) {
+                            updateSection(section.id, {
+                              items: updateScaleItem(section, question, {
+                                min_value: bounds.min_value,
+                                max_value: bounds.max_value,
+                              }),
+                            });
+                          } else {
+                            const nextItems = (section.items || []).filter((current) => Number(current.questionId) !== Number(question.id));
+                            updateSection(section.id, {
+                              items: nextItems,
+                              min_answered_items: Math.min(section.min_answered_items || 1, Math.max(1, nextItems.length)),
+                            });
+                          }
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell align="center">
+                      <Checkbox
+                        disabled={!checked}
+                        checked={Boolean(item?.reverse)}
+                        onChange={(event) => updateSection(section.id, {
+                          items: updateScaleItem(section, question, { reverse: event.target.checked }),
+                        })}
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <TextField
+                        size="small"
+                        type="number"
+                        disabled={!checked || !item?.reverse}
+                        value={item?.min_value ?? bounds.min_value}
+                        onChange={(event) => updateSection(section.id, {
+                          items: updateScaleItem(section, question, { min_value: Number(event.target.value) }),
+                        })}
+                        sx={{ width: 100 }}
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <TextField
+                        size="small"
+                        type="number"
+                        disabled={!checked || !item?.reverse}
+                        value={item?.max_value ?? bounds.max_value}
+                        onChange={(event) => updateSection(section.id, {
+                          items: updateScaleItem(section, question, { max_value: Number(event.target.value) }),
+                        })}
+                        sx={{ width: 100 }}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Box>
       </Stack>
     );
   }

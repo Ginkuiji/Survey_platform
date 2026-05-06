@@ -75,6 +75,12 @@ export const runReliabilityAnalysis = (payload) =>
     body: JSON.stringify(payload),
   });
 
+export const runScaleIndexAnalysis = (payload) =>
+  apiFetch("/analytics/advanced/scale-index/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
 export const fetchAnalysisReports = () =>
   apiFetch("/analytics/reports/");
 

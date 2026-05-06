@@ -664,5 +664,71 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
             for warning in result.get("warnings") or []:
                 row("Надёжность шкалы", title, "warning", warning)
 
+        elif section_type == "scale_index":
+            row("Индекс шкалы", title, "title", result.get("title"))
+            row("Индекс шкалы", title, "method", result.get("calculation"))
+            row("Индекс шкалы", title, "n_items", result.get("n_items"))
+            row("Индекс шкалы", title, "n_scored", result.get("n_scored"))
+            row("Индекс шкалы", title, "min_answered_items", result.get("min_answered_items"))
+            row("Индекс шкалы", title, "n_complete_cases_for_alpha", result.get("n_complete_cases_for_alpha"))
+            row("Индекс шкалы", title, "missing_count", result.get("missing_count"))
+
+            summary = result.get("score_summary") or {}
+            row(
+                "Индекс шкалы",
+                title,
+                "score_summary",
+                "mean",
+                summary.get("mean"),
+                "median",
+                summary.get("median"),
+                "std",
+                summary.get("std"),
+                "min",
+                summary.get("min"),
+                "max",
+                summary.get("max"),
+            )
+            for item in result.get("item_statistics") or []:
+                row(
+                    "Индекс шкалы",
+                    title,
+                    "item",
+                    item.get("label") or item.get("code"),
+                    "reverse",
+                    item.get("reverse"),
+                    "mean",
+                    item.get("mean"),
+                    "std",
+                    item.get("std"),
+                    "item_total_correlation",
+                    item.get("item_total_correlation"),
+                )
+            reliability = result.get("reliability") or {}
+            row("Индекс шкалы", title, "alpha", reliability.get("alpha"))
+            row("Индекс шкалы", title, "standardized_alpha", reliability.get("standardized_alpha"))
+            row("Индекс шкалы", title, "reliability_interpretation", reliability.get("interpretation"))
+            row("Индекс шкалы", title, "mean_inter_item_correlation", reliability.get("mean_inter_item_correlation"))
+            for item in result.get("score_distribution") or []:
+                row("Индекс шкалы", title, "distribution", item.get("label"), "count", item.get("count"), "percent", item.get("percent"))
+            for score in result.get("scores") or []:
+                row(
+                    "Индекс шкалы",
+                    title,
+                    "score",
+                    "response_id",
+                    score.get("response_id"),
+                    "score",
+                    score.get("score"),
+                    "answered_items",
+                    score.get("answered_items"),
+                    "missing_items",
+                    score.get("missing_items"),
+                )
+            for warning in result.get("warnings") or []:
+                row("Индекс шкалы", title, "warning", warning)
+            for warning in reliability.get("warnings") or []:
+                row("Индекс шкалы", title, "reliability_warning", warning)
+
     csv_text = output.getvalue()
     return ("\ufeff" + csv_text).encode("utf-8")

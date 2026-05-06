@@ -11,6 +11,7 @@ from .advanced_analytics_methods import (
     compute_kmeans_clustering,
     compute_linear_regression,
     compute_logistic_regression,
+    compute_scale_index,
     compute_time_analysis,
 )
 from .models import Response
@@ -354,3 +355,45 @@ def run_reliability_analysis(payload: dict) -> dict:
         standardize=payload.get("standardize", False),
     )
     return _with_metadata(survey_id, "reliability_analysis", dataset, result)
+
+
+def run_scale_index_analysis(payload: dict) -> dict:
+    survey_id = payload["survey_id"]
+    item_specs = payload["items"]
+    variable_specs = [
+        {
+            "question_id": item["question_id"],
+            "encoding": item["encoding"],
+            "measure": item["measure"],
+        }
+        for item in item_specs
+    ]
+
+    unsupported_encodings = {"one_hot", "rank", "matrix_multi_binary"}
+    invalid_specs = [
+        spec.get("encoding")
+        for spec in variable_specs
+        if spec.get("encoding") in unsupported_encodings
+    ]
+    if invalid_specs:
+        raise ValueError("Scale index does not support one_hot, rank, or matrix_multi encodings in MVP.")
+
+    dataset = build_analysis_dataset(survey_id, variable_specs)
+    if len(dataset.variables) < 2:
+        raise ValueError("Scale index requires at least two expanded variables.")
+
+    min_answered_items = payload.get("min_answered_items", 1)
+    if min_answered_items > len(dataset.variables):
+        raise ValueError("min_answered_items cannot be greater than number of expanded items.")
+
+    result = compute_scale_index(
+        rows=dataset.rows,
+        variables=dataset.variables,
+        item_configs=item_specs,
+        title=payload.get("title", "Индекс шкалы"),
+        method=payload.get("method", "mean"),
+        min_answered_items=min_answered_items,
+        include_cronbach_alpha=payload.get("include_cronbach_alpha", True),
+    )
+
+    return _with_metadata(survey_id, "scale_index", dataset, result)

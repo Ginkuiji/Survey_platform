@@ -26,6 +26,50 @@ class AdvancedVariableSer(serializers.Serializer):
     measure = serializers.ChoiceField(choices=MEASURE_CHOICES)
 
 
+class ScaleIndexItemSer(serializers.Serializer):
+    question_id = serializers.IntegerField()
+    encoding = serializers.ChoiceField(choices=ENCODING_CHOICES)
+    measure = serializers.ChoiceField(choices=MEASURE_CHOICES)
+    reverse = serializers.BooleanField(default=False)
+    min_value = serializers.FloatField(required=False, allow_null=True)
+    max_value = serializers.FloatField(required=False, allow_null=True)
+
+
+class ScaleIndexSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    title = serializers.CharField(required=False, allow_blank=True, default="Индекс шкалы")
+    items = ScaleIndexItemSer(many=True, allow_empty=False)
+    method = serializers.ChoiceField(
+        choices=("mean", "sum", "standardized_mean"),
+        default="mean",
+    )
+    min_answered_items = serializers.IntegerField(min_value=1, required=False, default=1)
+    include_cronbach_alpha = serializers.BooleanField(default=True)
+
+    def validate_items(self, value):
+        if len(value) < 2:
+            raise serializers.ValidationError("Scale index requires at least two items.")
+        return value
+
+    def validate(self, attrs):
+        items = attrs.get("items", [])
+        min_answered_items = attrs.get("min_answered_items", 1)
+
+        if min_answered_items > len(items):
+            raise serializers.ValidationError("min_answered_items cannot be greater than number of items.")
+
+        for item in items:
+            if item.get("reverse"):
+                min_value = item.get("min_value")
+                max_value = item.get("max_value")
+                if min_value is None or max_value is None:
+                    raise serializers.ValidationError("Reverse-coded items require min_value and max_value.")
+                if max_value <= min_value:
+                    raise serializers.ValidationError("max_value must be greater than min_value for reverse-coded items.")
+
+        return attrs
+
+
 class CorrelationAnalysisSer(serializers.Serializer):
     survey_id = serializers.IntegerField()
     method = serializers.ChoiceField(choices=("pearson", "spearman", "kendall"), default="pearson")

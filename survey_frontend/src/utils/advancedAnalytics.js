@@ -96,6 +96,10 @@ export function isQuestionSupportedForAnalysis(question, analysisType, role = "v
     return ["scale", "number", "yesno", "single", "dropdown", "ranking", "matrix_single"].includes(question.qtype);
   }
 
+  if (analysisType === "scale_index") {
+    return ["scale", "number", "yesno", "single", "dropdown", "matrix_single"].includes(question.qtype);
+  }
+
   return false;
 }
 
@@ -162,6 +166,21 @@ export function getDefaultVariableSpec(question, analysisType, role = "variable"
     }
     if (["single", "dropdown"].includes(question.qtype)) {
       return { question_id: question.id, encoding: "ordinal", measure: "nominal" };
+    }
+  }
+
+  if (analysisType === "scale_index") {
+    if (["number", "scale"].includes(question.qtype)) {
+      return { question_id: question.id, encoding: "numeric", measure: "interval" };
+    }
+    if (question.qtype === "yesno") {
+      return { question_id: question.id, encoding: "binary", measure: "binary" };
+    }
+    if (["single", "dropdown"].includes(question.qtype)) {
+      return { question_id: question.id, encoding: "ordinal", measure: "ordinal" };
+    }
+    if (question.qtype === "matrix_single") {
+      return { question_id: question.id, encoding: "matrix_ordinal", measure: "ordinal" };
     }
   }
 
@@ -441,6 +460,30 @@ export function buildSectionPayload(surveyId, section, questionsById) {
         return getSpec(question, "reliability_analysis", "variable", "Переменные шкалы");
       }),
       standardize: section.standardize ?? false,
+    };
+  }
+
+  if (section.type === "scale_index") {
+    if ((section.items || []).length < 2) {
+      throw new Error("Для расчёта индекса выберите минимум два пункта шкалы.");
+    }
+
+    return {
+      survey_id: Number(surveyId),
+      title: section.title || "Индекс шкалы",
+      method: section.method || "mean",
+      min_answered_items: section.min_answered_items || 1,
+      include_cronbach_alpha: section.include_cronbach_alpha ?? true,
+      items: section.items.map((item) => {
+        const question = getQuestion(questionsById, item.questionId, "Пункты шкалы");
+        const spec = getSpec(question, "scale_index", "item", "Пункты шкалы");
+        return {
+          ...spec,
+          reverse: item.reverse ?? false,
+          min_value: item.reverse ? Number(item.min_value) : null,
+          max_value: item.reverse ? Number(item.max_value) : null,
+        };
+      }),
     };
   }
 

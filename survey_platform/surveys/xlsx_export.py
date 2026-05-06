@@ -732,6 +732,88 @@ def _add_report_sheet(ws, analysis_report):
                         for row_index in range(len(labels))
                     ],
                 )
+        elif section_type == "scale_index":
+            append_key_value(ws, "title", result.get("title"))
+            append_key_value(ws, "calculation", result.get("calculation"))
+            append_key_value(ws, "n_items", result.get("n_items"))
+            append_key_value(ws, "n_scored", result.get("n_scored"))
+            append_key_value(ws, "min_answered_items", result.get("min_answered_items"))
+            append_key_value(ws, "n_complete_cases_for_alpha", result.get("n_complete_cases_for_alpha"))
+            append_key_value(ws, "missing_count", result.get("missing_count"))
+            summary = result.get("score_summary") or {}
+            _append_table(
+                ws,
+                ["Metric", "Value"],
+                [
+                    ["n", summary.get("n")],
+                    ["mean", format_number(summary.get("mean"))],
+                    ["median", format_number(summary.get("median"))],
+                    ["std", format_number(summary.get("std"))],
+                    ["variance", format_number(summary.get("variance"))],
+                    ["min", format_number(summary.get("min"))],
+                    ["max", format_number(summary.get("max"))],
+                    ["p25", format_number(summary.get("p25"))],
+                    ["p75", format_number(summary.get("p75"))],
+                    ["iqr", format_number(summary.get("iqr"))],
+                ],
+            )
+            reliability = result.get("reliability") or {}
+            if reliability:
+                _append_table(
+                    ws,
+                    ["Reliability", "Value"],
+                    [
+                        ["alpha", format_number(reliability.get("alpha"))],
+                        ["standardized_alpha", format_number(reliability.get("standardized_alpha"))],
+                        ["mean_inter_item_correlation", format_number(reliability.get("mean_inter_item_correlation"))],
+                        ["interpretation", reliability.get("interpretation")],
+                    ],
+                )
+                if reliability.get("warnings"):
+                    _append_table(ws, ["Reliability warnings"], [[warning] for warning in reliability.get("warnings") or []])
+            _append_table(
+                ws,
+                ["Item", "Reverse", "Min value", "Max value", "n", "Missing", "Mean", "Std", "Min", "Max", "Item-total correlation"],
+                [
+                    [
+                        item.get("label") or item.get("code"),
+                        item.get("reverse"),
+                        item.get("min_value"),
+                        item.get("max_value"),
+                        item.get("n"),
+                        item.get("missing"),
+                        format_number(item.get("mean")),
+                        format_number(item.get("std")),
+                        format_number(item.get("min")),
+                        format_number(item.get("max")),
+                        format_number(item.get("item_total_correlation")),
+                    ]
+                    for item in result.get("item_statistics") or []
+                ],
+            )
+            _append_table(
+                ws,
+                ["Bucket", "Count", "Percent"],
+                [
+                    [item.get("label"), item.get("count"), format_number(item.get("percent"))]
+                    for item in result.get("score_distribution") or []
+                ],
+            )
+            _append_table(
+                ws,
+                ["Response ID", "Score", "Answered items", "Missing items"],
+                [
+                    [
+                        item.get("response_id"),
+                        format_number(item.get("score")),
+                        item.get("answered_items"),
+                        item.get("missing_items"),
+                    ]
+                    for item in result.get("scores") or []
+                ],
+            )
+            if result.get("warnings"):
+                _append_table(ws, ["Warnings"], [[warning] for warning in result.get("warnings") or []])
         elif section_type == "regression":
             append_key_value(ws, "target", get_variable_label(result, result.get("target")))
             append_key_value(ws, "features", ", ".join(get_variable_label(result, code) for code in (result.get("features") or [])))

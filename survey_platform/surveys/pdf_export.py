@@ -702,6 +702,79 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
                         ],
                     ])
                 story.append(table([header, *rows]))
+        elif section_type == "scale_index":
+            story.append(key_value_table([
+                ["title", result.get("title")],
+                ["calculation", result.get("calculation")],
+                ["n_items", result.get("n_items")],
+                ["n_scored", result.get("n_scored")],
+                ["min_answered_items", result.get("min_answered_items")],
+                ["n_complete_cases_for_alpha", result.get("n_complete_cases_for_alpha")],
+                ["missing_count", result.get("missing_count")],
+            ]))
+            warnings = result.get("warnings") or []
+            if warnings:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table([["Warnings"], *[[warning] for warning in warnings]], [16 * cm]))
+            summary = result.get("score_summary") or {}
+            story.append(Spacer(1, 0.15 * cm))
+            story.append(p("Score summary", "AnalyticsHeading"))
+            story.append(key_value_table([
+                ["n", summary.get("n")],
+                ["mean", summary.get("mean")],
+                ["median", summary.get("median")],
+                ["std", summary.get("std")],
+                ["variance", summary.get("variance")],
+                ["min", summary.get("min")],
+                ["max", summary.get("max")],
+                ["p25", summary.get("p25")],
+                ["p75", summary.get("p75")],
+                ["iqr", summary.get("iqr")],
+            ]))
+            reliability = result.get("reliability") or {}
+            if reliability:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(p("Reliability", "AnalyticsHeading"))
+                story.append(key_value_table([
+                    ["alpha", reliability.get("alpha")],
+                    ["standardized_alpha", reliability.get("standardized_alpha")],
+                    ["mean_inter_item_correlation", reliability.get("mean_inter_item_correlation")],
+                    ["interpretation", reliability.get("interpretation")],
+                ]))
+                rel_warnings = reliability.get("warnings") or []
+                if rel_warnings:
+                    story.append(table([["Reliability warnings"], *[[warning] for warning in rel_warnings]], [16 * cm]))
+            items = result.get("item_statistics") or []
+            if items:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table(
+                    [["Item", "Reverse", "n", "Missing", "Mean", "Std", "Min", "Max", "Item-total"], *[
+                        [
+                            item.get("label") or item.get("code"),
+                            item.get("reverse"),
+                            item.get("n"),
+                            item.get("missing"),
+                            item.get("mean"),
+                            item.get("std"),
+                            item.get("min"),
+                            item.get("max"),
+                            item.get("item_total_correlation"),
+                        ]
+                        for item in items
+                    ]],
+                ))
+            distribution = result.get("score_distribution") or []
+            if distribution:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table(
+                    [["Bucket", "Count", "Percent"], *[
+                        [item.get("label"), item.get("count"), item.get("percent")]
+                        for item in distribution
+                    ]],
+                    [8 * cm, 3 * cm, 3 * cm],
+                ))
+            if result.get("scores"):
+                story.append(p("Индивидуальные значения индекса доступны в CSV/XLSX."))
         elif section_type == "regression":
             story.append(key_value_table([
                 ["target", _variable_label(result, result.get("target"))],
