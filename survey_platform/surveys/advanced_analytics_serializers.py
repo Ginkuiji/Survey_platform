@@ -70,6 +70,22 @@ class ScaleIndexSer(serializers.Serializer):
         return attrs
 
 
+class MissingAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    group_by = AdvancedVariableSer(required=False, allow_null=True)
+    include_screened_out = serializers.BooleanField(default=False)
+    include_group_breakdown = serializers.BooleanField(default=False)
+
+    def validate_group_by(self, value):
+        if not value:
+            return value
+        if value.get("encoding") not in ("binary", "ordinal"):
+            raise serializers.ValidationError(
+                "Missing analysis group_by supports only binary or ordinal categorical variables."
+            )
+        return value
+
+
 class CorrelationAnalysisSer(serializers.Serializer):
     survey_id = serializers.IntegerField()
     method = serializers.ChoiceField(choices=("pearson", "spearman", "kendall"), default="pearson")

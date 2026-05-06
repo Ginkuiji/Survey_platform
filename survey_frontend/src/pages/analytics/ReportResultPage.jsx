@@ -34,6 +34,7 @@ const SECTION_LABELS = {
   time_analysis: "Анализ времени прохождения и отсева",
   reliability_analysis: "Надёжность шкалы",
   scale_index: "Индекс шкалы",
+  missing_analysis: "Анализ пропусков",
 };
 
 function formatNumber(value) {
@@ -1440,6 +1441,207 @@ function renderScaleIndexSection(section) {
   );
 }
 
+function renderMissingShortTable(title, rows, helperText = "") {
+  if (!rows?.length) return null;
+
+  return (
+    <Box sx={{ width: "100%", overflowX: "auto" }}>
+      <Typography variant="subtitle1" sx={{ mb: 1 }}>
+        {title}
+      </Typography>
+      {helperText && (
+        <Typography color="text.secondary" variant="body2" sx={{ mb: 1 }}>
+          {helperText}
+        </Typography>
+      )}
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Вопрос</TableCell>
+            <TableCell align="right">Видели</TableCell>
+            <TableCell align="right">Пропустили</TableCell>
+            <TableCell align="right">Skip rate among shown</TableCell>
+            <TableCell align="right">Visibility rate</TableCell>
+            <TableCell>Тип пропуска</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((item) => (
+            <TableRow key={`${title}-${item.question_id}`}>
+              <TableCell>{item.label || item.question_id}</TableCell>
+              <TableCell align="right">{formatNumber(item.shown_count)}</TableCell>
+              <TableCell align="right">{formatNumber(item.skipped_count)}</TableCell>
+              <TableCell align="right">{formatNumber(item.skip_rate_shown)}%</TableCell>
+              <TableCell align="right">{formatNumber(item.visibility_rate)}%</TableCell>
+              <TableCell>{item.missing_type || "—"}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Box>
+  );
+}
+
+function renderMissingAnalysisSection(section) {
+  const result = section.result || {};
+  const summary = result.summary || {};
+  const screenedOut = result.screened_out_context;
+  const summaryRows = [
+    ["total_shown_slots", summary.total_shown_slots],
+    ["total_answered_slots", summary.total_answered_slots],
+    ["total_skipped_slots", summary.total_skipped_slots],
+    ["total_not_shown_slots", summary.total_not_shown_slots],
+    ["overall_skip_rate_shown", `${formatNumber(summary.overall_skip_rate_shown)}%`],
+    ["overall_visibility_rate", `${formatNumber(summary.overall_visibility_rate)}%`],
+  ];
+
+  return (
+    <Stack spacing={3}>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Chip label={`completed normal: ${formatNumber(summary.total_completed_normal)}`} />
+        <Chip label={`questions: ${formatNumber(summary.questions_count)}`} />
+        <Chip label={`overall skip among shown: ${formatNumber(summary.overall_skip_rate_shown)}%`} />
+        <Chip label={`high missing: ${formatNumber(summary.questions_with_high_missing)}`} />
+        <Chip label={`low visibility: ${formatNumber(summary.questions_with_low_visibility)}`} />
+      </Stack>
+
+      <Alert severity="info">
+        Структурные пропуски из-за ветвления не считаются реальными пропусками.
+      </Alert>
+
+      {(result.warnings || []).map((warning) => (
+        <Alert key={warning} severity="warning">{warning}</Alert>
+      ))}
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Summary
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Показатель</TableCell>
+              <TableCell align="right">Значение</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {summaryRows.map(([label, value]) => (
+              <TableRow key={label}>
+                <TableCell>{label}</TableCell>
+                <TableCell align="right">{value}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+
+      <Box sx={{ width: "100%", overflowX: "auto" }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Questions
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Вопрос</TableCell>
+              <TableCell>Тип</TableCell>
+              <TableCell>Required</TableCell>
+              <TableCell align="right">Видели</TableCell>
+              <TableCell align="right">Не видели из-за ветвления</TableCell>
+              <TableCell align="right">Ответили</TableCell>
+              <TableCell align="right">Пропустили</TableCell>
+              <TableCell align="right">Skip rate among shown</TableCell>
+              <TableCell align="right">Visibility rate</TableCell>
+              <TableCell>Интерпретация</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {(result.questions || []).map((item) => (
+              <TableRow key={item.question_id}>
+                <TableCell>{item.label || item.question_id}</TableCell>
+                <TableCell>{item.qtype}</TableCell>
+                <TableCell>{item.required ? "да" : "нет"}</TableCell>
+                <TableCell align="right">{formatNumber(item.shown_count)}</TableCell>
+                <TableCell align="right">{formatNumber(item.not_shown_count)}</TableCell>
+                <TableCell align="right">{formatNumber(item.answered_count)}</TableCell>
+                <TableCell align="right">{formatNumber(item.skipped_count)}</TableCell>
+                <TableCell align="right">{formatNumber(item.skip_rate_shown)}%</TableCell>
+                <TableCell align="right">{formatNumber(item.visibility_rate)}%</TableCell>
+                <TableCell>{item.interpretation || "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+
+      {renderMissingShortTable("Top skipped questions", result.top_skipped_questions || [])}
+      {renderMissingShortTable(
+        "Low visibility questions",
+        result.low_visibility_questions || [],
+        "Это не обязательно проблема качества, часто связано с ветвлением.",
+      )}
+
+      {!!(result.never_shown_questions || []).length && (
+        <Alert severity="warning">
+          Некоторые вопросы не были показаны ни одному завершившему респонденту. Проверьте условия ветвления.
+        </Alert>
+      )}
+      {renderMissingShortTable("Never shown questions", result.never_shown_questions || [])}
+
+      {!!(result.required_questions_with_missing || []).length && (
+        <Alert severity="warning">
+          Есть обязательные вопросы с реальными пропусками среди респондентов, которым вопрос был показан.
+        </Alert>
+      )}
+      {renderMissingShortTable("Required questions with missing", result.required_questions_with_missing || [])}
+
+      {!!(result.groups || []).length && (
+        <Box sx={{ width: "100%", overflowX: "auto" }}>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>
+            Group summary
+          </Typography>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Группа</TableCell>
+                <TableCell align="right">Shown slots</TableCell>
+                <TableCell align="right">Answered slots</TableCell>
+                <TableCell align="right">Skipped slots</TableCell>
+                <TableCell align="right">Skip rate among shown</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(result.groups || []).map((group) => (
+                <TableRow key={String(group.group)}>
+                  <TableCell>{group.group_label || group.group}</TableCell>
+                  <TableCell align="right">{formatNumber(group.total_shown_slots)}</TableCell>
+                  <TableCell align="right">{formatNumber(group.total_answered_slots)}</TableCell>
+                  <TableCell align="right">{formatNumber(group.total_skipped_slots)}</TableCell>
+                  <TableCell align="right">{formatNumber(group.overall_skip_rate_shown)}%</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
+
+      {screenedOut && (
+        <Box>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>
+            Screened out context
+          </Typography>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+            <Chip label={`screened out: ${formatNumber(screenedOut.total_screened_out)}`} />
+            <Chip label={`avg seen before screenout: ${formatNumber(screenedOut.average_seen_questions_before_screenout)}`} />
+          </Stack>
+          <Typography color="text.secondary" variant="body2">
+            {screenedOut.note}
+          </Typography>
+        </Box>
+      )}
+    </Stack>
+  );
+}
+
 function renderSection(section) {
   if (section.error) {
     return <Alert severity="error">{section.error}</Alert>;
@@ -1457,6 +1659,7 @@ function renderSection(section) {
   if (section.type === "time_analysis") return renderTimeAnalysisSection(section);
   if (section.type === "reliability_analysis") return renderReliabilityAnalysisSection(section);
   if (section.type === "scale_index") return renderScaleIndexSection(section);
+  if (section.type === "missing_analysis") return renderMissingAnalysisSection(section);
 
   return <Typography color="text.secondary">Неизвестный тип секции.</Typography>;
 }

@@ -100,6 +100,13 @@ export function isQuestionSupportedForAnalysis(question, analysisType, role = "v
     return ["scale", "number", "yesno", "single", "dropdown", "matrix_single"].includes(question.qtype);
   }
 
+  if (analysisType === "missing_analysis") {
+    if (role === "group") {
+      return ["single", "dropdown", "yesno"].includes(question.qtype);
+    }
+    return false;
+  }
+
   return false;
 }
 
@@ -181,6 +188,15 @@ export function getDefaultVariableSpec(question, analysisType, role = "variable"
     }
     if (question.qtype === "matrix_single") {
       return { question_id: question.id, encoding: "matrix_ordinal", measure: "ordinal" };
+    }
+  }
+
+  if (analysisType === "missing_analysis" && role === "group") {
+    if (question.qtype === "yesno") {
+      return { question_id: question.id, encoding: "binary", measure: "binary" };
+    }
+    if (["single", "dropdown"].includes(question.qtype)) {
+      return { question_id: question.id, encoding: "ordinal", measure: "nominal" };
     }
   }
 
@@ -484,6 +500,21 @@ export function buildSectionPayload(surveyId, section, questionsById) {
           max_value: item.reverse ? Number(item.max_value) : null,
         };
       }),
+    };
+  }
+
+  if (section.type === "missing_analysis") {
+    let group_by = null;
+    if (section.groupQuestionId) {
+      const groupQuestion = getQuestion(questionsById, section.groupQuestionId, "Группировка");
+      group_by = getSpec(groupQuestion, "missing_analysis", "group", "Группировка");
+    }
+
+    return {
+      survey_id: Number(surveyId),
+      group_by,
+      include_screened_out: section.include_screened_out ?? false,
+      include_group_breakdown: section.include_group_breakdown ?? false,
     };
   }
 

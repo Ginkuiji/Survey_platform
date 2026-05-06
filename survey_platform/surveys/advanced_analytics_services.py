@@ -11,8 +11,19 @@ from .advanced_analytics_methods import (
     compute_kmeans_clustering,
     compute_linear_regression,
     compute_logistic_regression,
+    compute_missing_analysis,
     compute_scale_index,
     compute_time_analysis,
+)
+from .analytics import (
+    _answer_has_value,
+    build_visibility_by_question,
+    get_completed_normal_responses,
+    get_question_answers,
+    get_screened_out_responses,
+    get_survey_conditions,
+    get_survey_pages,
+    get_survey_questions,
 )
 from .models import Response
 
@@ -397,3 +408,96 @@ def run_scale_index_analysis(payload: dict) -> dict:
     )
 
     return _with_metadata(survey_id, "scale_index", dataset, result)
+
+
+def run_missing_analysis(payload: dict) -> dict:
+    survey_id = payload["survey_id"]
+
+    completed_responses = list(
+        get_completed_normal_responses(survey_id)
+        .prefetch_related(
+            "answers",
+            "answers__selected_options",
+            "answers__matrix_cells__row",
+            "answers__matrix_cells__column",
+            "answers__ranking_items",
+        )
+    )
+    completed_response_ids = [response.id for response in completed_responses]
+    questions = list(get_survey_questions(survey_id).select_related("page"))
+    pages = get_survey_pages(survey_id)
+    conditions = get_survey_conditions(survey_id)
+    visibility_by_question = build_visibility_by_question(
+        completed_responses,
+        pages,
+        conditions,
+    )
+
+    answers_by_question = {}
+    for question in questions:
+        answers = get_question_answers(question.id, completed_response_ids=completed_response_ids)
+        answers_by_question[question.id] = {
+            answer.response_id
+            for answer in answers
+            if _answer_has_value(question, answer)
+        }
+
+    group_rows = None
+    group_variable = None
+    group_by = payload.get("group_by")
+    if group_by:
+        if group_by.get("encoding") not in ("binary", "ordinal"):
+            raise ValueError("Missing analysis group_by supports only binary or ordinal categorical variables.")
+        group_dataset = build_analysis_dataset(survey_id, [group_by])
+        group_variable = _single_variable(group_dataset, "Missing analysis group_by")
+        if group_variable.qtype not in ("yesno", "single", "dropdown"):
+            raise ValueError("Missing analysis group_by supports only yesno, single, or dropdown questions.")
+        group_rows = group_dataset.rows
+
+    result = compute_missing_analysis(
+        questions=questions,
+        completed_responses=completed_responses,
+        visibility_by_question=visibility_by_question,
+        answers_by_question=answers_by_question,
+        group_rows=group_rows,
+        group_variable=group_variable,
+        include_group_breakdown=payload.get("include_group_breakdown", False),
+    )
+
+    if payload.get("include_screened_out", False):
+        screened_out_responses = list(
+            get_screened_out_responses(survey_id)
+            .prefetch_related(
+                "answers",
+                "answers__selected_options",
+                "answers__matrix_cells__row",
+                "answers__matrix_cells__column",
+                "answers__ranking_items",
+            )
+        )
+        context = {
+            "total_screened_out": len(screened_out_responses),
+            "note": (
+                "Screened out responses are excluded from main missing analysis. "
+                "They are shown separately because respondents intentionally left the questionnaire due to screening logic."
+            ),
+        }
+        if screened_out_responses:
+            screened_visibility = build_visibility_by_question(screened_out_responses, pages, conditions)
+            seen_counts_by_response = {response.id: 0 for response in screened_out_responses}
+            for response_ids in screened_visibility.values():
+                for response_id in response_ids:
+                    if response_id in seen_counts_by_response:
+                        seen_counts_by_response[response_id] += 1
+            context["average_seen_questions_before_screenout"] = round(
+                sum(seen_counts_by_response.values()) / len(seen_counts_by_response),
+                2,
+            )
+        result["screened_out_context"] = context
+
+    return {
+        "survey_id": survey_id,
+        "analysis_type": "missing_analysis",
+        "dataset_size": len(completed_responses),
+        **result,
+    }

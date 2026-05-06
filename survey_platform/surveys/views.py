@@ -44,6 +44,7 @@ from .advanced_analytics_serializers import (
     FactorAnalysisSer,
     GroupComparisonSer,
     LogisticRegressionSer,
+    MissingAnalysisSer,
     ReliabilityAnalysisSer,
     RegressionAnalysisSer,
     ScaleIndexSer,
@@ -58,6 +59,7 @@ from .advanced_analytics_services import (
     run_factor_analysis,
     run_group_comparison,
     run_logistic_regression_analysis,
+    run_missing_analysis,
     run_reliability_analysis,
     run_regression_analysis,
     run_scale_index_analysis,
@@ -624,6 +626,10 @@ class AdvancedAnalyticsViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="scale-index")
     def scale_index(self, request):
         return self._run(request, ScaleIndexSer, run_scale_index_analysis)
+
+    @action(detail=False, methods=["post"], url_path="missing-analysis")
+    def missing_analysis(self, request):
+        return self._run(request, MissingAnalysisSer, run_missing_analysis)
 
 
 class AnalyticsExportViewSet(viewsets.ViewSet):

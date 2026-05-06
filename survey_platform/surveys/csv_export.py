@@ -730,5 +730,74 @@ def build_analytics_csv(survey, analytic_result, analysis_report) -> bytes:
             for warning in reliability.get("warnings") or []:
                 row("Индекс шкалы", title, "reliability_warning", warning)
 
+        elif section_type == "missing_analysis":
+            summary = result.get("summary") or {}
+            row("Анализ пропусков", title, "total_completed_normal", summary.get("total_completed_normal"))
+            row("Анализ пропусков", title, "questions_count", summary.get("questions_count"))
+            row("Анализ пропусков", title, "overall_skip_rate_shown", summary.get("overall_skip_rate_shown"))
+            row("Анализ пропусков", title, "overall_visibility_rate", summary.get("overall_visibility_rate"))
+            row("Анализ пропусков", title, "total_shown_slots", summary.get("total_shown_slots"))
+            row("Анализ пропусков", title, "total_answered_slots", summary.get("total_answered_slots"))
+            row("Анализ пропусков", title, "total_skipped_slots", summary.get("total_skipped_slots"))
+            row("Анализ пропусков", title, "total_not_shown_slots", summary.get("total_not_shown_slots"))
+
+            for item in result.get("questions") or []:
+                row(
+                    "Анализ пропусков",
+                    title,
+                    "question",
+                    item.get("label"),
+                    "qtype",
+                    item.get("qtype"),
+                    "required",
+                    item.get("required"),
+                    "shown",
+                    item.get("shown_count"),
+                    "not_shown",
+                    item.get("not_shown_count"),
+                    "answered",
+                    item.get("answered_count"),
+                    "skipped",
+                    item.get("skipped_count"),
+                    "skip_rate_shown",
+                    item.get("skip_rate_shown"),
+                    "visibility_rate",
+                    item.get("visibility_rate"),
+                    "missing_type",
+                    item.get("missing_type"),
+                    "interpretation",
+                    item.get("interpretation"),
+                )
+            for item in result.get("top_skipped_questions") or []:
+                row("Анализ пропусков", title, "top_skipped", item.get("label"), "skip_rate_shown", item.get("skip_rate_shown"))
+            for item in result.get("low_visibility_questions") or []:
+                row("Анализ пропусков", title, "low_visibility", item.get("label"), "visibility_rate", item.get("visibility_rate"))
+            for item in result.get("never_shown_questions") or []:
+                row("Анализ пропусков", title, "never_shown", item.get("label"), "visibility_rate", item.get("visibility_rate"))
+            for item in result.get("required_questions_with_missing") or []:
+                row("Анализ пропусков", title, "required_missing", item.get("label"), "skipped", item.get("skipped_count"), "skip_rate_shown", item.get("skip_rate_shown"))
+            for group in result.get("groups") or []:
+                row(
+                    "Анализ пропусков",
+                    title,
+                    "group",
+                    group.get("group_label"),
+                    "shown_slots",
+                    group.get("total_shown_slots"),
+                    "answered_slots",
+                    group.get("total_answered_slots"),
+                    "skipped_slots",
+                    group.get("total_skipped_slots"),
+                    "skip_rate_shown",
+                    group.get("overall_skip_rate_shown"),
+                )
+            screened_out = result.get("screened_out_context") or {}
+            if screened_out:
+                row("Анализ пропусков", title, "screened_out_total", screened_out.get("total_screened_out"))
+                row("Анализ пропусков", title, "average_seen_questions_before_screenout", screened_out.get("average_seen_questions_before_screenout"))
+                row("Анализ пропусков", title, "screened_out_note", screened_out.get("note"))
+            for warning in result.get("warnings") or []:
+                row("Анализ пропусков", title, "warning", warning)
+
     csv_text = output.getvalue()
     return ("\ufeff" + csv_text).encode("utf-8")

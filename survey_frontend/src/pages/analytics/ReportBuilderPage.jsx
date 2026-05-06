@@ -39,6 +39,7 @@ import {
   runFactorAnalysis,
   runGroupComparisonAnalysis,
   runLogisticRegressionAnalysis,
+  runMissingAnalysis,
   runReliabilityAnalysis,
   runRegressionAnalysis,
   runScaleIndexAnalysis,
@@ -64,6 +65,7 @@ const ANALYSIS_TYPES = [
   { value: "time_analysis", label: "Анализ времени прохождения и отсева" },
   { value: "reliability_analysis", label: "Надёжность шкалы" },
   { value: "scale_index", label: "Индекс шкалы" },
+  { value: "missing_analysis", label: "Анализ пропусков" },
 ];
 
 const API_BY_TYPE = {
@@ -79,6 +81,7 @@ const API_BY_TYPE = {
   time_analysis: runTimeAnalysis,
   reliability_analysis: runReliabilityAnalysis,
   scale_index: runScaleIndexAnalysis,
+  missing_analysis: runMissingAnalysis,
 };
 
 function createSection(type) {
@@ -196,6 +199,17 @@ function createSection(type) {
       method: "mean",
       min_answered_items: 1,
       include_cronbach_alpha: true,
+    };
+  }
+
+  if (type === "missing_analysis") {
+    return {
+      id,
+      type,
+      title: "Анализ пропусков",
+      groupQuestionId: "",
+      include_screened_out: false,
+      include_group_breakdown: false,
     };
   }
 
@@ -1071,6 +1085,54 @@ function SectionFields({ section, questions, updateSection }) {
             </TableBody>
           </Table>
         </Box>
+      </Stack>
+    );
+  }
+
+  if (section.type === "missing_analysis") {
+    const groupQuestions = questions.filter((question) => isQuestionSupportedForAnalysis(question, "missing_analysis", "group"));
+
+    return (
+      <Stack spacing={2}>
+        <Alert severity="info">
+          Анализ пропусков учитывает ветвление: вопрос считается пропущенным только если он был показан респонденту, но не был заполнен.
+        </Alert>
+
+        <FormControl fullWidth>
+          <InputLabel>Группировать по вопросу</InputLabel>
+          <Select
+            label="Группировать по вопросу"
+            value={section.groupQuestionId}
+            onChange={(event) => updateSection(section.id, { groupQuestionId: event.target.value })}
+          >
+            <MenuItem value="">Без группировки</MenuItem>
+            {groupQuestions.map((question) => (
+              <MenuItem key={question.id} value={question.id}>
+                <QuestionOption question={question} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={section.include_screened_out}
+              onChange={(event) => updateSection(section.id, { include_screened_out: event.target.checked })}
+            />
+          }
+          label="Показать контекст screened out ответов"
+        />
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={section.include_group_breakdown}
+              onChange={(event) => updateSection(section.id, { include_group_breakdown: event.target.checked })}
+            />
+          }
+          label="Добавить групповой разрез"
+        />
       </Stack>
     );
   }

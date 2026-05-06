@@ -775,6 +775,114 @@ def build_analytics_pdf(survey, analytic_result, analysis_report) -> bytes:
                 ))
             if result.get("scores"):
                 story.append(p("Индивидуальные значения индекса доступны в CSV/XLSX."))
+        elif section_type == "missing_analysis":
+            summary = result.get("summary") or {}
+            story.append(p("Вопросы, не показанные из-за ветвления, не учитываются как реальные пропуски."))
+            story.append(key_value_table([
+                ["total_completed_normal", summary.get("total_completed_normal")],
+                ["questions_count", summary.get("questions_count")],
+                ["total_shown_slots", summary.get("total_shown_slots")],
+                ["total_answered_slots", summary.get("total_answered_slots")],
+                ["total_skipped_slots", summary.get("total_skipped_slots")],
+                ["total_not_shown_slots", summary.get("total_not_shown_slots")],
+                ["overall_skip_rate_shown", summary.get("overall_skip_rate_shown")],
+                ["overall_visibility_rate", summary.get("overall_visibility_rate")],
+                ["questions_with_high_missing", summary.get("questions_with_high_missing")],
+                ["questions_with_low_visibility", summary.get("questions_with_low_visibility")],
+            ]))
+            warnings = result.get("warnings") or []
+            if warnings:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(table([["Warnings"], *[[warning] for warning in warnings]], [16 * cm]))
+
+            def add_missing_short(title_text, items, columns):
+                if not items:
+                    return
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(p(title_text, "AnalyticsHeading"))
+                story.append(table([columns, *[
+                    [
+                        item.get("label"),
+                        item.get("shown_count"),
+                        item.get("skipped_count"),
+                        item.get("skip_rate_shown"),
+                        item.get("visibility_rate"),
+                    ]
+                    for item in items[:20]
+                ]]))
+
+            add_missing_short(
+                "Top skipped questions",
+                result.get("top_skipped_questions") or [],
+                ["Question", "Shown", "Skipped", "Skip % shown", "Visibility %"],
+            )
+            add_missing_short(
+                "Low visibility questions",
+                result.get("low_visibility_questions") or [],
+                ["Question", "Shown", "Skipped", "Skip % shown", "Visibility %"],
+            )
+            required_missing = result.get("required_questions_with_missing") or []
+            add_missing_short(
+                "Required questions with missing",
+                required_missing,
+                ["Question", "Shown", "Skipped", "Skip % shown", "Visibility %"],
+            )
+
+            questions = result.get("questions") or []
+            if questions:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(p("Questions table", "AnalyticsHeading"))
+                sorted_questions = sorted(
+                    questions,
+                    key=lambda item: ((item.get("skip_rate_shown") or 0), item.get("skipped_count") or 0),
+                    reverse=True,
+                )
+                story.append(table(
+                    [["Question", "Type", "Required", "Shown", "Not shown", "Answered", "Skipped", "Skip %", "Visibility %", "Missing type"], *[
+                        [
+                            item.get("label"),
+                            item.get("qtype"),
+                            item.get("required"),
+                            item.get("shown_count"),
+                            item.get("not_shown_count"),
+                            item.get("answered_count"),
+                            item.get("skipped_count"),
+                            item.get("skip_rate_shown"),
+                            item.get("visibility_rate"),
+                            item.get("missing_type"),
+                        ]
+                        for item in sorted_questions[:30]
+                    ]],
+                ))
+                if len(questions) > 30:
+                    story.append(p("Полная таблица доступна в CSV/XLSX."))
+
+            groups = result.get("groups") or []
+            if groups:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(p("Group summary", "AnalyticsHeading"))
+                story.append(table(
+                    [["Group", "Shown slots", "Answered slots", "Skipped slots", "Skip % shown"], *[
+                        [
+                            group.get("group_label"),
+                            group.get("total_shown_slots"),
+                            group.get("total_answered_slots"),
+                            group.get("total_skipped_slots"),
+                            group.get("overall_skip_rate_shown"),
+                        ]
+                        for group in groups
+                    ]],
+                ))
+
+            screened_out = result.get("screened_out_context") or {}
+            if screened_out:
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(p("Screened out context", "AnalyticsHeading"))
+                story.append(key_value_table([
+                    ["total_screened_out", screened_out.get("total_screened_out")],
+                    ["average_seen_questions_before_screenout", screened_out.get("average_seen_questions_before_screenout")],
+                    ["note", screened_out.get("note")],
+                ]))
         elif section_type == "regression":
             story.append(key_value_table([
                 ["target", _variable_label(result, result.get("target"))],

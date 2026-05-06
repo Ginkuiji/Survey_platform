@@ -814,6 +814,129 @@ def _add_report_sheet(ws, analysis_report):
             )
             if result.get("warnings"):
                 _append_table(ws, ["Warnings"], [[warning] for warning in result.get("warnings") or []])
+        elif section_type == "missing_analysis":
+            summary = result.get("summary") or {}
+            append_key_value(ws, "total_completed_normal", summary.get("total_completed_normal"))
+            append_key_value(ws, "questions_count", summary.get("questions_count"))
+            append_key_value(ws, "total_shown_slots", summary.get("total_shown_slots"))
+            append_key_value(ws, "total_answered_slots", summary.get("total_answered_slots"))
+            append_key_value(ws, "total_skipped_slots", summary.get("total_skipped_slots"))
+            append_key_value(ws, "total_not_shown_slots", summary.get("total_not_shown_slots"))
+            append_key_value(ws, "overall_skip_rate_shown", format_number(summary.get("overall_skip_rate_shown")))
+            append_key_value(ws, "overall_visibility_rate", format_number(summary.get("overall_visibility_rate")))
+            append_key_value(ws, "questions_with_high_missing", summary.get("questions_with_high_missing"))
+            append_key_value(ws, "questions_with_moderate_missing", summary.get("questions_with_moderate_missing"))
+            append_key_value(ws, "questions_with_low_visibility", summary.get("questions_with_low_visibility"))
+            append_key_value(ws, "note", "Вопросы, не показанные из-за ветвления, не учитываются как реальные пропуски.")
+
+            _append_table(
+                ws,
+                [
+                    "Question",
+                    "Type",
+                    "Required",
+                    "Page",
+                    "Shown",
+                    "Not shown",
+                    "Answered",
+                    "Skipped",
+                    "Visibility rate",
+                    "Answer rate shown",
+                    "Skip rate shown",
+                    "Answer rate total",
+                    "Missing type",
+                    "Interpretation",
+                ],
+                [
+                    [
+                        item.get("label"),
+                        item.get("qtype"),
+                        item.get("required"),
+                        item.get("page_title"),
+                        item.get("shown_count"),
+                        item.get("not_shown_count"),
+                        item.get("answered_count"),
+                        item.get("skipped_count"),
+                        format_number(item.get("visibility_rate")),
+                        format_number(item.get("answer_rate_shown")),
+                        format_number(item.get("skip_rate_shown")),
+                        format_number(item.get("answer_rate_total")),
+                        item.get("missing_type"),
+                        item.get("interpretation"),
+                    ]
+                    for item in result.get("questions") or []
+                ],
+            )
+            _append_table(
+                ws,
+                ["Top skipped", "Shown", "Skipped", "Skip rate shown", "Visibility rate"],
+                [
+                    [
+                        item.get("label"),
+                        item.get("shown_count"),
+                        item.get("skipped_count"),
+                        format_number(item.get("skip_rate_shown")),
+                        format_number(item.get("visibility_rate")),
+                    ]
+                    for item in result.get("top_skipped_questions") or []
+                ],
+            )
+            _append_table(
+                ws,
+                ["Low visibility", "Shown", "Skipped", "Skip rate shown", "Visibility rate"],
+                [
+                    [
+                        item.get("label"),
+                        item.get("shown_count"),
+                        item.get("skipped_count"),
+                        format_number(item.get("skip_rate_shown")),
+                        format_number(item.get("visibility_rate")),
+                    ]
+                    for item in result.get("low_visibility_questions") or []
+                ],
+            )
+            _append_table(
+                ws,
+                ["Required with missing", "Shown", "Skipped", "Skip rate shown", "Visibility rate"],
+                [
+                    [
+                        item.get("label"),
+                        item.get("shown_count"),
+                        item.get("skipped_count"),
+                        format_number(item.get("skip_rate_shown")),
+                        format_number(item.get("visibility_rate")),
+                    ]
+                    for item in result.get("required_questions_with_missing") or []
+                ],
+            )
+            if result.get("groups"):
+                _append_table(
+                    ws,
+                    ["Group", "Shown slots", "Answered slots", "Skipped slots", "Skip rate shown"],
+                    [
+                        [
+                            group.get("group_label"),
+                            group.get("total_shown_slots"),
+                            group.get("total_answered_slots"),
+                            group.get("total_skipped_slots"),
+                            format_number(group.get("overall_skip_rate_shown")),
+                        ]
+                        for group in result.get("groups") or []
+                    ],
+                )
+            screened_out = result.get("screened_out_context") or {}
+            if screened_out:
+                _append_table(
+                    ws,
+                    ["Screened out context", "Value"],
+                    [
+                        ["total_screened_out", screened_out.get("total_screened_out")],
+                        ["average_seen_questions_before_screenout", format_number(screened_out.get("average_seen_questions_before_screenout"))],
+                        ["note", screened_out.get("note")],
+                    ],
+                )
+            if result.get("warnings"):
+                _append_table(ws, ["Warnings"], [[warning] for warning in result.get("warnings") or []])
         elif section_type == "regression":
             append_key_value(ws, "target", get_variable_label(result, result.get("target")))
             append_key_value(ws, "features", ", ".join(get_variable_label(result, code) for code in (result.get("features") or [])))
@@ -868,6 +991,75 @@ def _add_report_sheet(ws, analysis_report):
             for warning in result.get("warnings") or []:
                 append_key_value(ws, "warning", warning)
         ws.append([])
+
+
+def _add_missing_analysis_sheet(ws, section):
+    result = section.get("result") or {}
+    title = section.get("title") or "Анализ пропусков"
+    summary = result.get("summary") or {}
+    append_section_title(ws, title)
+    append_key_value(ws, "total_completed_normal", summary.get("total_completed_normal"))
+    append_key_value(ws, "questions_count", summary.get("questions_count"))
+    append_key_value(ws, "total_shown_slots", summary.get("total_shown_slots"))
+    append_key_value(ws, "total_answered_slots", summary.get("total_answered_slots"))
+    append_key_value(ws, "total_skipped_slots", summary.get("total_skipped_slots"))
+    append_key_value(ws, "total_not_shown_slots", summary.get("total_not_shown_slots"))
+    append_key_value(ws, "overall_skip_rate_shown", format_number(summary.get("overall_skip_rate_shown")))
+    append_key_value(ws, "overall_visibility_rate", format_number(summary.get("overall_visibility_rate")))
+    append_key_value(ws, "note", "Вопросы, не показанные из-за ветвления, не учитываются как реальные пропуски.")
+    ws.append([])
+    _append_table(
+        ws,
+        ["Question", "Type", "Required", "Shown", "Not shown", "Answered", "Skipped", "Skip rate shown", "Visibility rate", "Missing type", "Interpretation"],
+        [
+            [
+                item.get("label"),
+                item.get("qtype"),
+                item.get("required"),
+                item.get("shown_count"),
+                item.get("not_shown_count"),
+                item.get("answered_count"),
+                item.get("skipped_count"),
+                format_number(item.get("skip_rate_shown")),
+                format_number(item.get("visibility_rate")),
+                item.get("missing_type"),
+                item.get("interpretation"),
+            ]
+            for item in result.get("questions") or []
+        ],
+    )
+    _append_table(
+        ws,
+        ["Top skipped", "Shown", "Skipped", "Skip rate shown", "Visibility rate"],
+        [[item.get("label"), item.get("shown_count"), item.get("skipped_count"), format_number(item.get("skip_rate_shown")), format_number(item.get("visibility_rate"))] for item in result.get("top_skipped_questions") or []],
+    )
+    _append_table(
+        ws,
+        ["Low visibility", "Shown", "Skipped", "Skip rate shown", "Visibility rate"],
+        [[item.get("label"), item.get("shown_count"), item.get("skipped_count"), format_number(item.get("skip_rate_shown")), format_number(item.get("visibility_rate"))] for item in result.get("low_visibility_questions") or []],
+    )
+    _append_table(
+        ws,
+        ["Required with missing", "Shown", "Skipped", "Skip rate shown", "Visibility rate"],
+        [[item.get("label"), item.get("shown_count"), item.get("skipped_count"), format_number(item.get("skip_rate_shown")), format_number(item.get("visibility_rate"))] for item in result.get("required_questions_with_missing") or []],
+    )
+    if result.get("groups"):
+        _append_table(
+            ws,
+            ["Group", "Shown slots", "Answered slots", "Skipped slots", "Skip rate shown"],
+            [[group.get("group_label"), group.get("total_shown_slots"), group.get("total_answered_slots"), group.get("total_skipped_slots"), format_number(group.get("overall_skip_rate_shown"))] for group in result.get("groups") or []],
+        )
+    screened_out = result.get("screened_out_context") or {}
+    if screened_out:
+        _append_table(
+            ws,
+            ["Screened out context", "Value"],
+            [
+                ["total_screened_out", screened_out.get("total_screened_out")],
+                ["average_seen_questions_before_screenout", format_number(screened_out.get("average_seen_questions_before_screenout"))],
+                ["note", screened_out.get("note")],
+            ],
+        )
 
 
 def build_analytics_xlsx(survey, analytic_result, analysis_report) -> bytes:
@@ -940,6 +1132,18 @@ def build_analytics_xlsx(survey, analytic_result, analysis_report) -> bytes:
 
     _add_questions_sheet(ws_questions, survey, analytic_data)
     _add_report_sheet(ws_report, analysis_report)
+
+    report_result = _report_result(analysis_report)
+    missing_sections = [
+        section
+        for section in report_result.get("sections") or []
+        if section.get("type") == "missing_analysis" and not section.get("error")
+    ]
+    for index, section in enumerate(missing_sections, start=1):
+        sheet_title = "Анализ пропусков" if index == 1 else f"Анализ пропусков {index}"
+        ws_missing = wb.create_sheet(sheet_title[:31])
+        ws_missing.freeze_panes = "A2"
+        _add_missing_analysis_sheet(ws_missing, section)
 
     for ws in wb.worksheets:
         ws.sheet_view.showGridLines = True
