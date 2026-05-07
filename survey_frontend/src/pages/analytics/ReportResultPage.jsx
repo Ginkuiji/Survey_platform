@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Alert,
@@ -19,7 +19,10 @@ import {
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useQuery } from "@tanstack/react-query";
-import { fetchAnalysisReportById } from "../../api/analytics";
+import {
+  fetchAnalysisReportById,
+  fetchReportMatplotlibChart,
+} from "../../api/analytics";
 import {
   ClusterSizeChart,
   ClusterTopFeaturesChart,
@@ -117,7 +120,7 @@ function getVariableLabel(result, code) {
   return result?.variables_by_code?.[code]?.label || code;
 }
 
-function ReportSectionCard({ section, children, onRequestChart }) {
+function ReportSectionCard({ section, children, onRequestChart, serverChart }) {
   return (
     <Card variant="outlined">
       <CardContent>
@@ -144,12 +147,40 @@ function ReportSectionCard({ section, children, onRequestChart }) {
             <Button
               size="small"
               variant="outlined"
+              disabled={serverChart?.loading}
               onClick={() => onRequestChart?.(section)}
             >
-              Получить график
+              {serverChart?.loading ? "Построение..." : "Получить график"}
             </Button>
           </Stack>
         </Stack>
+
+        {serverChart?.error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {serverChart.error}
+          </Alert>
+        )}
+
+        {serverChart?.url && (
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle1" sx={{ mb: 1 }}>
+              Статистический график Matplotlib
+            </Typography>
+            <Box
+              component="img"
+              src={serverChart.url}
+              alt="Статистический график"
+              sx={{
+                width: "100%",
+                maxWidth: "100%",
+                border: "1px solid",
+                borderColor: "divider",
+                borderRadius: 1,
+                bgcolor: "background.paper",
+              }}
+            />
+          </Box>
+        )}
 
         {children}
       </CardContent>
@@ -1768,7 +1799,8 @@ function renderSection(section) {
 export default function ReportResultPage() {
   const { id, reportId } = useParams();
   const navigate = useNavigate();
-  const [chartRequestMessage, setChartRequestMessage] = useState("");
+  const [serverCharts, setServerCharts] = useState({});
+  const serverChartsRef = useRef({});
 
   const { report, storedReport, isLoading, error } = useStoredReport(reportId);
   const reportTitle = storedReport?.title || report?.title;
@@ -1776,10 +1808,59 @@ export default function ReportResultPage() {
   const generatedAt = storedReport?.generatedAt || report?.created_at;
   const sections = storedReport?.sections || [];
 
-  function handleRequestChart(section) {
-    setChartRequestMessage(
-      `Генерация отдельного графика для блока "${section.title || SECTION_LABELS[section.type] || section.type}" будет добавлена позже.`,
-    );
+  useEffect(() => {
+    serverChartsRef.current = serverCharts;
+  }, [serverCharts]);
+
+  useEffect(() => () => {
+    Object.values(serverChartsRef.current).forEach((item) => {
+      if (item?.url) URL.revokeObjectURL(item.url);
+    });
+  }, []);
+
+  async function handleRequestChart(section) {
+    const sectionId = section.id;
+    if (!sectionId) return;
+
+    setServerCharts((current) => ({
+      ...current,
+      [sectionId]: {
+        ...(current[sectionId] || {}),
+        loading: true,
+        error: "",
+      },
+    }));
+
+    try {
+      const blob = await fetchReportMatplotlibChart(reportId, {
+        section_id: sectionId,
+        chart_type: "auto",
+      });
+      const url = URL.createObjectURL(blob);
+
+      setServerCharts((current) => {
+        const oldUrl = current[sectionId]?.url;
+        if (oldUrl) URL.revokeObjectURL(oldUrl);
+
+        return {
+          ...current,
+          [sectionId]: {
+            loading: false,
+            error: "",
+            url,
+          },
+        };
+      });
+    } catch (chartError) {
+      setServerCharts((current) => ({
+        ...current,
+        [sectionId]: {
+          ...(current[sectionId] || {}),
+          loading: false,
+          error: chartError.message || "Не удалось построить график",
+        },
+      }));
+    }
   }
 
   if (isLoading) {
@@ -1833,18 +1914,13 @@ export default function ReportResultPage() {
         </Button>
       </Stack>
 
-      {chartRequestMessage && (
-        <Alert severity="info" onClose={() => setChartRequestMessage("")} sx={{ mb: 3 }}>
-          {chartRequestMessage}
-        </Alert>
-      )}
-
       <Stack spacing={3}>
         {sections.map((section, index) => (
           <ReportSectionCard
             key={section.id || index}
             section={section}
             onRequestChart={handleRequestChart}
+            serverChart={serverCharts[section.id]}
           >
             {renderSection(section)}
           </ReportSectionCard>

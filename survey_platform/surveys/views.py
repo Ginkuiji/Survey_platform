@@ -1,4 +1,5 @@
 # surveys/views.py
+import json
 import secrets, datetime as dt
 from django.http import HttpResponse
 from django.utils import timezone
@@ -65,6 +66,7 @@ from .advanced_analytics_services import (
     run_scale_index_analysis,
     run_time_analysis,
 )
+from .advanced_analytics_charts import build_report_section_chart
 from .pdf_export import build_analytics_pdf
 from .csv_export import build_analytics_csv
 from .xlsx_export import build_analytics_xlsx
@@ -973,6 +975,34 @@ class AnalysisReportViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You do not have access to this survey.")
 
         serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=["post"], url_path="chart")
+    def chart(self, request, pk=None):
+        report = self.get_object()
+        section_id = request.data.get("section_id")
+        chart_type = request.data.get("chart_type")
+
+        if not section_id:
+            return DRFResponse(
+                {"detail": "section_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            buffer = build_report_section_chart(
+                report=report,
+                section_id=section_id,
+                chart_type=chart_type,
+            )
+        except (ValueError, json.JSONDecodeError) as exc:
+            return DRFResponse(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        response = HttpResponse(buffer.getvalue(), content_type="image/png")
+        response["Content-Disposition"] = 'inline; filename="analysis-chart.png"'
+        return response
 
 class AnalyticResultsViewSet(viewsets.ModelViewSet):
     permission_classes = [IsOrganizerOrAdmin]

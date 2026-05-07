@@ -93,6 +93,33 @@ export const fetchAnalysisReports = () =>
 export const fetchAnalysisReportById = (id) =>
   apiFetch(`/analytics/reports/${id}/`);
 
+export const fetchReportMatplotlibChart = async (reportId, payload) => {
+  const accessToken = localStorage.getItem("accessToken");
+
+  const res = await fetch(`${API_URL}/analytics/reports/${reportId}/chart/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    let message = "Не удалось построить график";
+    try {
+      const data = await res.json();
+      message = data.detail || message;
+    } catch {
+      const text = await res.text();
+      message = text || message;
+    }
+    throw new Error(message);
+  }
+
+  return res.blob();
+};
+
 export const createAnalysisReport = (payload) =>
   apiFetch("/analytics/reports/", {
     method: "POST",
