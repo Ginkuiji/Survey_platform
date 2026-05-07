@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Alert,
@@ -20,6 +20,24 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useQuery } from "@tanstack/react-query";
 import { fetchAnalysisReportById } from "../../api/analytics";
+import {
+  ClusterSizeChart,
+  ClusterTopFeaturesChart,
+  CorrespondenceInertiaChart,
+  CorrelationHeatmap,
+  CrosstabStackedBar,
+  FactorLoadingsHeatmap,
+  FactorScreeChart,
+  GroupComparisonMeanChart,
+  LogisticOddsRatioChart,
+  LogisticProbabilityHistogram,
+  MissingAnalysisChart,
+  RegressionCoefficientChart,
+  ReliabilityItemChart,
+  ScaleIndexDistributionChart,
+  TimeDistributionChart,
+  TimeScreenoutReasonsChart,
+} from "./reportCharts";
 
 const SECTION_LABELS = {
   correlation: "Корреляционный анализ",
@@ -99,6 +117,46 @@ function getVariableLabel(result, code) {
   return result?.variables_by_code?.[code]?.label || code;
 }
 
+function ReportSectionCard({ section, children, onRequestChart }) {
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={1}
+          alignItems={{ xs: "flex-start", sm: "center" }}
+          justifyContent="space-between"
+          sx={{ mb: 2 }}
+        >
+          <Box>
+            <Typography variant="h6">
+              {section.title || SECTION_LABELS[section.type] || section.type}
+            </Typography>
+            <Typography color="text.secondary" variant="body2">
+              {SECTION_LABELS[section.type] || section.type}
+            </Typography>
+          </Box>
+
+          <Stack direction="row" spacing={1} alignItems="center">
+            {section.result?.analysis_type && (
+              <Chip label={section.result.analysis_type} />
+            )}
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => onRequestChart?.(section)}
+            >
+              Получить график
+            </Button>
+          </Stack>
+        </Stack>
+
+        {children}
+      </CardContent>
+    </Card>
+  );
+}
+
 function renderCorrelationSection(section) {
   const result = section.result;
   const variables = result?.variables || [];
@@ -112,6 +170,8 @@ function renderCorrelationSection(section) {
         <Chip label={`Метод: ${result?.method || section.config?.method || "—"}`} />
         <Chip label={`Dataset: ${result?.dataset_size ?? "—"}`} />
       </Stack>
+
+      <CorrelationHeatmap result={result} />
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Table size="small">
@@ -197,7 +257,12 @@ function renderCrosstabTable(crosstab) {
 }
 
 function renderCrosstabSection(section) {
-  return renderCrosstabTable(section.result?.crosstab);
+  return (
+    <Stack spacing={3}>
+      <CrosstabStackedBar crosstab={section.result?.crosstab} />
+      {renderCrosstabTable(section.result?.crosstab)}
+    </Stack>
+  );
 }
 
 function renderExpectedTable(expected) {
@@ -241,6 +306,8 @@ function renderChiSquareSection(section) {
 
   return (
     <Stack spacing={3}>
+      <CrosstabStackedBar crosstab={section.result?.crosstab} />
+
       {renderCrosstabTable(section.result?.crosstab)}
 
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -336,10 +403,13 @@ function renderCorrespondenceAnalysisSection(section) {
         <Alert key={warning} severity="warning">{warning}</Alert>
       ))}
 
+      <CorrespondenceInertiaChart result={result} />
+
       <Box>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
           Таблица сопряжённости
         </Typography>
+        <CrosstabStackedBar crosstab={result.crosstab} />
         {renderCrosstabTable(result.crosstab)}
       </Box>
 
@@ -393,6 +463,8 @@ function renderRegressionSection(section) {
         Features: {(result?.features || []).map(code => getVariableLabel(result, code)).join(", ") || "—"}
       </Typography>
 
+      <RegressionCoefficientChart result={result} />
+
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Table size="small">
           <TableHead>
@@ -444,6 +516,10 @@ function renderLogisticRegressionSection(section) {
       {(result.warnings || []).map((warning) => (
         <Alert key={warning} severity="warning">{warning}</Alert>
       ))}
+
+      <LogisticOddsRatioChart result={result} />
+      <LogisticProbabilityHistogram result={result} />
+
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
           Confusion matrix
@@ -539,6 +615,9 @@ function renderFactorAnalysisSection(section) {
       {(bartlett.warnings || []).map((warning) => (
         <Alert key={warning} severity="warning">{warning}</Alert>
       ))}
+
+      <FactorScreeChart result={result} />
+      <FactorLoadingsHeatmap result={result} />
 
       <Box>
         <Typography variant="subtitle1">Рекомендация числа факторов</Typography>
@@ -849,6 +928,8 @@ function renderClusterAnalysisSection(section) {
         <Alert key={warning} severity="warning">{warning}</Alert>
       ))}
 
+      <ClusterSizeChart result={result} />
+
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Table size="small">
           <TableHead>
@@ -883,6 +964,8 @@ function renderClusterAnalysisSection(section) {
       <Typography color="text.secondary" variant="body2">
         Assignments are stored in the result for export/API use; this view shows cluster summary only.
       </Typography>
+
+      <ClusterTopFeaturesChart result={result} />
 
       {renderClusterProfiles(profiles)}
     </Stack>
@@ -982,6 +1065,8 @@ function renderGroupComparisonSection(section) {
       {(result.warnings || []).map((warning) => (
         <Alert key={warning} severity="warning">{warning}</Alert>
       ))}
+
+      <GroupComparisonMeanChart result={result} />
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
@@ -1087,6 +1172,16 @@ function renderTimeAnalysisSection(section) {
       {(result.warnings || []).map((warning) => (
         <Alert key={warning} severity="warning">{warning}</Alert>
       ))}
+
+      <TimeDistributionChart
+        data={result.completion_time_distribution || []}
+        title="Распределение времени завершения"
+      />
+      <TimeDistributionChart
+        data={result.screenout_time_distribution || []}
+        title="Распределение времени до отсева"
+      />
+      <TimeScreenoutReasonsChart result={result} />
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
@@ -1215,6 +1310,8 @@ function renderReliabilityAnalysisSection(section) {
         <Alert key={warning} severity="warning">{warning}</Alert>
       ))}
 
+      <ReliabilityItemChart result={result} />
+
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
           Item statistics
@@ -1313,6 +1410,8 @@ function renderScaleIndexSection(section) {
       {(reliability.warnings || []).map((warning) => (
         <Alert key={`reliability-${warning}`} severity="warning">{warning}</Alert>
       ))}
+
+      <ScaleIndexDistributionChart result={result} />
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
@@ -1513,6 +1612,8 @@ function renderMissingAnalysisSection(section) {
         <Alert key={warning} severity="warning">{warning}</Alert>
       ))}
 
+      <MissingAnalysisChart result={result} />
+
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
           Summary
@@ -1667,12 +1768,19 @@ function renderSection(section) {
 export default function ReportResultPage() {
   const { id, reportId } = useParams();
   const navigate = useNavigate();
+  const [chartRequestMessage, setChartRequestMessage] = useState("");
 
   const { report, storedReport, isLoading, error } = useStoredReport(reportId);
   const reportTitle = storedReport?.title || report?.title;
   const surveyTitle = storedReport?.survey?.title || report?.survey_title;
   const generatedAt = storedReport?.generatedAt || report?.created_at;
   const sections = storedReport?.sections || [];
+
+  function handleRequestChart(section) {
+    setChartRequestMessage(
+      `Генерация отдельного графика для блока "${section.title || SECTION_LABELS[section.type] || section.type}" будет добавлена позже.`,
+    );
+  }
 
   if (isLoading) {
     return <CircularProgress />;
@@ -1725,27 +1833,21 @@ export default function ReportResultPage() {
         </Button>
       </Stack>
 
+      {chartRequestMessage && (
+        <Alert severity="info" onClose={() => setChartRequestMessage("")} sx={{ mb: 3 }}>
+          {chartRequestMessage}
+        </Alert>
+      )}
+
       <Stack spacing={3}>
         {sections.map((section, index) => (
-          <Card key={section.id || index}>
-            <CardContent>
-              <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1} sx={{ mb: 2 }}>
-                <Box>
-                  <Typography variant="h6">
-                    {section.title}
-                  </Typography>
-                  <Typography color="text.secondary" variant="body2">
-                    {SECTION_LABELS[section.type] || section.type}
-                  </Typography>
-                </Box>
-                {section.result?.analysis_type && (
-                  <Chip label={section.result.analysis_type} sx={{ alignSelf: { xs: "flex-start", md: "center" } }} />
-                )}
-              </Stack>
-
-              {renderSection(section)}
-            </CardContent>
-          </Card>
+          <ReportSectionCard
+            key={section.id || index}
+            section={section}
+            onRequestChart={handleRequestChart}
+          >
+            {renderSection(section)}
+          </ReportSectionCard>
         ))}
       </Stack>
     </Container>
