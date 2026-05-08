@@ -805,7 +805,7 @@ def _duration_seconds(start, end):
     return (end - start).total_seconds()
 
 
-def _percentile(values, percentile):
+def _duration_percentile(values, percentile):
     if not values:
         return None
     if np is not None:
@@ -833,8 +833,8 @@ def _describe_durations(values):
             "p75": None,
             "iqr": None,
         }
-    p25 = _percentile(values, 25)
-    p75 = _percentile(values, 75)
+    p25 = _duration_percentile(values, 25)
+    p75 = _duration_percentile(values, 75)
     return {
         "count": len(values),
         "average": float(_mean(values)),

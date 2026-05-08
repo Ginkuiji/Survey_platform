@@ -205,7 +205,7 @@ function ReportSectionCard({ section, children, onRequestChart, serverChart }) {
         {serverChart?.url && (
           <Box sx={{ mb: 3 }}>
             <Typography variant="subtitle1" sx={{ mb: 1 }}>
-              Статистический график Matplotlib
+              Статистический график
             </Typography>
             <Box
               component="img"
