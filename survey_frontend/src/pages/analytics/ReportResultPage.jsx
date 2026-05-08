@@ -120,6 +120,47 @@ function getVariableLabel(result, code) {
   return result?.variables_by_code?.[code]?.label || code;
 }
 
+const TIME_SUMMARY_LABELS = {
+  total_started: "Начали прохождение",
+  total_finished: "Завершили прохождение",
+  total_completed: "Полностью завершили",
+  total_screened_out: "Отсеяны",
+  total_active_unfinished: "Активные незавершенные",
+  completion_rate: "Доля полных завершений",
+  screenout_rate: "Доля отсева",
+  finish_rate: "Доля завершивших",
+  average_completion_time_seconds: "Среднее время полного прохождения",
+  median_completion_time_seconds: "Медианное время полного прохождения",
+  min_completion_time_seconds: "Минимальное время полного прохождения",
+  max_completion_time_seconds: "Максимальное время полного прохождения",
+  average_screenout_time_seconds: "Среднее время до отсева",
+  median_screenout_time_seconds: "Медианное время до отсева",
+  min_screenout_time_seconds: "Минимальное время до отсева",
+  max_screenout_time_seconds: "Максимальное время до отсева",
+};
+
+const SCALE_SUMMARY_LABELS = {
+  n: "Число наблюдений",
+  mean: "Среднее",
+  median: "Медиана",
+  std: "Стандартное отклонение",
+  variance: "Дисперсия",
+  min: "Мини",
+  max: "Макс",
+  p25: "25-й процентиль",
+  p75: "75-й процентиль",
+  iqr: "Межквартильный размах",
+};
+
+const MISSING_SUMMARY_LABELS = {
+  total_shown_slots: "Всего показанных вопросов",
+  total_answered_slots: "Всего полученных ответов",
+  total_skipped_slots: "Всего пропущенных показанных вопросов",
+  total_not_shown_slots: "Всего непоказанных вопросов из-за ветвления",
+  overall_skip_rate_shown: "Общая доля пропусков среди показанных",
+  overall_visibility_rate: "Общая доля видимости вопросов",
+};
+
 function ReportSectionCard({ section, children, onRequestChart, serverChart }) {
   return (
     <Card variant="outlined">
@@ -271,7 +312,7 @@ function renderCrosstabTable(crosstab) {
                 <TableCell key={column.value} align="center">
                   <Typography>{column.count}</Typography>
                   <Typography color="text.secondary" variant="caption">
-                    row {formatNumber(column.percent_row)}% · total {formatNumber(column.percent_total)}%
+                    по строке {formatNumber(column.percent_row)}% · от общего числа {formatNumber(column.percent_total)}%
                   </Typography>
                 </TableCell>
               ))}
@@ -344,7 +385,7 @@ function renderChiSquareSection(section) {
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
         <Chip label={`χ²: ${formatNumber(chiSquare?.chi2)}`} />
         <Chip label={`p-value: ${formatNumber(chiSquare?.p_value)}`} />
-        <Chip label={`dof: ${formatNumber(chiSquare?.dof)}`} />
+        <Chip label={`Степени свободы: ${formatNumber(chiSquare?.dof)}`} />
         <Chip label={`V Крамера: ${formatNumber(cramersV?.cramers_v)}`} />
         <Chip label={`Сила связи: ${cramersV?.interpretation || "—"}`} />
         <Chip label={`n: ${formatNumber(cramersV?.n)}`} />
@@ -381,12 +422,12 @@ function renderCorrespondenceCoordinatesTable(title, dimensions, points) {
         <TableHead>
           <TableRow>
             <TableCell>Категория</TableCell>
-            <TableCell align="right">Mass</TableCell>
+            <TableCell align="right">Масса</TableCell>
             {dimensionNames.map((dimension) => (
               <TableCell key={dimension} align="right">{dimension}</TableCell>
             ))}
             {dimensionNames.map((dimension) => (
-              <TableCell key={`${dimension}-contribution`} align="right">Contribution {dimension}</TableCell>
+              <TableCell key={`${dimension}-contribution`} align="right">Вклад {dimension}</TableCell>
             ))}
             <TableCell align="right">Cos²</TableCell>
           </TableRow>
@@ -427,7 +468,7 @@ function renderCorrespondenceAnalysisSection(section) {
         <Chip label={`Строк: ${formatNumber(result.n_rows)}`} />
         <Chip label={`Столбцов: ${formatNumber(result.n_columns)}`} />
         <Chip label={`Измерений: ${formatNumber(result.n_dimensions)}`} />
-        <Chip label={`Total inertia: ${formatNumber(result.total_inertia)}`} />
+        <Chip label={`Общая инерция: ${formatNumber(result.total_inertia)}`} />
       </Stack>
 
       {(result.warnings || []).map((warning) => (
@@ -452,8 +493,8 @@ function renderCorrespondenceAnalysisSection(section) {
           <TableHead>
             <TableRow>
               <TableCell>Измерение</TableCell>
-              <TableCell align="right">Eigenvalue</TableCell>
-              <TableCell align="right">Explained inertia</TableCell>
+              <TableCell align="right">Собственное значение</TableCell>
+              <TableCell align="right">Объясненная инерция</TableCell>
               <TableCell align="right">%</TableCell>
             </TableRow>
           </TableHead>
@@ -483,15 +524,15 @@ function renderRegressionSection(section) {
   return (
     <Stack spacing={2}>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-        <Chip label={`Target: ${getVariableLabel(result, result?.target)}`} />
+        <Chip label={`Зависимая переменная: ${getVariableLabel(result, result?.target)}`} />
         <Chip label={`n: ${formatNumber(result?.n)}`} />
-        <Chip label={`Features: ${featureLabels.length}`} />
+        <Chip label={`Предикторов: ${featureLabels.length}`} />
         <Chip label={`R²: ${formatNumber(result?.r2)}`} />
-        <Chip label={`Adjusted R²: ${formatNumber(result?.adjusted_r2)}`} />
+        <Chip label={`Скорректированный R²: ${formatNumber(result?.adjusted_r2)}`} />
       </Stack>
 
       <Typography color="text.secondary" variant="body2">
-        Features: {(result?.features || []).map(code => getVariableLabel(result, code)).join(", ") || "—"}
+        Предикторы: {(result?.features || []).map(code => getVariableLabel(result, code)).join(", ") || "—"}
       </Typography>
 
       <RegressionCoefficientChart result={result} />
@@ -527,21 +568,21 @@ function renderLogisticRegressionSection(section) {
   return (
     <Stack spacing={3}>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-        <Chip label={`Method: ${result.method || "—"}`} />
-        <Chip label={`Target: ${getVariableLabel(result, result.target)}`} />
+        <Chip label={`Метод: ${result.method || "—"}`} />
+        <Chip label={`Зависимая переменная: ${getVariableLabel(result, result.target)}`} />
         <Chip label={`n: ${formatNumber(result.n)}`} />
-        <Chip label={`Positive: ${formatNumber(result.positive_class_count)}`} />
-        <Chip label={`Negative: ${formatNumber(result.negative_class_count)}`} />
-        <Chip label={`Threshold: ${formatNumber(result.threshold)}`} />
-        <Chip label={`Accuracy: ${formatNumber(metrics.accuracy)}`} />
-        <Chip label={`Precision: ${formatNumber(metrics.precision)}`} />
-        <Chip label={`Recall: ${formatNumber(metrics.recall)}`} />
+        <Chip label={`Положительный класс: ${formatNumber(result.positive_class_count)}`} />
+        <Chip label={`Отрицательный класс: ${formatNumber(result.negative_class_count)}`} />
+        <Chip label={`Порог классификации: ${formatNumber(result.threshold)}`} />
+        <Chip label={`Доля верных классификаций: ${formatNumber(metrics.accuracy)}`} />
+        <Chip label={`Точность: ${formatNumber(metrics.precision)}`} />
+        <Chip label={`Полнота: ${formatNumber(metrics.recall)}`} />
         <Chip label={`F1: ${formatNumber(metrics.f1)}`} />
         <Chip label={`McFadden R²: ${formatNumber(metrics.mcfadden_r2)}`} />
       </Stack>
 
       <Typography color="text.secondary" variant="body2">
-        Features: {featureLabels.join(", ") || "—"}
+        Предикторы: {featureLabels.join(", ") || "—"}
       </Typography>
 
       {(result.warnings || []).map((warning) => (
@@ -553,24 +594,24 @@ function renderLogisticRegressionSection(section) {
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Confusion matrix
+          Матрица ошибок
         </Typography>
         <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell />
-              <TableCell align="right">Predicted 0</TableCell>
-              <TableCell align="right">Predicted 1</TableCell>
+              <TableCell align="right">Прогноз: 0</TableCell>
+              <TableCell align="right">Прогноз: 1</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             <TableRow>
-              <TableCell>Actual 0</TableCell>
+              <TableCell>Факт: 0</TableCell>
               <TableCell align="right">{formatNumber(confusionMatrix.tn)}</TableCell>
               <TableCell align="right">{formatNumber(confusionMatrix.fp)}</TableCell>
             </TableRow>
             <TableRow>
-              <TableCell>Actual 1</TableCell>
+              <TableCell>Факт: 1</TableCell>
               <TableCell align="right">{formatNumber(confusionMatrix.fn)}</TableCell>
               <TableCell align="right">{formatNumber(confusionMatrix.tp)}</TableCell>
             </TableRow>
@@ -580,15 +621,15 @@ function renderLogisticRegressionSection(section) {
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Coefficients
+          Коэффициенты
         </Typography>
         <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell>Переменная</TableCell>
-              <TableCell align="right">Coefficient</TableCell>
-              <TableCell align="right">Odds ratio</TableCell>
-              <TableCell>Interpretation</TableCell>
+              <TableCell align="right">Коэффициент</TableCell>
+              <TableCell align="right">Отношение шансов</TableCell>
+              <TableCell>Интерпретация</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -605,7 +646,7 @@ function renderLogisticRegressionSection(section) {
       </Box>
 
       <Typography color="text.secondary" variant="body2">
-        Predictions are stored in the API result; this view shows model summary only.
+        Прогнозы сохранены в результате API; в этом представлении показана только сводка модели.
       </Typography>
     </Stack>
   );
@@ -626,14 +667,14 @@ function renderFactorAnalysisSection(section) {
   return (
     <Stack spacing={3}>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-        <Chip label={`Method: ${result.method || "вЂ”"}`} />
+        <Chip label={`Метод: ${result.method || "вЂ”"}`} />
         <Chip label={`n: ${formatNumber(result.n)}`} />
-        <Chip label={`Variables: ${formatNumber(result.n_variables)}`} />
-        <Chip label={`Factors: ${formatNumber(result.n_factors)}`} />
-        <Chip label={`Rotation: ${result.rotation || "вЂ”"}`} />
-        <Chip label={`Cumulative: ${formatPercent(result.cumulative_explained_variance)}`} />
+        <Chip label={`Переменных: ${formatNumber(result.n_variables)}`} />
+        <Chip label={`Факторов: ${formatNumber(result.n_factors)}`} />
+        <Chip label={`Вращение: ${result.rotation || "вЂ”"}`} />
+        <Chip label={`Накопленная объясненная дисперсия: ${formatPercent(result.cumulative_explained_variance)}`} />
         <Chip label={`KMO: ${formatNumber(kmo.overall)}`} />
-        <Chip label={`Bartlett p: ${formatNumber(bartlett.p_value)}`} />
+        <Chip label={`p-value Бартлетта: ${formatNumber(bartlett.p_value)}`} />
         <Chip label={`Kaiser: ${formatNumber(recommendations.kaiser_n_factors)}`} />
       </Stack>
 
@@ -660,15 +701,15 @@ function renderFactorAnalysisSection(section) {
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>KMO</Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
-          <Chip label={`Overall: ${formatNumber(kmo.overall)}`} />
+          <Chip label={`Общий KMO: ${formatNumber(kmo.overall)}`} />
           <Chip label={kmo.interpretation || "—"} />
         </Stack>
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Variable</TableCell>
+              <TableCell>Переменная</TableCell>
               <TableCell align="right">KMO</TableCell>
-              <TableCell>Interpretation</TableCell>
+              <TableCell>Интерпретация</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -684,12 +725,12 @@ function renderFactorAnalysisSection(section) {
       </Box>
 
       <Box>
-        <Typography variant="subtitle1">Bartlett&apos;s test</Typography>
+        <Typography variant="subtitle1">Критерий сферичности Бартлетта</Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ my: 1 }}>
-          <Chip label={`chi-square: ${formatNumber(bartlett.chi_square)}`} />
-          <Chip label={`dof: ${formatNumber(bartlett.dof)}`} />
+          <Chip label={`χ²: ${formatNumber(bartlett.chi_square)}`} />
+          <Chip label={`Степени свободы: ${formatNumber(bartlett.dof)}`} />
           <Chip label={`p-value: ${formatNumber(bartlett.p_value)}`} />
-          <Chip label={`Significant: ${bartlett.significant === null || bartlett.significant === undefined ? "—" : (bartlett.significant ? "да" : "нет")}`} />
+          <Chip label={`Статистически значимо: ${bartlett.significant === null || bartlett.significant === undefined ? "—" : (bartlett.significant ? "да" : "нет")}`} />
         </Stack>
         <Typography color="text.secondary" variant="body2">
           {bartlett.interpretation || "—"}
@@ -698,14 +739,14 @@ function renderFactorAnalysisSection(section) {
 
       {scree.length > 0 && (
         <Box sx={{ width: "100%", overflowX: "auto" }}>
-          <Typography variant="subtitle1" sx={{ mb: 1 }}>Scree data</Typography>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>Данные графика каменистой осыпи</Typography>
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Component</TableCell>
-                <TableCell align="right">Eigenvalue</TableCell>
-                <TableCell align="right">Explained variance</TableCell>
-                <TableCell align="right">Cumulative</TableCell>
+                <TableCell>Компонента</TableCell>
+                <TableCell align="right">Собственное значение</TableCell>
+                <TableCell align="right">Объясненная дисперсия</TableCell>
+                <TableCell align="right">Накопленная доля</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -724,14 +765,14 @@ function renderFactorAnalysisSection(section) {
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Explained variance
+          Объясненная дисперсия
         </Typography>
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Factor</TableCell>
-              <TableCell align="right">Value</TableCell>
-              <TableCell align="right">Percent</TableCell>
+              <TableCell>Фактор</TableCell>
+              <TableCell align="right">Значение</TableCell>
+              <TableCell align="right">Доля</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -748,13 +789,13 @@ function renderFactorAnalysisSection(section) {
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Loadings
+          Факторные нагрузки
         </Typography>
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Variable</TableCell>
-              <TableCell align="right">Communality</TableCell>
+              <TableCell>Переменная</TableCell>
+              <TableCell align="right">Общность</TableCell>
               {factorNames.map((factor) => (
                 <TableCell key={factor} align="right">{factor}</TableCell>
               ))}
@@ -779,19 +820,19 @@ function renderFactorAnalysisSection(section) {
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Eigenvalues
+          Собственные значения
         </Typography>
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Component</TableCell>
-              <TableCell align="right">Eigenvalue</TableCell>
+              <TableCell>Компонента</TableCell>
+              <TableCell align="right">Собственное значение</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {eigenvalues.map((value, index) => (
               <TableRow key={index}>
-                <TableCell>Component {index + 1}</TableCell>
+                <TableCell>Компонента {index + 1}</TableCell>
                 <TableCell align="right">{formatNumber(value)}</TableCell>
               </TableRow>
             ))}
@@ -802,12 +843,12 @@ function renderFactorAnalysisSection(section) {
       {factorScores.length > 0 && (
         <Box sx={{ width: "100%", overflowX: "auto" }}>
           <Alert severity="info" sx={{ mb: 1 }}>
-            Factor scores рассчитаны; в интерфейсе показаны первые 20.
+            Факторные значения рассчитаны; в интерфейсе показаны первые 20.
           </Alert>
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>response_id</TableCell>
+                <TableCell>ID ответа</TableCell>
                 {factorScores[0]?.scores?.map((score) => (
                   <TableCell key={score.factor} align="right">{score.factor}</TableCell>
                 ))}
@@ -947,12 +988,12 @@ function renderClusterAnalysisSection(section) {
   return (
     <Stack spacing={3}>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-        <Chip label={`Method: ${result.method || "—"}`} />
+        <Chip label={`Метод: ${result.method || "—"}`} />
         <Chip label={`n: ${formatNumber(result.n)}`} />
-        <Chip label={`Variables: ${formatNumber(result.n_variables)}`} />
-        <Chip label={`Clusters: ${formatNumber(result.n_clusters)}`} />
-        <Chip label={`Standardize: ${result.standardize ? "yes" : "no"}`} />
-        <Chip label={`Inertia: ${formatNumber(result.inertia)}`} />
+        <Chip label={`Переменных: ${formatNumber(result.n_variables)}`} />
+        <Chip label={`Кластеров: ${formatNumber(result.n_clusters)}`} />
+        <Chip label={`Стандартизация: ${result.standardize ? "да" : "нет"}`} />
+        <Chip label={`Инерция: ${formatNumber(result.inertia)}`} />
       </Stack>
 
       {(result.warnings || []).map((warning) => (
@@ -965,9 +1006,9 @@ function renderClusterAnalysisSection(section) {
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Cluster</TableCell>
-              <TableCell align="right">Size</TableCell>
-              <TableCell align="right">Percent</TableCell>
+              <TableCell>Кластер</TableCell>
+              <TableCell align="right">Размер</TableCell>
+              <TableCell align="right">Доля</TableCell>
               {variables.map((variable) => (
                 <TableCell key={variable.code} align="right">
                   {variable.label || variable.code}
@@ -993,7 +1034,7 @@ function renderClusterAnalysisSection(section) {
       </Box>
 
       <Typography color="text.secondary" variant="body2">
-        Assignments are stored in the result for export/API use; this view shows cluster summary only.
+        Принадлежность респондентов к кластерам сохранена в результате для экспорта и API; в этом представлении показана только сводка по кластерам.
       </Typography>
 
       <ClusterTopFeaturesChart result={result} />
@@ -1010,7 +1051,7 @@ function renderPostHocComparisons(postHoc) {
   return (
     <Box sx={{ width: "100%", overflowX: "auto" }}>
       <Typography variant="subtitle1" sx={{ mb: 1 }}>
-        Post-hoc сравнения
+        Апостериорные сравнения
       </Typography>
 
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
@@ -1030,13 +1071,13 @@ function renderPostHocComparisons(postHoc) {
               <TableCell>Группа A</TableCell>
               <TableCell>Группа B</TableCell>
               <TableCell>Тест</TableCell>
-              <TableCell align="right">Statistic</TableCell>
+              <TableCell align="right">Статистика критерия</TableCell>
               <TableCell align="right">p-value</TableCell>
-              <TableCell align="right">p adjusted</TableCell>
-              <TableCell>Significant</TableCell>
-              <TableCell align="right">Difference</TableCell>
-              <TableCell align="right">Effect size</TableCell>
-              <TableCell>Interpretation</TableCell>
+              <TableCell align="right">Скорректированное p</TableCell>
+              <TableCell>Статистически значимо</TableCell>
+              <TableCell align="right">Разность</TableCell>
+              <TableCell align="right">Размер эффекта</TableCell>
+              <TableCell>Интерпретация</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -1075,8 +1116,8 @@ function renderGroupComparisonSection(section) {
         <Chip label={`Метод: ${result.method_name || result.method || "—"}`} />
         <Chip label={`n: ${formatNumber(result.n)}`} />
         <Chip label={`Групп: ${formatNumber(result.n_groups)}`} />
-        <Chip label={`alpha: ${formatNumber(result.alpha)}`} />
-        <Chip label={`statistic: ${formatNumber(test.statistic)}`} />
+        <Chip label={`α: ${formatNumber(result.alpha)}`} />
+        <Chip label={`Статистика критерия: ${formatNumber(test.statistic)}`} />
         <Chip label={`p-value: ${formatNumber(test.p_value)}`} />
         <Chip label={`Статистически значимо: ${test.significant ? "да" : "нет"}`} />
       </Stack>
@@ -1087,8 +1128,8 @@ function renderGroupComparisonSection(section) {
 
       {effectSize && (
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-          <Chip label={`Effect size: ${effectSize.type}`} />
-          <Chip label={`value: ${formatNumber(effectSize.value)}`} />
+          <Chip label={`Размер эффекта: ${effectSize.type}`} />
+          <Chip label={`Значение: ${formatNumber(effectSize.value)}`} />
           <Chip label={effectSize.interpretation || "—"} />
         </Stack>
       )}
@@ -1110,9 +1151,9 @@ function renderGroupComparisonSection(section) {
               <TableCell align="right">n</TableCell>
               <TableCell align="right">Среднее</TableCell>
               <TableCell align="right">Медиана</TableCell>
-              <TableCell align="right">Std</TableCell>
-              <TableCell align="right">Min</TableCell>
-              <TableCell align="right">Max</TableCell>
+              <TableCell align="right">Стандартное отклонение</TableCell>
+              <TableCell align="right">Мин</TableCell>
+              <TableCell align="right">Макс</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -1147,8 +1188,8 @@ function renderTimeDistributionTable(title, rows) {
         <TableHead>
           <TableRow>
             <TableCell>Интервал</TableCell>
-            <TableCell align="right">Count</TableCell>
-            <TableCell align="right">Percent</TableCell>
+            <TableCell align="right">Частота</TableCell>
+            <TableCell align="right">Доля</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -1191,13 +1232,13 @@ function renderTimeAnalysisSection(section) {
   return (
     <Stack spacing={3}>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-        <Chip label={`Started: ${formatNumber(summary.total_started)}`} />
-        <Chip label={`Completed: ${formatNumber(summary.total_completed)}`} />
-        <Chip label={`Screened out: ${formatNumber(summary.total_screened_out)}`} />
-        <Chip label={`Completion rate: ${formatNumber(summary.completion_rate)}%`} />
-        <Chip label={`Screenout rate: ${formatNumber(summary.screenout_rate)}%`} />
-        <Chip label={`Avg completion: ${formatDurationSeconds(summary.average_completion_time_seconds)}`} />
-        <Chip label={`Avg screenout: ${formatDurationSeconds(summary.average_screenout_time_seconds)}`} />
+        <Chip label={`Начали: ${formatNumber(summary.total_started)}`} />
+        <Chip label={`Полностью завершили: ${formatNumber(summary.total_completed)}`} />
+        <Chip label={`Отсеяны: ${formatNumber(summary.total_screened_out)}`} />
+        <Chip label={`Доля полных завершений: ${formatNumber(summary.completion_rate)}%`} />
+        <Chip label={`Доля отсева: ${formatNumber(summary.screenout_rate)}%`} />
+        <Chip label={`Среднее время прохождения: ${formatDurationSeconds(summary.average_completion_time_seconds)}`} />
+        <Chip label={`Среднее время до отсева: ${formatDurationSeconds(summary.average_screenout_time_seconds)}`} />
       </Stack>
 
       {(result.warnings || []).map((warning) => (
@@ -1216,7 +1257,7 @@ function renderTimeAnalysisSection(section) {
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Summary
+          Сводные показатели
         </Typography>
         <Table size="small">
           <TableHead>
@@ -1228,7 +1269,7 @@ function renderTimeAnalysisSection(section) {
           <TableBody>
             {summaryRows.map(([label, value]) => (
               <TableRow key={label}>
-                <TableCell>{label}</TableCell>
+                <TableCell>{TIME_SUMMARY_LABELS[label] || label}</TableCell>
                 <TableCell align="right">{value}</TableCell>
               </TableRow>
             ))}
@@ -1236,20 +1277,20 @@ function renderTimeAnalysisSection(section) {
         </Table>
       </Box>
 
-      {renderTimeDistributionTable("Completion time distribution", result.completion_time_distribution || [])}
-      {renderTimeDistributionTable("Screenout time distribution", result.screenout_time_distribution || [])}
+      {renderTimeDistributionTable("Распределение времени полного прохождения", result.completion_time_distribution || [])}
+      {renderTimeDistributionTable("Распределение времени до отсева", result.screenout_time_distribution || [])}
 
       {!!(result.screenout_reasons || []).length && (
         <Box sx={{ width: "100%", overflowX: "auto" }}>
           <Typography variant="subtitle1" sx={{ mb: 1 }}>
-            Screenout reasons
+            Причины отсева
           </Typography>
           <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Причина</TableCell>
                 <TableCell align="right">Количество</TableCell>
-                <TableCell align="right">% от screened out</TableCell>
+                <TableCell align="right">% от отсеянных</TableCell>
                 <TableCell align="right">Среднее время до отсева</TableCell>
               </TableRow>
             </TableHead>
@@ -1270,19 +1311,19 @@ function renderTimeAnalysisSection(section) {
       {!!(result.group_breakdown || []).length && (
         <Box sx={{ width: "100%", overflowX: "auto" }}>
           <Typography variant="subtitle1" sx={{ mb: 1 }}>
-            Group breakdown
+            Разбивка по группам
           </Typography>
           <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Группа</TableCell>
-                <TableCell align="right">Started</TableCell>
-                <TableCell align="right">Completed</TableCell>
-                <TableCell align="right">Screened out</TableCell>
-                <TableCell align="right">Completion rate</TableCell>
-                <TableCell align="right">Screenout rate</TableCell>
-                <TableCell align="right">Median completion</TableCell>
-                <TableCell align="right">Median screenout</TableCell>
+                <TableCell align="right">Начали</TableCell>
+                <TableCell align="right">Полностью завершили</TableCell>
+                <TableCell align="right">Отсеяны</TableCell>
+                <TableCell align="right">Доля полных завершений</TableCell>
+                <TableCell align="right">Доля отсева</TableCell>
+                <TableCell align="right">Медианное время прохождения</TableCell>
+                <TableCell align="right">Медианное время до отсева</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1305,12 +1346,12 @@ function renderTimeAnalysisSection(section) {
 
       {groupTimeTest && (
         <Stack spacing={1}>
-          <Typography variant="subtitle1">Group time test</Typography>
+          <Typography variant="subtitle1">Критерий различий времени между группами</Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            <Chip label={`Method: ${groupTimeTest.method || "—"}`} />
-            <Chip label={`Statistic: ${formatNumber(groupTimeTest.statistic)}`} />
+            <Chip label={`Метод: ${groupTimeTest.method || "—"}`} />
+            <Chip label={`Статистика критерия: ${formatNumber(groupTimeTest.statistic)}`} />
             <Chip label={`p-value: ${formatNumber(groupTimeTest.p_value)}`} />
-            <Chip label={`Significant: ${groupTimeTest.significant ? "да" : "нет"}`} />
+            <Chip label={`Статистически значимо: ${groupTimeTest.significant ? "да" : "нет"}`} />
           </Stack>
           <Typography color="text.secondary" variant="body2">
             {groupTimeTest.interpretation || "—"}
@@ -1329,11 +1370,11 @@ function renderReliabilityAnalysisSection(section) {
   return (
     <Stack spacing={3}>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-        <Chip label="Метод: Cronbach’s alpha" />
+        <Chip label="Метод: α Кронбаха" />
         <Chip label={`n: ${formatNumber(result.n)}`} />
-        <Chip label={`items: ${formatNumber(result.n_items)}`} />
-        <Chip label={`alpha: ${formatNumber(result.alpha)}`} />
-        <Chip label={`standardized alpha: ${formatNumber(result.standardized_alpha)}`} />
+        <Chip label={`Пунктов: ${formatNumber(result.n_items)}`} />
+        <Chip label={`α Кронбаха: ${formatNumber(result.alpha)}`} />
+        <Chip label={`Стандартизованная α: ${formatNumber(result.standardized_alpha)}`} />
         <Chip label={result.interpretation || "—"} />
       </Stack>
 
@@ -1345,17 +1386,17 @@ function renderReliabilityAnalysisSection(section) {
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Item statistics
+          Статистики пунктов
         </Typography>
         <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell>Пункт</TableCell>
-              <TableCell align="right">Mean</TableCell>
-              <TableCell align="right">Variance</TableCell>
-              <TableCell align="right">Std</TableCell>
-              <TableCell align="right">Item-total correlation</TableCell>
-              <TableCell align="right">Alpha if deleted</TableCell>
+              <TableCell align="right">Среднее</TableCell>
+              <TableCell align="right">Дисперсия</TableCell>
+              <TableCell align="right">Стандартное отклонение</TableCell>
+              <TableCell align="right">Корреляция пункта с суммарной шкалой</TableCell>
+              <TableCell align="right">α при удалении пункта</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -1375,7 +1416,7 @@ function renderReliabilityAnalysisSection(section) {
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Inter-item correlations
+          Межпунктовые корреляции
         </Typography>
         <Table size="small">
           <TableHead>
@@ -1428,10 +1469,10 @@ function renderScaleIndexSection(section) {
     <Stack spacing={3}>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
         <Chip label={`Метод: ${result.method || "scale_index"}`} />
-        <Chip label={`n scored: ${formatNumber(result.n_scored)}`} />
-        <Chip label={`items: ${formatNumber(result.n_items)}`} />
-        <Chip label={`calculation: ${result.calculation || "—"}`} />
-        <Chip label={`alpha: ${formatNumber(reliability.alpha)}`} />
+        <Chip label={`Рассчитано индексов: ${formatNumber(result.n_scored)}`} />
+        <Chip label={`Пунктов: ${formatNumber(result.n_items)}`} />
+        <Chip label={`Способ расчета: ${result.calculation || "—"}`} />
+        <Chip label={`α Кронбаха: ${formatNumber(reliability.alpha)}`} />
         <Chip label={reliability.interpretation || "—"} />
       </Stack>
 
@@ -1446,7 +1487,7 @@ function renderScaleIndexSection(section) {
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Score summary
+          Сводка индекса
         </Typography>
         <Table size="small">
           <TableHead>
@@ -1458,7 +1499,7 @@ function renderScaleIndexSection(section) {
           <TableBody>
             {summaryRows.map(([label, value]) => (
               <TableRow key={label}>
-                <TableCell>{label}</TableCell>
+                <TableCell>{SCALE_SUMMARY_LABELS[label] || label}</TableCell>
                 <TableCell align="right">{formatNumber(value)}</TableCell>
               </TableRow>
             ))}
@@ -1468,20 +1509,20 @@ function renderScaleIndexSection(section) {
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Item statistics
+          Статистики пунктов
         </Typography>
         <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell>Пункт</TableCell>
-              <TableCell align="center">Reverse</TableCell>
+              <TableCell align="center">Обратное кодирование</TableCell>
               <TableCell align="right">n</TableCell>
-              <TableCell align="right">missing</TableCell>
-              <TableCell align="right">mean</TableCell>
-              <TableCell align="right">std</TableCell>
-              <TableCell align="right">min</TableCell>
-              <TableCell align="right">max</TableCell>
-              <TableCell align="right">item-total correlation</TableCell>
+              <TableCell align="right">Пропуски</TableCell>
+              <TableCell align="right">Среднее</TableCell>
+              <TableCell align="right">Стандартное отклонение</TableCell>
+              <TableCell align="right">Мин</TableCell>
+              <TableCell align="right">Макс</TableCell>
+              <TableCell align="right">Корреляция пункта с суммарной шкалой</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -1504,30 +1545,30 @@ function renderScaleIndexSection(section) {
 
       <Box>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Reliability
+          Надежность
         </Typography>
         {result.reliability ? (
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            <Chip label={`alpha: ${formatNumber(reliability.alpha)}`} />
-            <Chip label={`standardized alpha: ${formatNumber(reliability.standardized_alpha)}`} />
-            <Chip label={`mean inter-item correlation: ${formatNumber(reliability.mean_inter_item_correlation)}`} />
+            <Chip label={`α Кронбаха: ${formatNumber(reliability.alpha)}`} />
+            <Chip label={`Стандартизованная α: ${formatNumber(reliability.standardized_alpha)}`} />
+            <Chip label={`Средняя межпунктовая корреляция: ${formatNumber(reliability.mean_inter_item_correlation)}`} />
             <Chip label={reliability.interpretation || "—"} />
           </Stack>
         ) : (
-          <Typography color="text.secondary">Cronbach’s alpha не рассчитана.</Typography>
+          <Typography color="text.secondary">α Кронбаха не рассчитана.</Typography>
         )}
       </Box>
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Score distribution
+          Распределение значений индекса
         </Typography>
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>bucket</TableCell>
-              <TableCell align="right">count</TableCell>
-              <TableCell align="right">percent</TableCell>
+              <TableCell>Интервал</TableCell>
+              <TableCell align="right">Частота</TableCell>
+              <TableCell align="right">Доля</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -1549,10 +1590,10 @@ function renderScaleIndexSection(section) {
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>response_id</TableCell>
-              <TableCell align="right">score</TableCell>
-              <TableCell align="right">answered_items</TableCell>
-              <TableCell align="right">missing_items</TableCell>
+              <TableCell>ID ответа</TableCell>
+              <TableCell align="right">Значение индекса</TableCell>
+              <TableCell align="right">Отвеченных пунктов</TableCell>
+              <TableCell align="right">Пропущенных пунктов</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -1590,8 +1631,8 @@ function renderMissingShortTable(title, rows, helperText = "") {
             <TableCell>Вопрос</TableCell>
             <TableCell align="right">Видели</TableCell>
             <TableCell align="right">Пропустили</TableCell>
-            <TableCell align="right">Skip rate among shown</TableCell>
-            <TableCell align="right">Visibility rate</TableCell>
+            <TableCell align="right">Доля пропусков среди показанных</TableCell>
+            <TableCell align="right">Доля видимости</TableCell>
             <TableCell>Тип пропуска</TableCell>
           </TableRow>
         </TableHead>
@@ -1628,11 +1669,11 @@ function renderMissingAnalysisSection(section) {
   return (
     <Stack spacing={3}>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-        <Chip label={`completed normal: ${formatNumber(summary.total_completed_normal)}`} />
-        <Chip label={`questions: ${formatNumber(summary.questions_count)}`} />
-        <Chip label={`overall skip among shown: ${formatNumber(summary.overall_skip_rate_shown)}%`} />
-        <Chip label={`high missing: ${formatNumber(summary.questions_with_high_missing)}`} />
-        <Chip label={`low visibility: ${formatNumber(summary.questions_with_low_visibility)}`} />
+        <Chip label={`Завершили без отсева: ${formatNumber(summary.total_completed_normal)}`} />
+        <Chip label={`Вопросов: ${formatNumber(summary.questions_count)}`} />
+        <Chip label={`Общая доля пропусков среди показанных: ${formatNumber(summary.overall_skip_rate_shown)}%`} />
+        <Chip label={`Вопросов с высокой долей пропусков: ${formatNumber(summary.questions_with_high_missing)}`} />
+        <Chip label={`Вопросов с низкой видимостью: ${formatNumber(summary.questions_with_low_visibility)}`} />
       </Stack>
 
       <Alert severity="info">
@@ -1647,7 +1688,7 @@ function renderMissingAnalysisSection(section) {
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Summary
+          Сводные показатели
         </Typography>
         <Table size="small">
           <TableHead>
@@ -1659,7 +1700,7 @@ function renderMissingAnalysisSection(section) {
           <TableBody>
             {summaryRows.map(([label, value]) => (
               <TableRow key={label}>
-                <TableCell>{label}</TableCell>
+                <TableCell>{MISSING_SUMMARY_LABELS[label] || label}</TableCell>
                 <TableCell align="right">{value}</TableCell>
               </TableRow>
             ))}
@@ -1669,20 +1710,20 @@ function renderMissingAnalysisSection(section) {
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Questions
+          Вопросы
         </Typography>
         <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell>Вопрос</TableCell>
               <TableCell>Тип</TableCell>
-              <TableCell>Required</TableCell>
+              <TableCell>Обязательный</TableCell>
               <TableCell align="right">Видели</TableCell>
               <TableCell align="right">Не видели из-за ветвления</TableCell>
               <TableCell align="right">Ответили</TableCell>
               <TableCell align="right">Пропустили</TableCell>
-              <TableCell align="right">Skip rate among shown</TableCell>
-              <TableCell align="right">Visibility rate</TableCell>
+              <TableCell align="right">Доля пропусков среди показанных</TableCell>
+              <TableCell align="right">Доля видимости</TableCell>
               <TableCell>Интерпретация</TableCell>
             </TableRow>
           </TableHead>
@@ -1705,9 +1746,9 @@ function renderMissingAnalysisSection(section) {
         </Table>
       </Box>
 
-      {renderMissingShortTable("Top skipped questions", result.top_skipped_questions || [])}
+      {renderMissingShortTable("Вопросы с наибольшей долей пропусков", result.top_skipped_questions || [])}
       {renderMissingShortTable(
-        "Low visibility questions",
+        "Вопросы с низкой видимостью",
         result.low_visibility_questions || [],
         "Это не обязательно проблема качества, часто связано с ветвлением.",
       )}
@@ -1717,28 +1758,28 @@ function renderMissingAnalysisSection(section) {
           Некоторые вопросы не были показаны ни одному завершившему респонденту. Проверьте условия ветвления.
         </Alert>
       )}
-      {renderMissingShortTable("Never shown questions", result.never_shown_questions || [])}
+      {renderMissingShortTable("Вопросы, ни разу не показанные респондентам", result.never_shown_questions || [])}
 
       {!!(result.required_questions_with_missing || []).length && (
         <Alert severity="warning">
           Есть обязательные вопросы с реальными пропусками среди респондентов, которым вопрос был показан.
         </Alert>
       )}
-      {renderMissingShortTable("Required questions with missing", result.required_questions_with_missing || [])}
+      {renderMissingShortTable("Обязательные вопросы с пропусками", result.required_questions_with_missing || [])}
 
       {!!(result.groups || []).length && (
         <Box sx={{ width: "100%", overflowX: "auto" }}>
           <Typography variant="subtitle1" sx={{ mb: 1 }}>
-            Group summary
+            Сводка по группам
           </Typography>
           <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Группа</TableCell>
-                <TableCell align="right">Shown slots</TableCell>
-                <TableCell align="right">Answered slots</TableCell>
-                <TableCell align="right">Skipped slots</TableCell>
-                <TableCell align="right">Skip rate among shown</TableCell>
+                <TableCell align="right">Показано вопросов</TableCell>
+                <TableCell align="right">Получено ответов</TableCell>
+                <TableCell align="right">Пропущено показанных вопросов</TableCell>
+                <TableCell align="right">Доля пропусков среди показанных</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1759,11 +1800,11 @@ function renderMissingAnalysisSection(section) {
       {screenedOut && (
         <Box>
           <Typography variant="subtitle1" sx={{ mb: 1 }}>
-            Screened out context
+            Контекст отсева
           </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
-            <Chip label={`screened out: ${formatNumber(screenedOut.total_screened_out)}`} />
-            <Chip label={`avg seen before screenout: ${formatNumber(screenedOut.average_seen_questions_before_screenout)}`} />
+            <Chip label={`Отсеяны: ${formatNumber(screenedOut.total_screened_out)}`} />
+            <Chip label={`Среднее число увиденных вопросов до отсева: ${formatNumber(screenedOut.average_seen_questions_before_screenout)}`} />
           </Stack>
           <Typography color="text.secondary" variant="body2">
             {screenedOut.note}

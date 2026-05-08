@@ -33,6 +33,38 @@ def _is_numeric(value: Any) -> bool:
     return True
 
 
+QUESTION_TYPE_LABELS = {
+    "single": "Одиночный выбор",
+    "multi": "Множественный выбор",
+    "dropdown": "Выпадающий список",
+    "yesno": "Да/нет",
+    "text": "Текстовый ответ",
+    "date": "Дата",
+    "number": "Числовой ответ",
+    "scale": "Шкала",
+    "matrix_single": "Матрица с одиночным выбором",
+    "matrix_multi": "Матрица с множественным выбором",
+    "ranking": "Ранжирование",
+}
+
+MISSING_TYPE_LABELS = {
+    "not_shown": "Не показывался",
+    "no_missing": "Без пропусков",
+    "branching_limited": "Ограниченная видимость из-за ветвления",
+    "high_missing": "Высокая доля пропусков",
+    "moderate_missing": "Умеренная доля пропусков",
+    "low_missing": "Низкая доля пропусков",
+}
+
+
+def _question_type_label(qtype):
+    return QUESTION_TYPE_LABELS.get(qtype, str(qtype) if qtype is not None else "")
+
+
+def _missing_type_label(missing_type):
+    return MISSING_TYPE_LABELS.get(missing_type, str(missing_type) if missing_type is not None else "")
+
+
 def get_column(rows, code):
     return [row.get(code) for row in rows]
 
@@ -85,7 +117,7 @@ def _manual_correlation(x_values, y_values, method):
 
 def compute_correlation_matrix(rows, variables, method="pearson") -> dict:
     if method not in ("pearson", "spearman", "kendall"):
-        raise ValueError("Correlation method must be 'pearson', 'spearman', or 'kendall'.")
+        raise ValueError("Метод корреляции должен быть одним из: pearson, spearman, kendall.")
 
     matrix = []
     p_values = []
@@ -124,7 +156,7 @@ def compute_correlation_matrix(rows, variables, method="pearson") -> dict:
                 p_value = None if math.isnan(result.pvalue) else float(result.pvalue)
             else:
                 if method == "kendall":
-                    raise ValueError("Kendall correlation requires scipy to be installed.")
+                    raise ValueError("Для корреляции Кендалла требуется установленный пакет scipy.")
                 coefficient = _manual_correlation(x_values, y_values, method)
                 p_value = None
 
@@ -148,7 +180,7 @@ def _sort_values(values):
     return sorted(values, key=lambda value: (str(type(value)), value))
 
 
-def compute_crosstab(rows, row_var_code, col_var_code) -> dict:
+def compute_crosstab(rows, row_var_code, col_var_code, row_variable=None, column_variable=None) -> dict:
     counts = defaultdict(Counter)
     row_totals = Counter()
     column_values = set()
@@ -172,20 +204,24 @@ def compute_crosstab(rows, row_var_code, col_var_code) -> dict:
         for column_value in ordered_column_values:
             count = counts[row_value][column_value]
             columns.append({
-                "value": column_value,
+                "raw_value": column_value,
+                "value": _label_for_value(column_value, getattr(column_variable, "value_labels", None)),
                 "count": count,
                 "percent_row": round(count / row_total * 100, 2) if row_total else 0,
                 "percent_total": round(count / total * 100, 2) if total else 0,
             })
         result_rows.append({
-            "value": row_value,
+            "raw_value": row_value,
+            "value": _label_for_value(row_value, getattr(row_variable, "value_labels", None)),
             "columns": columns,
             "total": row_total,
         })
 
     return {
-        "row_variable": row_var_code,
-        "column_variable": col_var_code,
+        "row_variable": getattr(row_variable, "label", None) or row_var_code,
+        "column_variable": getattr(column_variable, "label", None) or col_var_code,
+        "row_variable_code": row_var_code,
+        "column_variable_code": col_var_code,
         "rows": result_rows,
         "total": total,
     }
@@ -214,31 +250,31 @@ def _contingency_from_crosstab(crosstab_result):
 
 def compute_correspondence_analysis(crosstab_result, row_variable=None, column_variable=None, n_dimensions=2) -> dict:
     if np is None:
-        raise ValueError("Correspondence analysis requires numpy to be installed.")
+        raise ValueError("Для анализа соответствий требуется установленный пакет numpy.")
 
     observed = _contingency_from_crosstab(crosstab_result)
     if len(observed) < 2 or not observed or len(observed[0]) < 2:
-        raise ValueError("Correspondence analysis requires at least a 2x2 crosstab.")
+        raise ValueError("Для анализа соответствий нужна таблица сопряженности размером не менее 2x2.")
 
     matrix = np.array(observed, dtype=float)
     n_rows, n_columns = matrix.shape
     grand_total = float(np.sum(matrix))
     if grand_total <= 0:
-        raise ValueError("Correspondence analysis requires non-empty crosstab counts.")
+        raise ValueError("Для анализа соответствий нужна непустая таблица сопряженности.")
 
     row_sums = np.sum(matrix, axis=1)
     col_sums = np.sum(matrix, axis=0)
     if np.any(row_sums == 0):
-        raise ValueError("Correspondence analysis cannot use crosstab rows with zero total.")
+        raise ValueError("Анализ соответствий невозможен: в таблице есть строка с нулевой суммой.")
     if np.any(col_sums == 0):
-        raise ValueError("Correspondence analysis cannot use crosstab columns with zero total.")
+        raise ValueError("Анализ соответствий невозможен: в таблице есть столбец с нулевой суммой.")
 
     max_dimensions = min(n_rows - 1, n_columns - 1)
     warnings = []
     dims = n_dimensions
     if dims > max_dimensions:
         dims = max_dimensions
-        warnings.append("n_dimensions was reduced to maximum available dimensions.")
+        warnings.append("Число измерений уменьшено до максимально доступного для этой таблицы.")
 
     p_matrix = matrix / grand_total
     row_masses = np.sum(p_matrix, axis=1)
@@ -250,12 +286,12 @@ def compute_correspondence_analysis(crosstab_result, row_variable=None, column_v
     eigenvalues = singular_values ** 2
     total_inertia = float(np.sum(eigenvalues))
     if total_inertia == 0:
-        raise ValueError("No association structure detected; correspondence analysis inertia is zero.")
+        raise ValueError("Структура связи не обнаружена: инерция анализа соответствий равна нулю.")
 
     row_coordinates_all = (u_matrix * singular_values) / np.sqrt(row_masses[:, None])
     column_coordinates_all = (vt_matrix.T * singular_values) / np.sqrt(col_masses[:, None])
     selected_eigenvalues = eigenvalues[:dims]
-    dimension_names = [f"Dim {index + 1}" for index in range(dims)]
+    dimension_names = [f"Измерение {index + 1}" for index in range(dims)]
 
     row_values = [row.get("value") for row in crosstab_result.get("rows") or []]
     column_values = []
@@ -303,11 +339,11 @@ def compute_correspondence_analysis(crosstab_result, row_variable=None, column_v
         "n_dimensions": dims,
         "total_inertia": total_inertia,
         "row_variable": {
-            "code": row_variable.code if row_variable else crosstab_result.get("row_variable"),
+            "code": row_variable.code if row_variable else crosstab_result.get("row_variable_code"),
             "label": row_variable.label if row_variable else crosstab_result.get("row_variable"),
         },
         "column_variable": {
-            "code": column_variable.code if column_variable else crosstab_result.get("column_variable"),
+            "code": column_variable.code if column_variable else crosstab_result.get("column_variable_code"),
             "label": column_variable.label if column_variable else crosstab_result.get("column_variable"),
         },
         "dimensions": dimensions,
@@ -341,7 +377,7 @@ def compute_correspondence_analysis(crosstab_result, row_variable=None, column_v
 def compute_chi_square(crosstab_result) -> dict:
     observed = _contingency_from_crosstab(crosstab_result)
     if len(observed) < 2 or not observed or len(observed[0]) < 2:
-        raise ValueError("Chi-square requires at least a 2x2 crosstab.")
+        raise ValueError("Для χ²-критерия нужна таблица сопряженности размером не менее 2x2.")
 
     if stats is not None:
         chi2, p_value, dof, expected = stats.chi2_contingency(observed)
@@ -356,7 +392,7 @@ def compute_chi_square(crosstab_result) -> dict:
     column_totals = [sum(observed[row_index][col_index] for row_index in range(len(observed))) for col_index in range(len(observed[0]))]
     total = sum(row_totals)
     if total == 0:
-        raise ValueError("Chi-square requires non-empty crosstab counts.")
+        raise ValueError("Для χ²-критерия нужна непустая таблица сопряженности.")
 
     expected = [
         [row_total * column_total / total for column_total in column_totals]
@@ -392,7 +428,7 @@ def interpret_cramers_v(value: float) -> str:
 def compute_cramers_v(crosstab_result, chi_square_result=None) -> dict:
     observed = _contingency_from_crosstab(crosstab_result)
     if not observed or not observed[0]:
-        raise ValueError("Cramer's V requires a non-empty crosstab.")
+        raise ValueError("Для V Крамера нужна непустая таблица сопряженности.")
 
     n = sum(sum(row) for row in observed)
     rows = len(observed)
@@ -400,15 +436,15 @@ def compute_cramers_v(crosstab_result, chi_square_result=None) -> dict:
     min_dimension = min(rows - 1, columns - 1)
 
     if n == 0:
-        raise ValueError("Cramer's V requires non-empty crosstab counts.")
+        raise ValueError("Для V Крамера нужна непустая таблица сопряженности.")
     if min_dimension == 0:
-        raise ValueError("Cramer's V requires at least a 2x2 crosstab.")
+        raise ValueError("Для V Крамера нужна таблица сопряженности размером не менее 2x2.")
 
     if chi_square_result is None:
         chi_square_result = compute_chi_square(crosstab_result)
     chi2 = chi_square_result.get("chi2")
     if chi2 is None:
-        raise ValueError("Cramer's V requires chi-square value.")
+        raise ValueError("Для V Крамера требуется значение χ².")
 
     value = math.sqrt(float(chi2) / (n * min_dimension))
     value = max(0.0, min(1.0, value))
@@ -435,9 +471,9 @@ def _complete_regression_cases(rows, target_code, feature_codes):
 
 def compute_linear_regression(rows, target_code, feature_codes, include_intercept=True) -> dict:
     if not feature_codes:
-        raise ValueError("Linear regression requires at least one feature.")
+        raise ValueError("Для линейной регрессии требуется хотя бы один предиктор.")
     if np is None:
-        raise ValueError("Linear regression requires numpy to be installed.")
+        raise ValueError("Для линейной регрессии требуется установленный пакет numpy.")
 
     y_values, x_values = _complete_regression_cases(rows, target_code, feature_codes)
     n = len(y_values)
@@ -445,7 +481,7 @@ def compute_linear_regression(rows, target_code, feature_codes, include_intercep
     parameter_count = feature_count + (1 if include_intercept else 0)
 
     if n <= parameter_count:
-        raise ValueError("Not enough complete cases for linear regression.")
+        raise ValueError("Недостаточно полных наблюдений для линейной регрессии.")
 
     x_matrix = np.array(x_values, dtype=float)
     if include_intercept:
@@ -454,7 +490,7 @@ def compute_linear_regression(rows, target_code, feature_codes, include_intercep
 
     coefficients, _, rank, _ = np.linalg.lstsq(x_matrix, y_vector, rcond=None)
     if rank < parameter_count:
-        raise ValueError("Regression design matrix is rank deficient.")
+        raise ValueError("Матрица плана регрессии вырождена.")
 
     predicted = x_matrix @ coefficients
     residual_sum_squares = float(np.sum((y_vector - predicted) ** 2))
@@ -488,7 +524,7 @@ def _complete_logistic_cases(rows, target_code, feature_codes):
         if any(_is_missing(value) for value in values):
             continue
         if not all(_is_numeric(value) for value in values):
-            raise ValueError("Logistic regression requires numeric target and feature values.")
+            raise ValueError("Для логистической регрессии зависимая переменная и предикторы должны быть числовыми.")
 
         y_values.append(_as_float(values[0]))
         x_values.append([_as_float(value) for value in values[1:]])
@@ -610,33 +646,33 @@ def compute_logistic_regression(
     lambda_=0.01,
 ) -> dict:
     if np is None:
-        raise ValueError("Logistic regression requires numpy to be installed.")
+        raise ValueError("Для логистической регрессии требуется установленный пакет numpy.")
     if not feature_codes:
-        raise ValueError("Logistic regression requires at least one feature.")
+        raise ValueError("Для логистической регрессии требуется хотя бы один предиктор.")
     if regularization not in ("none", "l2"):
-        raise ValueError("regularization must be either 'none' or 'l2'.")
+        raise ValueError("Параметр regularization должен быть 'none' или 'l2'.")
 
     response_ids, y_values, x_values = _complete_logistic_cases(rows, target_code, feature_codes)
     n = len(y_values)
     feature_count = len(feature_codes)
     parameter_count = feature_count + (1 if include_intercept else 0)
     if n <= parameter_count:
-        raise ValueError("Not enough complete cases for logistic regression.")
+        raise ValueError("Недостаточно полных наблюдений для логистической регрессии.")
 
     unique_y = sorted(set(y_values))
     if unique_y != [0.0, 1.0]:
-        raise ValueError("Logistic regression target must be binary (0/1) and contain both classes.")
+        raise ValueError("Зависимая переменная логистической регрессии должна быть бинарной (0/1) и содержать оба класса.")
 
     x_matrix = np.array(x_values, dtype=float)
     y_vector = np.array(y_values, dtype=float)
     if not np.all(np.isfinite(x_matrix)) or not np.all(np.isfinite(y_vector)):
-        raise ValueError("Logistic regression data contains non-finite numeric values.")
+        raise ValueError("Данные логистической регрессии содержат некорректные числовые значения.")
 
     feature_std = np.std(x_matrix, axis=0, ddof=1)
     zero_variance_indexes = np.where(feature_std == 0)[0]
     if len(zero_variance_indexes):
         labels = [feature_codes[index] for index in zero_variance_indexes]
-        raise ValueError(f"Logistic regression cannot use features with zero variance: {', '.join(labels)}.")
+        raise ValueError(f"Логистическая регрессия не может использовать предикторы с нулевой дисперсией: {', '.join(labels)}.")
 
     warnings = []
     try:
@@ -660,7 +696,7 @@ def compute_logistic_regression(
             lambda_,
         )
         method = "numpy_logistic_regression"
-        warnings.append("sklearn is not installed; numpy gradient descent fallback was used.")
+        warnings.append("Пакет sklearn не установлен; использован резервный расчет градиентным спуском на numpy.")
 
     probabilities = np.array(probabilities, dtype=float)
     predicted = probabilities >= threshold
@@ -868,10 +904,10 @@ def _time_analysis_group_test(group_breakdown, warnings):
     ]
     if len(completion_groups) < 2:
         if group_breakdown:
-            warnings.append("Not enough completion duration data for group time significance test.")
+            warnings.append("Недостаточно данных о времени завершения для проверки различий между группами.")
         return None
     if stats is None:
-        warnings.append("scipy is not installed; group time significance test is not available.")
+        warnings.append("Пакет scipy не установлен; проверка значимости различий времени между группами недоступна.")
         return {
             "method": None,
             "statistic": None,
@@ -1062,7 +1098,7 @@ def _complete_kmeans_cases(rows, variables):
         if any(_is_missing(value) for value in values):
             continue
         if not all(_is_numeric(value) for value in values):
-            raise ValueError("Cluster analysis requires all selected values to be numeric.")
+            raise ValueError("Для кластерного анализа все выбранные значения должны быть числовыми.")
         matrix.append([_as_float(value) for value in values])
         response_ids.append(row.get("response_id"))
     return response_ids, matrix
@@ -1381,23 +1417,23 @@ def compute_kmeans_clustering(
     max_profile_features=5,
 ) -> dict:
     if np is None:
-        raise ValueError("Cluster analysis requires numpy to be installed.")
+        raise ValueError("Для кластерного анализа требуется установленный пакет numpy.")
     if len(variables) < 2:
-        raise ValueError("Cluster analysis requires at least two variables.")
+        raise ValueError("Для кластерного анализа требуется не менее двух переменных.")
     if n_clusters < 2 or n_clusters > 10:
-        raise ValueError("n_clusters must be between 2 and 10.")
+        raise ValueError("Число кластеров должно быть от 2 до 10.")
     if max_iter < 10 or max_iter > 1000:
-        raise ValueError("max_iter must be between 10 and 1000.")
+        raise ValueError("max_iter должен быть от 10 до 1000.")
 
     response_ids, complete_cases = _complete_kmeans_cases(rows, variables)
     n = len(complete_cases)
     p = len(variables)
     if n < n_clusters:
-        raise ValueError("Cluster analysis requires at least as many complete cases as clusters.")
+        raise ValueError("Для кластерного анализа число полных наблюдений должно быть не меньше числа кластеров.")
 
     raw_matrix = np.array(complete_cases, dtype=float)
     if not np.all(np.isfinite(raw_matrix)):
-        raise ValueError("Cluster analysis data contains non-finite numeric values.")
+        raise ValueError("Данные кластерного анализа содержат некорректные числовые значения.")
 
     means = np.mean(raw_matrix, axis=0)
     standard_deviations = np.std(raw_matrix, axis=0, ddof=1)
@@ -1425,7 +1461,7 @@ def compute_kmeans_clustering(
         method = "sklearn_kmeans"
     except ImportError:
         labels, centers, inertia = _run_numpy_kmeans(x_matrix, n_clusters, max_iter, random_state)
-        warnings.append("sklearn is not installed; numpy fallback k-means was used.")
+        warnings.append("Пакет sklearn не установлен; использован резервный расчет k-средних на numpy.")
 
     output_centers = (centers * standard_deviations + means) if standardize else centers
     order = sorted(range(n_clusters), key=lambda index: (-int(np.sum(labels == index)), index))
@@ -1571,7 +1607,7 @@ def _interpret_eta_squared(value):
 
 def adjust_p_values(p_values, method="bonferroni"):
     if method not in ("bonferroni", "holm"):
-        raise ValueError("Unsupported p-value adjustment method.")
+        raise ValueError("Неподдерживаемый метод поправки p-значения.")
 
     adjusted = [None] * len(p_values)
     valid = [
@@ -1637,7 +1673,7 @@ def _compute_tukey_hsd(groups, ordered_group_keys, group_labels, alpha):
     try:
         from statsmodels.stats.multicomp import pairwise_tukeyhsd
     except ImportError as exc:
-        raise ValueError("Tukey HSD requires statsmodels to be installed.") from exc
+        raise ValueError("Для критерия Тьюки HSD требуется установленный пакет statsmodels.") from exc
 
     values = []
     labels = []
@@ -1708,11 +1744,11 @@ def compute_post_hoc_comparisons(
     if resolved_method == "auto":
         resolved_method = "pairwise_t_test" if method == "anova" else "pairwise_mann_whitney"
     if resolved_method == "pairwise_t_test" and method != "anova":
-        raise ValueError("Pairwise t-tests can be used only with ANOVA.")
+        raise ValueError("Попарные t-критерии можно использовать только после ANOVA.")
     if resolved_method == "pairwise_mann_whitney" and method != "kruskal_wallis":
-        raise ValueError("Pairwise Mann-Whitney tests can be used only with Kruskal-Wallis.")
+        raise ValueError("Попарные критерии Манна-Уитни можно использовать только после критерия Краскела-Уоллиса.")
     if resolved_method == "tukey_hsd" and method != "anova":
-        raise ValueError("Tukey HSD can be used only with ANOVA.")
+        raise ValueError("Критерий Тьюки HSD можно использовать только после ANOVA.")
 
     if resolved_method == "tukey_hsd":
         comparisons = _compute_tukey_hsd(groups, ordered_group_keys, group_labels, alpha)
@@ -1817,9 +1853,9 @@ def compute_group_comparison(
     p_adjust="bonferroni",
 ) -> dict:
     if stats is None:
-        raise ValueError("Group comparison requires scipy to be installed.")
+        raise ValueError("Для сравнения групп требуется установленный пакет scipy.")
     if method not in ("t_test", "anova", "mann_whitney", "kruskal_wallis"):
-        raise ValueError("Unsupported group comparison method.")
+        raise ValueError("Неподдерживаемый метод сравнения групп.")
 
     groups = defaultdict(list)
     warnings = []
@@ -1829,7 +1865,7 @@ def compute_group_comparison(
         if _is_missing(group_value) or _is_missing(value):
             continue
         if not _is_numeric(value):
-            raise ValueError("Group comparison value variable must contain numeric values.")
+            raise ValueError("Зависимая переменная для сравнения групп должна содержать числовые значения.")
         groups[group_value].append(_as_float(value))
 
     ordered_group_keys = _sort_values(groups.keys())
@@ -1838,15 +1874,15 @@ def compute_group_comparison(
     n = sum(len(values) for values in group_values)
 
     if n_groups < 2:
-        raise ValueError("Group comparison requires at least two groups with complete data.")
+        raise ValueError("Для сравнения групп нужны как минимум две группы с полными данными.")
     if any(len(values) < 2 for values in group_values):
-        raise ValueError("Each group must contain at least two observations.")
+        raise ValueError("В каждой группе должно быть не менее двух наблюдений.")
     if method in ("t_test", "mann_whitney") and n_groups != 2:
-        raise ValueError("Selected method requires exactly two groups.")
+        raise ValueError("Выбранный метод требует ровно две группы.")
     if method in ("anova", "kruskal_wallis") and n_groups < 2:
-        raise ValueError("Selected method requires at least two groups.")
+        raise ValueError("Выбранный метод требует как минимум две группы.")
     if n <= n_groups:
-        raise ValueError("Group comparison requires more observations than groups.")
+        raise ValueError("Для сравнения групп число наблюдений должно быть больше числа групп.")
 
     if method == "t_test":
         result = stats.ttest_ind(group_values[0], group_values[1], equal_var=False, nan_policy="omit")
@@ -1873,7 +1909,7 @@ def compute_group_comparison(
         method_name = "Mann-Whitney U"
         groups_compared = [ordered_group_keys[0], ordered_group_keys[1]]
         effect_size = None
-        warnings.append("Effect size is not returned for Mann-Whitney U in MVP.")
+        warnings.append("Для критерия Манна-Уитни размер эффекта в этой версии не возвращается.")
     else:
         result = stats.kruskal(*group_values)
         method_name = "Kruskal-Wallis"
@@ -2001,34 +2037,34 @@ def _safe_corr(left, right):
 
 def compute_cronbach_alpha(rows, variables, standardize=False) -> dict:
     if np is None:
-        raise ValueError("Cronbach's alpha requires numpy to be installed.")
+        raise ValueError("Для расчета α Кронбаха требуется установленный пакет numpy.")
 
     k = len(variables)
     if k < 2:
-        raise ValueError("Cronbach's alpha requires at least two variables.")
+        raise ValueError("Для расчета α Кронбаха требуется не менее двух переменных.")
 
     complete_cases = _complete_numeric_matrix(rows, variables, "Cronbach's alpha")
     n = len(complete_cases)
     if n < 2:
-        raise ValueError("Cronbach's alpha requires at least two complete cases.")
+        raise ValueError("Для расчета α Кронбаха требуется не менее двух полных наблюдений.")
 
     x_matrix = np.array(complete_cases, dtype=float)
     if not np.all(np.isfinite(x_matrix)):
-        raise ValueError("Cronbach's alpha data contains non-finite numeric values.")
+        raise ValueError("Данные для расчета α Кронбаха содержат некорректные числовые значения.")
 
     item_variances = np.var(x_matrix, axis=0, ddof=1)
     zero_variance_indexes = np.where(item_variances == 0)[0]
     if len(zero_variance_indexes):
         labels = [variables[index].label for index in zero_variance_indexes]
-        raise ValueError(f"Cronbach's alpha cannot use variables with zero variance: {', '.join(labels)}.")
+        raise ValueError(f"α Кронбаха нельзя рассчитать для переменных с нулевой дисперсией: {', '.join(labels)}.")
 
     alpha = _cronbach_alpha_from_matrix(x_matrix)
     if alpha is None:
-        raise ValueError("Total score variance is zero; Cronbach's alpha cannot be computed.")
+        raise ValueError("Дисперсия суммарного балла равна нулю; α Кронбаха не может быть рассчитана.")
 
     correlation_matrix = np.corrcoef(x_matrix, rowvar=False)
     if not np.all(np.isfinite(correlation_matrix)):
-        raise ValueError("Inter-item correlation matrix contains non-finite values.")
+        raise ValueError("Матрица межпунктовых корреляций содержит некорректные значения.")
     standardized_alpha, mean_inter_item_correlation = _standardized_cronbach_alpha(correlation_matrix)
 
     selected_alpha = standardized_alpha if standardize else alpha
@@ -2063,13 +2099,13 @@ def compute_cronbach_alpha(rows, variables, standardize=False) -> dict:
 
     warnings = []
     if n < 30:
-        warnings.append("Small sample size for reliability analysis; interpret Cronbach's alpha cautiously.")
+        warnings.append("Малый объем выборки для анализа надежности; интерпретируйте α Кронбаха с осторожностью.")
     if selected_alpha is not None and selected_alpha > 0.95:
-        warnings.append("Very high alpha may indicate redundant items.")
+        warnings.append("Очень высокая α может указывать на избыточность пунктов.")
     if mean_inter_item_correlation is not None and mean_inter_item_correlation < 0:
-        warnings.append("Negative average inter-item correlation; selected items may not measure the same construct.")
+        warnings.append("Средняя межпунктовая корреляция отрицательна; выбранные пункты могут измерять разные конструкты.")
     if negative_item_total:
-        warnings.append("Some items have negative item-total correlation and may need reverse coding or removal.")
+        warnings.append("У некоторых пунктов отрицательная корреляция с суммарной шкалой; проверьте обратное кодирование или исключение пунктов.")
 
     return {
         "method": "cronbach_alpha",
@@ -2207,7 +2243,7 @@ def _row_item_values(row, variables, reverse_configs):
             values[variable.code] = None
             continue
         if not _is_numeric(value):
-            raise ValueError("Scale index requires numeric item values after encoding.")
+            raise ValueError("Для индекса шкалы после кодирования нужны числовые значения пунктов.")
         numeric_value = _as_float(value)
         config = reverse_configs.get(variable.question_id) or {}
         if config.get("reverse"):
@@ -2234,11 +2270,11 @@ def compute_scale_index(
     include_cronbach_alpha=True,
 ) -> dict:
     if method not in ("mean", "sum", "standardized_mean"):
-        raise ValueError("Scale index method must be mean, sum, or standardized_mean.")
+        raise ValueError("Метод индекса шкалы должен быть mean, sum или standardized_mean.")
     if len(variables) < 2:
-        raise ValueError("Scale index requires at least two expanded variables.")
+        raise ValueError("Для индекса шкалы требуется не менее двух развернутых переменных.")
     if min_answered_items > len(variables):
-        raise ValueError("min_answered_items cannot be greater than number of expanded items.")
+        raise ValueError("min_answered_items не может быть больше числа развернутых пунктов.")
 
     reverse_configs = {
         int(item["question_id"]): {
@@ -2250,9 +2286,9 @@ def compute_scale_index(
     }
     warnings = []
     if any(config.get("reverse") for config in reverse_configs.values()):
-        warnings.append("Reverse coding was applied to selected items.")
+        warnings.append("К выбранным пунктам применено обратное кодирование.")
     if min_answered_items < len(variables):
-        warnings.append("Scores were computed with partial responses; respondents with enough answered items were included.")
+        warnings.append("Индексы рассчитаны по частичным ответам; включены респонденты с достаточным числом отвеченных пунктов.")
 
     transformed_rows = []
     item_columns = defaultdict(list)
@@ -2374,14 +2410,14 @@ def compute_scale_index(
                 "warnings": reliability_result.get("warnings") or [],
             }
         except ValueError as exc:
-            warnings.append(f"Cronbach's alpha could not be computed: {exc}")
+            warnings.append(f"α Кронбаха не удалось рассчитать: {exc}")
 
     if reliability and reliability.get("alpha") is not None and reliability["alpha"] < 0.6:
-        warnings.append("Scale reliability is low; interpret composite score cautiously.")
+        warnings.append("Надежность шкалы низкая; интерпретируйте интегральный индекс с осторожностью.")
     if negative_item_total:
-        warnings.append("Some items have negative item-total correlation; check reverse coding or item consistency.")
+        warnings.append("У некоторых пунктов отрицательная корреляция с суммарной шкалой; проверьте обратное кодирование и согласованность пунктов.")
     if len(score_values) < 30:
-        warnings.append("Small sample size for scale index.")
+        warnings.append("Малый объем выборки для индекса шкалы.")
 
     return {
         "method": "scale_index",
@@ -2485,6 +2521,7 @@ def _missing_question_short_item(item):
         "skipped_count": item.get("skipped_count"),
         "skip_rate_shown": item.get("skip_rate_shown"),
         "visibility_rate": item.get("visibility_rate"),
+        "missing_type_code": item.get("missing_type_code"),
         "missing_type": item.get("missing_type"),
     }
 
@@ -2530,12 +2567,14 @@ def compute_missing_analysis(
         answer_rate_shown = round(answered_count / shown_count * 100, 2) if shown_count else None
         skip_rate_shown = round(skipped_count / shown_count * 100, 2) if shown_count else None
         answer_rate_total = round(answered_count / total_completed_normal * 100, 2) if total_completed_normal else 0
-        missing_type = classify_missing_item(shown_count, skipped_count, visibility_rate, skip_rate_shown)
+        missing_type_code = classify_missing_item(shown_count, skipped_count, visibility_rate, skip_rate_shown)
+        qtype = _question_value(question, "qtype")
 
         item = {
             "question_id": question_id,
             "label": _question_label(question),
-            "qtype": _question_value(question, "qtype"),
+            "qtype_code": qtype,
+            "qtype": _question_type_label(qtype),
             "required": bool(_question_value(question, "required", False)),
             "page_id": _question_page_id(question),
             "page_title": _question_page_title(question),
@@ -2548,7 +2587,8 @@ def compute_missing_analysis(
             "answer_rate_shown": answer_rate_shown,
             "skip_rate_shown": skip_rate_shown,
             "answer_rate_total": answer_rate_total,
-            "missing_type": missing_type,
+            "missing_type_code": missing_type_code,
+            "missing_type": _missing_type_label(missing_type_code),
         }
         item["interpretation"] = interpret_missing_item(item)
         question_items.append(item)
@@ -2629,8 +2669,8 @@ def compute_missing_analysis(
             "total_not_shown_slots": total_not_shown_slots,
             "overall_skip_rate_shown": round(total_skipped_slots / total_shown_slots * 100, 2) if total_shown_slots else None,
             "overall_visibility_rate": round(total_shown_slots / total_possible_slots * 100, 2) if total_possible_slots else 0,
-            "questions_with_high_missing": sum(1 for item in question_items if item["missing_type"] == "high_missing"),
-            "questions_with_moderate_missing": sum(1 for item in question_items if item["missing_type"] == "moderate_missing"),
+            "questions_with_high_missing": sum(1 for item in question_items if item["missing_type_code"] == "high_missing"),
+            "questions_with_moderate_missing": sum(1 for item in question_items if item["missing_type_code"] == "moderate_missing"),
             "questions_with_low_visibility": sum(1 for item in question_items if item["visibility_rate"] < LOW_VISIBILITY_RATE),
         },
         "questions": question_items,
@@ -2685,7 +2725,7 @@ def compute_kmo(correlation_matrix, variables) -> dict:
         inverse = np.linalg.inv(correlation_matrix)
     except np.linalg.LinAlgError:
         inverse = np.linalg.pinv(correlation_matrix)
-        warnings.append("Correlation matrix is singular; pseudo-inverse was used for KMO.")
+        warnings.append("Корреляционная матрица вырождена; для расчета KMO использована псевдообратная матрица.")
 
     diagonal = np.diag(inverse)
     denominator = np.sqrt(np.outer(diagonal, diagonal))
@@ -2728,9 +2768,9 @@ def compute_bartlett_sphericity(correlation_matrix, n, p) -> dict:
     determinant = float(np.linalg.det(correlation_matrix))
     if determinant <= 0:
         determinant = 1e-12
-        warnings.append("Correlation matrix determinant is non-positive; determinant was clipped for Bartlett test.")
+        warnings.append("Определитель корреляционной матрицы неположителен; для критерия Бартлетта он был ограничен малым положительным значением.")
     if n <= p:
-        warnings.append("Sample size is small relative to number of variables; Bartlett test may be unstable.")
+        warnings.append("Объем выборки мал относительно числа переменных; критерий Бартлетта может быть нестабильным.")
 
     chi_square = float(-(n - 1 - (2 * p + 5) / 6) * math.log(determinant))
     dof = int(p * (p - 1) / 2)
@@ -2738,7 +2778,7 @@ def compute_bartlett_sphericity(correlation_matrix, n, p) -> dict:
     if stats is not None:
         p_value = float(stats.chi2.sf(chi_square, dof))
     else:
-        warnings.append("scipy is not installed; Bartlett p-value is not available.")
+        warnings.append("Пакет scipy не установлен; p-значение критерия Бартлетта недоступно.")
 
     significant = None if p_value is None else bool(p_value < 0.05)
     if p_value is None:
@@ -2768,7 +2808,7 @@ def _factor_scores(response_ids, z_matrix, loadings, n_factors):
         {
             "response_id": response_id,
             "scores": [
-                {"factor": f"Factor {index + 1}", "value": float(scores[row_index, index])}
+                {"factor": f"Фактор {index + 1}", "value": float(scores[row_index, index])}
                 for index in range(n_factors)
             ],
         }
@@ -2785,34 +2825,34 @@ def compute_factor_analysis(
     include_factor_scores=False,
 ) -> dict:
     if np is None:
-        raise ValueError("Factor analysis requires numpy to be installed.")
+        raise ValueError("Для факторного анализа требуется установленный пакет numpy.")
     if rotation not in ("none", "varimax"):
-        raise ValueError("Factor analysis rotation must be 'none' or 'varimax'.")
+        raise ValueError("Метод вращения в факторном анализе должен быть 'none' или 'varimax'.")
 
     p = len(variables)
     if p < 3:
-        raise ValueError("Factor analysis requires at least three variables.")
+        raise ValueError("Для факторного анализа требуется не менее трех переменных.")
     if n_factors < 1:
-        raise ValueError("n_factors must be at least 1.")
+        raise ValueError("Число факторов должно быть не меньше 1.")
     if n_factors >= p:
-        raise ValueError("n_factors must be less than number of variables.")
+        raise ValueError("Число факторов должно быть меньше числа переменных.")
 
     response_ids, complete_cases = _complete_factor_cases_with_ids(rows, variables)
     n = len(complete_cases)
     if n <= p:
-        raise ValueError("Not enough complete cases for factor analysis.")
+        raise ValueError("Недостаточно полных наблюдений для факторного анализа.")
 
     x_matrix = np.array(complete_cases, dtype=float)
     warnings = []
     if n < max(20, 5 * p):
-        warnings.append("Small sample size for factor analysis; interpret results cautiously.")
+        warnings.append("Малый объем выборки для факторного анализа; интерпретируйте результаты с осторожностью.")
 
     means = np.mean(x_matrix, axis=0)
     standard_deviations = np.std(x_matrix, axis=0, ddof=1)
     zero_variance_indexes = np.where(standard_deviations == 0)[0]
     if len(zero_variance_indexes):
         labels = [variables[index].label for index in zero_variance_indexes]
-        raise ValueError(f"Factor analysis cannot use variables with zero variance: {', '.join(labels)}.")
+        raise ValueError(f"Факторный анализ не может использовать переменные с нулевой дисперсией: {', '.join(labels)}.")
 
     z_matrix = (x_matrix - means) / standard_deviations
     if standardize:
@@ -2820,7 +2860,7 @@ def compute_factor_analysis(
 
     correlation_matrix = np.corrcoef(x_matrix, rowvar=False)
     if not np.all(np.isfinite(correlation_matrix)):
-        raise ValueError("Factor analysis correlation matrix contains non-finite values.")
+        raise ValueError("Корреляционная матрица факторного анализа содержит некорректные числовые значения.")
 
     eigenvalues, eigenvectors = np.linalg.eigh(correlation_matrix)
     order = np.argsort(eigenvalues)[::-1]
@@ -2834,7 +2874,7 @@ def compute_factor_analysis(
         try:
             loadings = _varimax(loadings)
         except (np.linalg.LinAlgError, ValueError):
-            warnings.append("Varimax rotation failed; unrotated loadings returned.")
+            warnings.append("Вращение varimax выполнить не удалось; возвращены невращенные факторные нагрузки.")
 
     total_eigenvalue = float(np.sum(eigenvalues))
     scree = []
@@ -2865,7 +2905,7 @@ def compute_factor_analysis(
     if include_factor_scores:
         factor_scores = _factor_scores(response_ids, z_matrix, loadings, n_factors)
         if n > 500:
-            warnings.append("Factor scores are included for many responses; exports may be large.")
+            warnings.append("Факторные значения рассчитаны для большого числа ответов; экспорт может быть объемным.")
 
     return {
         "method": "pca_factor_extraction",
@@ -2886,7 +2926,7 @@ def compute_factor_analysis(
             "message": recommendation_message,
         },
         "explained_variance": [
-            {"factor": f"Factor {index + 1}", "value": value}
+            {"factor": f"Фактор {index + 1}", "value": value}
             for index, value in enumerate(explained)
         ],
         "cumulative_explained_variance": float(sum(explained)),
@@ -2895,7 +2935,7 @@ def compute_factor_analysis(
                 "variable": variable.code,
                 "label": variable.label,
                 "factors": [
-                    {"factor": f"Factor {index + 1}", "loading": float(loadings[row_index, index])}
+                    {"factor": f"Фактор {index + 1}", "loading": float(loadings[row_index, index])}
                     for index in range(n_factors)
                 ],
                 "communality": float(communalities[row_index]),

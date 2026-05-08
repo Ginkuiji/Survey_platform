@@ -40,8 +40,8 @@ def _with_metadata(survey_id: int, analysis_type: str, dataset, result: dict) ->
 def _single_variable(dataset, role: str):
     if len(dataset.variables) != 1:
         raise ValueError(
-            f"{role} variable must produce exactly one dataset column. "
-            "Use ordinal, binary, numeric, rank, or a specific single-column encoding."
+            f"Переменная «{role}» должна давать ровно один столбец данных. "
+            "Используйте порядковое, бинарное, числовое, ранговое или другое одностолбцовое кодирование."
         )
     return dataset.variables[0]
 
@@ -67,7 +67,13 @@ def run_crosstab_analysis(payload: dict) -> dict:
         )
 
     row_variable, column_variable = dataset.variables
-    result = compute_crosstab(dataset.rows, row_variable.code, column_variable.code)
+    result = compute_crosstab(
+        dataset.rows,
+        row_variable.code,
+        column_variable.code,
+        row_variable=row_variable,
+        column_variable=column_variable,
+    )
     return _with_metadata(survey_id, "crosstab", dataset, {"crosstab": result})
 
 
@@ -81,7 +87,13 @@ def run_chi_square_analysis(payload: dict) -> dict:
         )
 
     row_variable, column_variable = dataset.variables
-    crosstab = compute_crosstab(dataset.rows, row_variable.code, column_variable.code)
+    crosstab = compute_crosstab(
+        dataset.rows,
+        row_variable.code,
+        column_variable.code,
+        row_variable=row_variable,
+        column_variable=column_variable,
+    )
     chi_square = compute_chi_square(crosstab)
     cramers_v = compute_cramers_v(crosstab, chi_square)
     return _with_metadata(
@@ -105,7 +117,13 @@ def run_correspondence_analysis(payload: dict) -> dict:
         )
 
     row_variable, column_variable = dataset.variables
-    crosstab = compute_crosstab(dataset.rows, row_variable.code, column_variable.code)
+    crosstab = compute_crosstab(
+        dataset.rows,
+        row_variable.code,
+        column_variable.code,
+        row_variable=row_variable,
+        column_variable=column_variable,
+    )
     result = compute_correspondence_analysis(
         crosstab,
         row_variable=row_variable,
@@ -118,7 +136,7 @@ def run_correspondence_analysis(payload: dict) -> dict:
 def run_regression_analysis(payload: dict) -> dict:
     survey_id = payload["survey_id"]
     if payload["target"].get("encoding") == "matrix_multi_binary":
-        raise ValueError("matrix_multi can be used only as a regression feature, not as a target.")
+        raise ValueError("Матричный множественный выбор можно использовать только как предиктор регрессии, но не как зависимую переменную.")
     specs = [payload["target"], *payload["features"]]
     dataset = build_analysis_dataset(survey_id, specs)
 
@@ -160,9 +178,9 @@ def run_logistic_regression_analysis(payload: dict) -> dict:
     feature_specs = payload["features"]
 
     if target_spec.get("encoding") not in ("binary", "ordinal"):
-        raise ValueError("Logistic regression target must use binary encoding or binary ordinal choice encoding.")
+        raise ValueError("Зависимая переменная логистической регрессии должна использовать бинарное кодирование или бинарное порядковое кодирование.")
     if target_spec.get("encoding") == "matrix_multi_binary":
-        raise ValueError("matrix_multi is not supported as logistic regression target in MVP.")
+        raise ValueError("Матричный множественный выбор не поддерживается как зависимая переменная логистической регрессии.")
 
     specs = [target_spec, *feature_specs]
     dataset = build_analysis_dataset(survey_id, specs)
@@ -175,7 +193,7 @@ def run_logistic_regression_analysis(payload: dict) -> dict:
         if variable.code != target_variable.code
     ]
     if not feature_codes:
-        raise ValueError("Logistic regression requires at least one feature column.")
+        raise ValueError("Для логистической регрессии требуется хотя бы один столбец-предиктор.")
 
     variables_meta = {
         variable.code: {
@@ -216,13 +234,13 @@ def run_factor_analysis(payload: dict) -> dict:
         if spec.get("encoding") in unsupported_encodings
     ]
     if invalid_specs:
-        raise ValueError("Factor analysis does not support one_hot or matrix_multi encodings in MVP.")
+        raise ValueError("Факторный анализ не поддерживает кодирования one_hot и matrix_multi.")
 
     dataset = build_analysis_dataset(survey_id, variable_specs)
     if len(dataset.variables) < 3:
-        raise ValueError("Factor analysis requires at least three expanded variables.")
+        raise ValueError("Для факторного анализа требуется не менее трех развернутых переменных.")
     if payload.get("n_factors", 2) >= len(dataset.variables):
-        raise ValueError("n_factors must be less than number of expanded variables.")
+        raise ValueError("Число факторов должно быть меньше числа развернутых переменных.")
 
     result = compute_factor_analysis(
         dataset.rows,
@@ -239,7 +257,7 @@ def run_cluster_analysis(payload: dict) -> dict:
     survey_id = payload["survey_id"]
     dataset = build_analysis_dataset(survey_id, payload["variables"])
     if len(dataset.variables) < 2:
-        raise ValueError("Cluster analysis requires at least two expanded variables.")
+        raise ValueError("Для кластерного анализа требуется не менее двух развернутых переменных.")
 
     profile_specs = payload.get("profile_variables") or payload["variables"]
     profile_dataset = build_analysis_dataset(survey_id, profile_specs)
@@ -285,7 +303,7 @@ def run_group_comparison(payload: dict) -> dict:
         if variable.question_id == value_spec["question_id"]
     ]
     if len(group_variables) != 1 or len(value_variables) != 1:
-        raise ValueError("Group comparison currently requires variables that produce exactly one column.")
+        raise ValueError("Для сравнения групп каждая выбранная переменная должна давать ровно один столбец данных.")
 
     result = compute_group_comparison(
         rows=dataset.rows,
@@ -354,11 +372,11 @@ def run_reliability_analysis(payload: dict) -> dict:
         if spec.get("encoding") in unsupported_encodings
     ]
     if invalid_specs:
-        raise ValueError("Reliability analysis does not support one_hot or matrix_multi encodings in MVP.")
+        raise ValueError("Анализ надежности не поддерживает кодирования one_hot и matrix_multi.")
 
     dataset = build_analysis_dataset(survey_id, variable_specs)
     if len(dataset.variables) < 2:
-        raise ValueError("Cronbach's alpha requires at least two expanded variables.")
+        raise ValueError("Для расчета α Кронбаха требуется не менее двух развернутых переменных.")
 
     result = compute_cronbach_alpha(
         dataset.rows,
@@ -387,15 +405,15 @@ def run_scale_index_analysis(payload: dict) -> dict:
         if spec.get("encoding") in unsupported_encodings
     ]
     if invalid_specs:
-        raise ValueError("Scale index does not support one_hot, rank, or matrix_multi encodings in MVP.")
+        raise ValueError("Индекс шкалы не поддерживает кодирования one_hot, rank и matrix_multi.")
 
     dataset = build_analysis_dataset(survey_id, variable_specs)
     if len(dataset.variables) < 2:
-        raise ValueError("Scale index requires at least two expanded variables.")
+        raise ValueError("Для индекса шкалы требуется не менее двух развернутых переменных.")
 
     min_answered_items = payload.get("min_answered_items", 1)
     if min_answered_items > len(dataset.variables):
-        raise ValueError("min_answered_items cannot be greater than number of expanded items.")
+        raise ValueError("min_answered_items не может быть больше числа развернутых пунктов.")
 
     result = compute_scale_index(
         rows=dataset.rows,
@@ -447,11 +465,11 @@ def run_missing_analysis(payload: dict) -> dict:
     group_by = payload.get("group_by")
     if group_by:
         if group_by.get("encoding") not in ("binary", "ordinal"):
-            raise ValueError("Missing analysis group_by supports only binary or ordinal categorical variables.")
+            raise ValueError("Группировка в анализе пропусков поддерживает только бинарные или порядковые категориальные переменные.")
         group_dataset = build_analysis_dataset(survey_id, [group_by])
         group_variable = _single_variable(group_dataset, "Missing analysis group_by")
         if group_variable.qtype not in ("yesno", "single", "dropdown"):
-            raise ValueError("Missing analysis group_by supports only yesno, single, or dropdown questions.")
+            raise ValueError("Группировка в анализе пропусков поддерживает только вопросы типов да/нет, одиночный выбор или выпадающий список.")
         group_rows = group_dataset.rows
 
     result = compute_missing_analysis(
