@@ -34,7 +34,7 @@ export default function AdminRecentUsers() {
               <TableRow key={u.id}>
                 <TableCell>{u.email}</TableCell>
                 <TableCell>{u.first_name} {u.last_name}</TableCell>
-                <TableCell>{u.date_joined}</TableCell>
+                <TableCell>{u.date_joined_display ?? "-"}</TableCell>
               </TableRow>
             ))}
           </TableBody>

@@ -58,6 +58,19 @@ async function fetchResponsesForSurveys(surveys) {
   return responseGroups.flat();
 }
 
+function formatDateTime(value) {
+  const date = toDate(value);
+  if (!date) return "—";
+
+  return date.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export async function fetchDashboardData() {
   const [users, surveys] = await Promise.all([
     fetchAllUsers(),
@@ -101,7 +114,13 @@ export async function fetchDashboardData() {
         users: item.count,
       })),
     },
-    recentUsers: sortByDateDesc(users, "date_joined").slice(0, 5),
-    recentSurveys: sortByDateDesc(surveys, "created_at").slice(0, 5),
+    recentUsers: sortByDateDesc(users, "date_joined").slice(0, 5).map(user => ({
+      ...user,
+      date_joined_display: formatDateTime(user.date_joined),
+    })),
+    recentSurveys: sortByDateDesc(surveys, "created_at").slice(0, 5).map(survey => ({
+      ...survey,
+      created_at_display: formatDateTime(survey.created_at),
+    })),
   };
 }

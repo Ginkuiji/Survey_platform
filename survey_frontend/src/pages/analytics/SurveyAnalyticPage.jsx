@@ -137,9 +137,9 @@ function EnhancedSummaryBlock({ summary }) {
           <Metric label="Отсечены" value={summary.total_screened_out ?? 0} />
           <Metric label="Всего завершили" value={summary.total_finished ?? 0} />
           <Metric label="Начали" value={summary.total_started ?? 0} />
-          <Metric label="Completion rate" value={`${summary.completion_rate ?? 0}%`} />
-          <Metric label="Screenout rate" value={`${summary.screenout_rate ?? 0}%`} />
-          <Metric label="Finish rate" value={`${summary.finish_rate ?? 0}%`} />
+          <Metric label="Полностью прошли %" value={`${summary.completion_rate ?? 0}%`} />
+          <Metric label="Отсечены %" value={`${summary.screenout_rate ?? 0}%`} />
+          <Metric label="Завершили %" value={`${summary.finish_rate ?? 0}%`} />
           <Metric label="Среднее время завершения" value={formatSeconds(summary.average_completion_time)} />
           <Metric label="Среднее до скрининга" value={formatSeconds(summary.average_screenout_time)} />
           <Metric label="Вопросов" value={summary.questions_count ?? 0} />
@@ -159,7 +159,7 @@ function ScreeningBlock({ screening }) {
           Скрининг
         </Typography>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={2} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
-          <Metric label="Screened out" value={screening?.total_screened_out ?? 0} />
+          <Metric label="Отсечены" value={screening?.total_screened_out ?? 0} />
           <Metric label="Среднее до скрининга" value={formatSeconds(screening?.average_screenout_time)} />
         </Stack>
 

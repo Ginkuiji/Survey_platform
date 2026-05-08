@@ -48,7 +48,7 @@ export default function AdminRecentSurveys() {
                 <TableCell>{s.title}</TableCell>
                 <TableCell>{s.description}</TableCell>
                 <TableCell>{s.questions_count ?? 0}</TableCell>
-                <TableCell>{s.created_at}</TableCell>
+                <TableCell>{s.created_at_display ?? "-"}</TableCell>
               </TableRow>
             ))}
           </TableBody>

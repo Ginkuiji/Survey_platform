@@ -21,7 +21,7 @@ export default function SurveyAnalyticsListPage() {
   if (!surveys) return null;
 
   return (
-    <Container sx={{ mt: "-15%" }}>
+    <Container sx={{ mt: 0 }}>
       <Typography variant="h4" sx={{ mb: 3 }}>
         Аналитика моих опросов
       </Typography>

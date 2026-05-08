@@ -199,7 +199,7 @@ function renderCorrelationSection(section) {
     <Stack spacing={2}>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
         <Chip label={`Метод: ${result?.method || section.config?.method || "—"}`} />
-        <Chip label={`Dataset: ${result?.dataset_size ?? "—"}`} />
+        <Chip label={`Датасет: ${result?.dataset_size ?? "—"}`} />
       </Stack>
 
       <CorrelationHeatmap result={result} />
@@ -298,7 +298,7 @@ function renderCrosstabSection(section) {
 
 function renderExpectedTable(expected) {
   if (!expected?.length) {
-    return <Typography color="text.secondary">Expected values недоступны.</Typography>;
+    return <Typography color="text.secondary">Ожидаемые величины недоступны.</Typography>;
   }
 
   return (
@@ -345,19 +345,19 @@ function renderChiSquareSection(section) {
         <Chip label={`χ²: ${formatNumber(chiSquare?.chi2)}`} />
         <Chip label={`p-value: ${formatNumber(chiSquare?.p_value)}`} />
         <Chip label={`dof: ${formatNumber(chiSquare?.dof)}`} />
-        <Chip label={`Cramér’s V: ${formatNumber(cramersV?.cramers_v)}`} />
+        <Chip label={`V Крамера: ${formatNumber(cramersV?.cramers_v)}`} />
         <Chip label={`Сила связи: ${cramersV?.interpretation || "—"}`} />
         <Chip label={`n: ${formatNumber(cramersV?.n)}`} />
         <Chip label={`${formatNumber(cramersV?.rows)}×${formatNumber(cramersV?.columns)}`} />
       </Stack>
 
       <Typography color="text.secondary" variant="body2">
-        Cramér’s V показывает силу связи между категориальными переменными от 0 до 1.
+        V Крамера показывает силу связи между категориальными переменными от 0 до 1.
       </Typography>
 
       <Box>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
-          Expected values
+          Ожидаемые величины
         </Typography>
         {renderExpectedTable(chiSquare?.expected)}
       </Box>

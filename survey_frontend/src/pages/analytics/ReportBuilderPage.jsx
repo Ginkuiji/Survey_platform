@@ -307,9 +307,9 @@ function SectionFields({ section, questions, updateSection }) {
             value={section.method}
             onChange={(event) => updateSection(section.id, { method: event.target.value })}
           >
-            <MenuItem value="pearson">Pearson</MenuItem>
-            <MenuItem value="spearman">Spearman</MenuItem>
-            <MenuItem value="kendall">Kendall</MenuItem>
+            <MenuItem value="pearson">Пирсон</MenuItem>
+            <MenuItem value="spearman">Спирман</MenuItem>
+            <MenuItem value="kendall">Кендалл</MenuItem>
           </Select>
         </FormControl>
 
@@ -429,21 +429,21 @@ function SectionFields({ section, questions, updateSection }) {
               onChange={(event) => updateSection(section.id, { post_hoc: event.target.checked })}
             />
           }
-          label="Выполнить post-hoc сравнения"
+          label="Выполнить пост-хок сравнения"
         />
 
         <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
           <FormControl fullWidth disabled={!section.post_hoc}>
-            <InputLabel>Post-hoc метод</InputLabel>
+            <InputLabel>Пост-хок метод</InputLabel>
             <Select
-              label="Post-hoc метод"
+              label="Пост-хок метод"
               value={section.post_hoc_method}
               onChange={(event) => updateSection(section.id, { post_hoc_method: event.target.value })}
             >
               <MenuItem value="auto">Автоматически</MenuItem>
-              <MenuItem value="pairwise_t_test">Попарные t-tests</MenuItem>
-              <MenuItem value="pairwise_mann_whitney">Попарные Mann-Whitney</MenuItem>
-              <MenuItem value="tukey_hsd">Tukey HSD</MenuItem>
+              <MenuItem value="pairwise_t_test">Парный t-критерий</MenuItem>
+              <MenuItem value="pairwise_mann_whitney">U-критерий Манна-Уитни</MenuItem>
+              <MenuItem value="tukey_hsd">Тьюки HSD</MenuItem>
             </Select>
           </FormControl>
 
@@ -454,8 +454,8 @@ function SectionFields({ section, questions, updateSection }) {
               value={section.p_adjust}
               onChange={(event) => updateSection(section.id, { p_adjust: event.target.value })}
             >
-              <MenuItem value="bonferroni">Bonferroni</MenuItem>
-              <MenuItem value="holm">Holm</MenuItem>
+              <MenuItem value="bonferroni">Бонферрони</MenuItem>
+              <MenuItem value="holm">Холма</MenuItem>
             </Select>
           </FormControl>
         </Stack>
@@ -463,10 +463,10 @@ function SectionFields({ section, questions, updateSection }) {
         {section.post_hoc && (
           <Alert severity="info">
             {section.method === "anova"
-              ? "Post-hoc сравнения помогут определить, между какими группами есть различия."
+              ? "Пост=хок сравнения помогут определить, между какими группами есть различия."
               : section.method === "kruskal_wallis"
-                ? "Для Kruskal-Wallis будут использованы попарные Mann-Whitney U с поправкой p-value."
-                : "Post-hoc обычно не требуется для двухгрупповых тестов."}
+                ? "Для Крускала-Уоллиса будут использованы U-критерий Манна-Уитни с поправкой p-value."
+                : "Пост-хок обычно не требуется для двухгрупповых тестов."}
           </Alert>
         )}
       </Stack>
@@ -526,14 +526,14 @@ function SectionFields({ section, questions, updateSection }) {
               onChange={(event) => updateSection(section.id, { include_intercept: event.target.checked })}
             />
           }
-          label="Включить intercept"
+          label="Включить свободный член модели"
         />
 
         <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
           <TextField
             fullWidth
             type="number"
-            label="threshold"
+            label="порог классификации"
             inputProps={{ min: 0.01, max: 0.99, step: 0.01 }}
             value={section.threshold}
             onChange={(event) => updateSection(section.id, { threshold: Number(event.target.value) })}
@@ -542,19 +542,19 @@ function SectionFields({ section, questions, updateSection }) {
           <FormControl fullWidth>
             <InputLabel>regularization</InputLabel>
             <Select
-              label="regularization"
+              label="регуляризация"
               value={section.regularization}
               onChange={(event) => updateSection(section.id, { regularization: event.target.value })}
             >
-              <MenuItem value="l2">l2</MenuItem>
-              <MenuItem value="none">none</MenuItem>
+              <MenuItem value="l2">L2</MenuItem>
+              <MenuItem value="none">нет</MenuItem>
             </Select>
           </FormControl>
 
           <TextField
             fullWidth
             type="number"
-            label="lambda"
+            label="коэффициент регуляризации"
             inputProps={{ min: 0, max: 10, step: 0.01 }}
             value={section.lambda_}
             onChange={(event) => updateSection(section.id, { lambda_: Number(event.target.value) })}
@@ -565,7 +565,7 @@ function SectionFields({ section, questions, updateSection }) {
           <TextField
             fullWidth
             type="number"
-            label="max_iter"
+            label="макс. число итераций"
             inputProps={{ min: 50, max: 10000 }}
             value={section.max_iter}
             onChange={(event) => updateSection(section.id, { max_iter: Number(event.target.value) })}
@@ -574,7 +574,7 @@ function SectionFields({ section, questions, updateSection }) {
           <TextField
             fullWidth
             type="number"
-            label="learning_rate"
+            label="скорость обучения"
             inputProps={{ min: 0.0001, max: 1, step: 0.01 }}
             value={section.learning_rate}
             onChange={(event) => updateSection(section.id, { learning_rate: Number(event.target.value) })}
@@ -638,14 +638,14 @@ function SectionFields({ section, questions, updateSection }) {
           </FormControl>
 
           <FormControl fullWidth>
-            <InputLabel>Rotation</InputLabel>
+            <InputLabel>Вращение</InputLabel>
             <Select
-              label="Rotation"
+              label="Вращение"
               value={section.rotation}
               onChange={(event) => updateSection(section.id, { rotation: event.target.value })}
             >
-              <MenuItem value="varimax">varimax</MenuItem>
-              <MenuItem value="none">none</MenuItem>
+              <MenuItem value="varimax">варимакс</MenuItem>
+              <MenuItem value="none">нет</MenuItem>
             </Select>
           </FormControl>
         </Stack>
@@ -667,7 +667,7 @@ function SectionFields({ section, questions, updateSection }) {
               onChange={(event) => updateSection(section.id, { include_factor_scores: event.target.checked })}
             />
           }
-          label="Рассчитать factor scores"
+          label="Рассчитать факторные оценки"
         />
 
         {section.include_factor_scores && (
@@ -739,7 +739,7 @@ function SectionFields({ section, questions, updateSection }) {
           <TextField
             fullWidth
             type="number"
-            label="n_clusters"
+            label="кол-во кластеров"
             inputProps={{ min: 2, max: 10 }}
             value={section.n_clusters}
             onChange={(event) => updateSection(section.id, { n_clusters: Number(event.target.value) })}
@@ -747,7 +747,7 @@ function SectionFields({ section, questions, updateSection }) {
           <TextField
             fullWidth
             type="number"
-            label="max_iter"
+            label="макс. число итераций"
             inputProps={{ min: 10, max: 1000 }}
             value={section.max_iter}
             onChange={(event) => updateSection(section.id, { max_iter: Number(event.target.value) })}
@@ -755,7 +755,7 @@ function SectionFields({ section, questions, updateSection }) {
           <TextField
             fullWidth
             type="number"
-            label="Количество ключевых отличий"
+            label="количество ключевых отличий"
             inputProps={{ min: 1, max: 20 }}
             value={section.max_profile_features}
             onChange={(event) => updateSection(section.id, { max_profile_features: Number(event.target.value) })}
@@ -785,7 +785,7 @@ function SectionFields({ section, questions, updateSection }) {
     return (
       <Stack spacing={2}>
         <Alert severity="info">
-          t-test и Mann-Whitney требуют ровно 2 группы; ANOVA и Kruskal-Wallis подходят для 2+ групп.
+          t-критерий и Манн-Уитни требуют ровно 2 группы; ANOVA и Крускал-Уоллис подходят для 2+ групп.
         </Alert>
 
         <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
@@ -831,17 +831,17 @@ function SectionFields({ section, questions, updateSection }) {
               value={section.method}
               onChange={(event) => updateSection(section.id, { method: event.target.value })}
             >
-              <MenuItem value="t_test">Welch t-test</MenuItem>
+              <MenuItem value="t_test">t-критей Уэлча</MenuItem>
               <MenuItem value="anova">ANOVA</MenuItem>
-              <MenuItem value="mann_whitney">Mann-Whitney U</MenuItem>
-              <MenuItem value="kruskal_wallis">Kruskal-Wallis</MenuItem>
+              <MenuItem value="mann_whitney">U-критерий Манна-Уитни</MenuItem>
+              <MenuItem value="kruskal_wallis">Крускал-Уоллис</MenuItem>
             </Select>
           </FormControl>
 
           <TextField
             fullWidth
             type="number"
-            label="alpha"
+            label="альфа"
             inputProps={{ min: 0.001, max: 0.2, step: 0.001 }}
             value={section.alpha}
             onChange={(event) => updateSection(section.id, { alpha: Number(event.target.value) })}
@@ -914,7 +914,7 @@ function SectionFields({ section, questions, updateSection }) {
     return (
       <Stack spacing={2}>
         <Alert severity="info">
-          Cronbach’s alpha используется для оценки внутренней согласованности набора вопросов, измеряющих одну шкалу. Выберите минимум два вопроса.
+          Альфа Кронбаха используется для оценки внутренней согласованности набора вопросов, измеряющих одну шкалу. Выберите минимум два вопроса.
         </Alert>
 
         <FormControl fullWidth>
@@ -942,7 +942,7 @@ function SectionFields({ section, questions, updateSection }) {
               onChange={(event) => updateSection(section.id, { standardize: event.target.checked })}
             />
           }
-          label="Использовать стандартизированную alpha"
+          label="Использовать стандартизированную альфа"
         />
       </Stack>
     );
@@ -956,7 +956,7 @@ function SectionFields({ section, questions, updateSection }) {
     return (
       <Stack spacing={2}>
         <Alert severity="info">
-          Индекс шкалы объединяет несколько вопросов в один показатель. Reverse coding используется для обратных пунктов.
+          Индекс шкалы объединяет несколько вопросов в один показатель. Обратное кодирование используется для обратных пунктов.
         </Alert>
 
         <TextField
@@ -1000,7 +1000,7 @@ function SectionFields({ section, questions, updateSection }) {
               onChange={(event) => updateSection(section.id, { include_cronbach_alpha: event.target.checked })}
             />
           }
-          label="Рассчитать Cronbach’s alpha"
+          label="Рассчитать альфу Кронбаха"
         />
 
         <Box sx={{ width: "100%", overflowX: "auto" }}>
@@ -1010,9 +1010,9 @@ function SectionFields({ section, questions, updateSection }) {
                 <TableCell>Вопрос</TableCell>
                 <TableCell>Тип</TableCell>
                 <TableCell align="center">Включён</TableCell>
-                <TableCell align="center">Reverse coding</TableCell>
-                <TableCell align="right">Min</TableCell>
-                <TableCell align="right">Max</TableCell>
+                <TableCell align="center">Обратное кодирование</TableCell>
+                <TableCell align="right">Мин</TableCell>
+                <TableCell align="right">Макс</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1121,7 +1121,7 @@ function SectionFields({ section, questions, updateSection }) {
               onChange={(event) => updateSection(section.id, { include_screened_out: event.target.checked })}
             />
           }
-          label="Показать контекст screened out ответов"
+          label="Показать контекст отсеченных ответов"
         />
 
         <FormControlLabel
@@ -1185,7 +1185,7 @@ function SectionFields({ section, questions, updateSection }) {
             onChange={(event) => updateSection(section.id, { include_intercept: event.target.checked })}
           />
         }
-        label="Включить intercept"
+        label="Включить свободный член модели"
       />
     </Stack>
   );

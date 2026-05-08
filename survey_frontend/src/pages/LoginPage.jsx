@@ -63,12 +63,28 @@ export default function LoginPage() {
   };
 
   return (
-    <Container sx={{ mt: 6, display: "flex", flexDirection: "column", alignItems: "center" }}>
-      <Typography variant="h4" sx={{ mb: 3 }}>
-        Вход
-      </Typography>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        width: "100vw",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        bgcolor: "background.default",
+      }}
+    >
+      <Box
+        sx={{
+          width: "100%",
+          maxWidth: 400,
+          px: 2,
+        }}
+      >
+        
+        <Typography variant="h4" sx={{ mb: 3 }}>
+          Вход
+        </Typography>
 
-      <Box sx={{ width: "100%", maxWidth: "400px" }}>
         <TextField
           label="Email"
           type="email"
@@ -96,14 +112,20 @@ export default function LoginPage() {
           onChange={e => setPassword(e.target.value)}
         />
 
-        <Button variant="contained" fullWidth onClick={handleLogin}>
-          Войти
+        <Button variant="contained" fullWidth onClick={handleLogin} disabled={loading}>
+          {loading ? "Вход..." : "Войти"}
         </Button>
+
+        {error && (
+          <Typography color="error" sx={{mt: 2, textAlign: "center"}}>
+            {error}
+          </Typography>
+        )}
 
         <Typography sx={{ mt: 2 }}>
           Нет аккаунта? <Link to="/register">Регистрация</Link>
         </Typography>
       </Box>
-    </Container>
+    </Box>
   );
 }

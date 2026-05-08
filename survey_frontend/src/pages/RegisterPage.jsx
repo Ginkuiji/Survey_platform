@@ -65,12 +65,21 @@ export default function RegisterPage() {
   };
 
   return (
-    <Container sx={{ mt: 6, display: "flex", flexDirection: "column", alignItems: "center" }}>
-      <Typography variant="h4" sx={{ mb: 3 }}>
-        Регистрация
-      </Typography>
+    <Box sx={{ 
+      minHeight: "100vh",
+      width: "100vw", 
+      display: "flex", 
+      alignItems: "center",
+      justifyContent: "center",
+      bgcolor: "background.default", 
+    }}>
+      <Box sx={{ width: "100%", maxWidth: 400, px: 2 }}>
+        
+        <Typography variant="h4" sx={{ mb: 3 }}>
+          Регистрация
+        </Typography>
 
-      <Box sx={{ width: "100%", maxWidth: "400px" }}>
+
         <TextField
           label="Email"
           type="email"
@@ -115,6 +124,6 @@ export default function RegisterPage() {
           Уже есть аккаунт? <Link to="/login">Войти</Link>
         </Typography>
       </Box>
-    </Container>
+    </Box>
   );
 }
