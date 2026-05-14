@@ -6,14 +6,14 @@ export default function AddQuestionMenu({ onAdd }) {
   const [qtype, setQtype] = useState(QuestionType.SINGLE);
 
   return (
-    <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
+    <Box sx={{ display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap" }}>
       <TextField
         select
         label="Тип вопроса"
         size="small"
         value={qtype}
         onChange={e => setQtype(e.target.value)}
-        sx={{ minWidth: 240 }}
+        sx={{ minWidth: 220 }}
       >
         {QUESTION_TYPE_OPTIONS.map(option => (
           <MenuItem key={option.value} value={option.value}>
@@ -22,7 +22,7 @@ export default function AddQuestionMenu({ onAdd }) {
         ))}
       </TextField>
 
-      <Button variant="outlined" onClick={() => onAdd(qtype)}>
+      <Button variant="outlined" size="small" onClick={() => onAdd(qtype)}>
         Добавить вопрос
       </Button>
     </Box>

@@ -63,18 +63,18 @@ export default function BranchingConditionsEditor({
   };
 
   return (
-    <Card sx={{ mb: 3 }}>
+    <Card sx={{ mb: 2 }}>
       <CardContent>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mb: 0.75 }}>
           <Typography variant="h5" sx={{ flexGrow: 1 }}>
             Ветвление и скрининг
           </Typography>
-          <Button variant="outlined" onClick={addCondition} disabled={disabled || questions.length === 0}>
+          <Button variant="outlined" size="small" onClick={addCondition} disabled={disabled || questions.length === 0}>
             Добавить условие
           </Button>
         </Box>
 
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
           Условия сохраняются после сохранения структуры опроса. Для новых вопросов варианты будут привязаны после создания ID на сервере.
         </Typography>
 
@@ -89,10 +89,10 @@ export default function BranchingConditionsEditor({
           const valueMode = getValueMode(condition, sourceQuestion);
 
           return (
-            <Box key={condition.id} sx={{ py: 2 }}>
-              {index > 0 && <Divider sx={{ mb: 2 }} />}
+            <Box key={condition.id} sx={{ py: 1.25 }}>
+              {index > 0 && <Divider sx={{ mb: 1.25 }} />}
 
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25 }}>
                 <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
                   Условие {index + 1}
                 </Typography>
@@ -101,9 +101,10 @@ export default function BranchingConditionsEditor({
                 </IconButton>
               </Box>
 
-              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2 }}>
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.25 }}>
                 <TextField
                   select
+                  size="small"
                   label="Если вопрос"
                   value={condition.source_question || ""}
                   onChange={e => updateCondition(condition.id, {
@@ -121,6 +122,7 @@ export default function BranchingConditionsEditor({
 
                 <TextField
                   select
+                  size="small"
                   label="Оператор"
                   value={condition.operator}
                   onChange={e => updateCondition(condition.id, {
@@ -141,6 +143,7 @@ export default function BranchingConditionsEditor({
                 {valueMode === "option" && (
                   <TextField
                     select
+                    size="small"
                     label="Вариант"
                     value={condition.option || ""}
                     onChange={e => updateCondition(condition.id, { option: e.target.value })}
@@ -157,6 +160,7 @@ export default function BranchingConditionsEditor({
                 {valueMode === "number" && (
                   <TextField
                     type="number"
+                    size="small"
                     label="Число"
                     value={condition.value_number ?? ""}
                     onChange={e => updateCondition(condition.id, { value_number: e.target.value })}
@@ -166,6 +170,7 @@ export default function BranchingConditionsEditor({
 
                 {valueMode === "text" && (
                   <TextField
+                    size="small"
                     label="Текст/дата"
                     value={condition.value_text || ""}
                     onChange={e => updateCondition(condition.id, { value_text: e.target.value })}
@@ -175,6 +180,7 @@ export default function BranchingConditionsEditor({
 
                 <TextField
                   select
+                  size="small"
                   label="Действие"
                   value={condition.action}
                   onChange={e => updateCondition(condition.id, {
@@ -195,6 +201,7 @@ export default function BranchingConditionsEditor({
                 {condition.action === "show_question" && (
                   <TextField
                     select
+                    size="small"
                     label="Показать вопрос"
                     value={condition.question || ""}
                     onChange={e => updateCondition(condition.id, { question: e.target.value })}
@@ -211,6 +218,7 @@ export default function BranchingConditionsEditor({
                 {condition.action === "show_page" && (
                   <TextField
                     select
+                    size="small"
                     label="Показать страницу"
                     value={condition.page || ""}
                     onChange={e => updateCondition(condition.id, { page: e.target.value })}
@@ -227,6 +235,7 @@ export default function BranchingConditionsEditor({
                 {condition.action === "jump_to_page" && (
                   <TextField
                     select
+                    size="small"
                     label="Перейти на страницу"
                     value={condition.target_page || ""}
                     onChange={e => updateCondition(condition.id, { target_page: e.target.value })}
@@ -242,6 +251,7 @@ export default function BranchingConditionsEditor({
 
                 {condition.action === "terminate" && (
                   <TextField
+                    size="small"
                     label="Сообщение скрининга"
                     value={condition.terminate_message || ""}
                     onChange={e => updateCondition(condition.id, { terminate_message: e.target.value })}
@@ -250,6 +260,7 @@ export default function BranchingConditionsEditor({
                 )}
 
                 <TextField
+                  size="small"
                   label="Ключ группы"
                   value={condition.group_key || ""}
                   onChange={e => updateCondition(condition.id, { group_key: e.target.value })}
@@ -258,6 +269,7 @@ export default function BranchingConditionsEditor({
 
                 <TextField
                   select
+                  size="small"
                   label="Логика группы"
                   value={condition.group_logic || "all"}
                   onChange={e => updateCondition(condition.id, { group_logic: e.target.value })}
@@ -269,6 +281,7 @@ export default function BranchingConditionsEditor({
 
                 <TextField
                   type="number"
+                  size="small"
                   label="Приоритет"
                   value={condition.priority ?? index}
                   onChange={e => updateCondition(condition.id, { priority: Number(e.target.value) })}

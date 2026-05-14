@@ -84,6 +84,60 @@ const API_BY_TYPE = {
   missing_analysis: runMissingAnalysis,
 };
 
+const compactReportBuilderSx = {
+  mt: 2,
+  width: "100%",
+  pb: 3,
+  "& .MuiCard-root": {
+    borderRadius: 1
+  },
+  "& .MuiCardContent-root": {
+    p: 2,
+    "&:last-child": {
+      pb: 2
+    }
+  },
+  "& .MuiInputBase-root": {
+    fontSize: "0.875rem"
+  },
+  "& .MuiInputBase-input": {
+    py: 1
+  },
+  "& .MuiInputLabel-root": {
+    fontSize: "0.875rem"
+  },
+  "& .MuiButton-root": {
+    minHeight: 32,
+    px: 1.5,
+    py: 0.5,
+    fontSize: "0.8125rem"
+  },
+  "& .MuiCheckbox-root": {
+    p: 0.5
+  },
+  "& .MuiFormControlLabel-root": {
+    my: 0.25
+  },
+  "& .MuiFormControlLabel-label": {
+    fontSize: "0.875rem"
+  },
+  "& .MuiAlert-root": {
+    py: 0.5,
+    fontSize: "0.875rem"
+  },
+  "& .MuiTableCell-root": {
+    py: 0.75,
+    px: 1,
+    fontSize: "0.8125rem"
+  },
+  "& .MuiTypography-h4": {
+    fontSize: "1.5rem"
+  },
+  "& .MuiTypography-body1": {
+    fontSize: "0.9rem"
+  }
+};
+
 function createSection(type) {
   const id = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 
@@ -1295,8 +1349,8 @@ export default function ReportBuilderPage() {
   if (isLoading || !survey) return null;
 
   return (
-    <Container maxWidth={false} sx={{ mt: 4, width: "100%" }}>
-      <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={2} sx={{ mb: 3 }}>
+    <Container maxWidth={false} sx={compactReportBuilderSx}>
+      <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1.25} sx={{ mb: 2 }}>
         <Box>
           <Typography variant="h4" sx={{ mb: 1 }}>
             Конструктор аналитического отчёта
@@ -1317,11 +1371,11 @@ export default function ReportBuilderPage() {
         label="Название отчёта"
         value={reportTitle}
         onChange={(event) => setReportTitle(event.target.value)}
-        sx={{ mb: 3 }}
+        sx={{ mb: 2 }}
       />
 
-      <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mb: 3 }}>
-        <FormControl sx={{ minWidth: 260 }}>
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.25} sx={{ mb: 2 }}>
+        <FormControl sx={{ minWidth: 240 }}>
           <InputLabel>Тип анализа</InputLabel>
           <Select
             label="Тип анализа"
@@ -1340,11 +1394,11 @@ export default function ReportBuilderPage() {
         </Button>
       </Stack>
 
-      <Stack spacing={2} sx={{ mb: 3 }}>
+      <Stack spacing={1.25} sx={{ mb: 2 }}>
         {sections.map((section, index) => (
           <Card key={section.id}>
             <CardContent>
-              <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
+              <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1.25} sx={{ mb: 1.5 }}>
                 <TextField
                   fullWidth
                   label={`Блок ${index + 1}`}
@@ -1356,7 +1410,7 @@ export default function ReportBuilderPage() {
                   variant="outlined"
                   startIcon={<DeleteIcon />}
                   onClick={() => removeSection(section.id)}
-                  sx={{ minWidth: 130 }}
+                  sx={{ minWidth: 112 }}
                 >
                   Удалить
                 </Button>
@@ -1369,14 +1423,13 @@ export default function ReportBuilderPage() {
       </Stack>
 
       {!sections.length && (
-        <Typography color="text.secondary" sx={{ mb: 3 }}>
+        <Typography color="text.secondary" sx={{ mb: 2 }}>
           Добавьте первый блок анализа, чтобы собрать отчёт.
         </Typography>
       )}
 
       <Button
         variant="contained"
-        size="large"
         startIcon={<PlayArrowIcon />}
         disabled={isRunning}
         onClick={buildReport}

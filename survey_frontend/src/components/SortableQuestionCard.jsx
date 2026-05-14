@@ -141,9 +141,9 @@ export default function SortableQuestionCard({
   };
 
   return (
-    <Card ref={setNodeRef} style={style} sx={{ mb: 2 }}>
+    <Card ref={setNodeRef} style={style} sx={{ mb: 1.5 }}>
       <CardContent>
-        <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+        <Box sx={{ display: "flex", alignItems: "center", mb: 1.25 }}>
           <IconButton {...listeners} {...attributes}>
             <DragIndicatorIcon />
           </IconButton>
@@ -162,11 +162,12 @@ export default function SortableQuestionCard({
           label="Текст вопроса"
           value={question.text}
           onChange={e => onChange({ text: e.target.value })}
-          sx={{ mb: 2 }}
+          size="small"
+          sx={{ mb: 1.25 }}
         />
 
         <FormControlLabel
-          sx={{ mb: 2 }}
+          sx={{ mb: 1 }}
           control={
             <Checkbox
               checked={question.required ?? true}
@@ -182,7 +183,8 @@ export default function SortableQuestionCard({
             label="Плейсхолдер"
             value={question.qsettings?.placeholder || ""}
             onChange={e => updateSettings({ placeholder: e.target.value })}
-            sx={{ mb: 2 }}
+            size="small"
+            sx={{ mb: 1.25 }}
           />
         )}
 
@@ -194,6 +196,7 @@ export default function SortableQuestionCard({
               </Typography>
 
               <FormControlLabel
+                sx={{ mr: 0 }}
                 control={
                   <Checkbox
                     checked={question.randomize_options ?? false}
@@ -205,9 +208,10 @@ export default function SortableQuestionCard({
             </Box>
 
             {question.options?.map(o => (
-              <Box key={o.id} sx={{ display: "flex", mb: 1 }}>
+              <Box key={o.id} sx={{ display: "flex", mb: 0.75 }}>
                 <TextField
                   fullWidth
+                  size="small"
                   value={o.text}
                   label="Вариант"
                   onChange={e => updateOption(o.id, e.target.value)}
@@ -234,7 +238,7 @@ export default function SortableQuestionCard({
 
         {question.qtype === QuestionType.RANKING && (
           <FormControlLabel
-            sx={{ mt: 1, mb: 1 }}
+            sx={{ mt: 0.75, mb: 0.75 }}
             control={
               <Checkbox
                 checked={question.qsettings?.full_ranking ?? true}
@@ -246,15 +250,16 @@ export default function SortableQuestionCard({
         )}
 
         {matrixTypes.includes(question.qtype) && (
-          <Box sx={{ mt: 1 }}>
-            <Typography variant="body2" sx={{ mb: 1 }}>
+          <Box sx={{ mt: 0.75 }}>
+            <Typography variant="body2" sx={{ mb: 0.75 }}>
               Строки матрицы
             </Typography>
 
             {(question.matrix_rows || []).map(row => (
-              <Box key={row.id} sx={{ display: "flex", mb: 1 }}>
+              <Box key={row.id} sx={{ display: "flex", mb: 0.75 }}>
                 <TextField
                   fullWidth
+                  size="small"
                   value={row.text}
                   label="Строка"
                   onChange={e => updateMatrixRow(row.id, e.target.value)}
@@ -266,18 +271,19 @@ export default function SortableQuestionCard({
               </Box>
             ))}
 
-            <Button onClick={addMatrixRow} sx={{ mb: 2 }}>
+            <Button onClick={addMatrixRow} sx={{ mb: 1 }}>
               Добавить строку
             </Button>
 
-            <Typography variant="body2" sx={{ mb: 1 }}>
+            <Typography variant="body2" sx={{ mb: 0.75 }}>
               Колонки матрицы
             </Typography>
 
             {(question.matrix_columns || []).map(column => (
-              <Box key={column.id} sx={{ display: "flex", mb: 1 }}>
+              <Box key={column.id} sx={{ display: "flex", mb: 0.75 }}>
                 <TextField
                   fullWidth
+                  size="small"
                   value={column.text}
                   label="Колонка"
                   onChange={e => updateMatrixColumn(column.id, e.target.value)}
@@ -296,20 +302,23 @@ export default function SortableQuestionCard({
         )}
 
         {question.qtype === QuestionType.SCALE && (
-          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+          <Box sx={{ display: "flex", gap: 1.25, flexWrap: "wrap" }}>
             <TextField
+              size="small"
               type="number"
               label="Минимум"
               value={question.qsettings?.min ?? 1}
               onChange={e => updateSettings({ min: Number(e.target.value) })}
             />
             <TextField
+              size="small"
               type="number"
               label="Максимум"
               value={question.qsettings?.max ?? 5}
               onChange={e => updateSettings({ max: Number(e.target.value) })}
             />
             <TextField
+              size="small"
               type="number"
               label="Шаг"
               value={question.qsettings?.step ?? 1}
@@ -319,14 +328,16 @@ export default function SortableQuestionCard({
         )}
 
         {question.qtype === QuestionType.NUMBER && (
-          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+          <Box sx={{ display: "flex", gap: 1.25, flexWrap: "wrap" }}>
             <TextField
+              size="small"
               type="number"
               label="Минимум"
               value={question.qsettings?.min ?? ""}
               onChange={e => updateSettings({ min: toNumberOrEmpty(e.target.value) })}
             />
             <TextField
+              size="small"
               type="number"
               label="Максимум"
               value={question.qsettings?.max ?? ""}
@@ -345,8 +356,9 @@ export default function SortableQuestionCard({
         )}
 
         {question.qtype === QuestionType.DATE && (
-          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+          <Box sx={{ display: "flex", gap: 1.25, flexWrap: "wrap" }}>
             <TextField
+              size="small"
               type="date"
               label="Минимальная дата"
               value={question.qsettings?.min || ""}
@@ -354,6 +366,7 @@ export default function SortableQuestionCard({
               onChange={e => updateSettings({ min: e.target.value })}
             />
             <TextField
+              size="small"
               type="date"
               label="Максимальная дата"
               value={question.qsettings?.max || ""}

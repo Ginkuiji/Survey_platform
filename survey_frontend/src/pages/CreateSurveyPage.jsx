@@ -35,6 +35,64 @@ import {
 import { createEmptyQuestion } from "../types/survey";
 import { buildConditionPayload } from "../utils/branching";
 
+const compactEditorSx = {
+  mt: 2,
+  pb: 3,
+  width: "80%",
+  "& .MuiCard-root": {
+    borderRadius: 1
+  },
+  "& .MuiCardContent-root": {
+    p: 2,
+    "&:last-child": {
+      pb: 2
+    }
+  },
+  "& .MuiInputBase-root": {
+    fontSize: "0.875rem"
+  },
+  "& .MuiInputBase-input": {
+    py: 1
+  },
+  "& .MuiInputLabel-root": {
+    fontSize: "0.875rem"
+  },
+  "& .MuiButton-root": {
+    minHeight: 32,
+    px: 1.5,
+    py: 0.5,
+    fontSize: "0.8125rem"
+  },
+  "& .MuiIconButton-root": {
+    p: 0.5
+  },
+  "& .MuiSvgIcon-root": {
+    fontSize: "1.15rem"
+  },
+  "& .MuiCheckbox-root": {
+    p: 0.5
+  },
+  "& .MuiFormControlLabel-root": {
+    mr: 1,
+    my: 0.25
+  },
+  "& .MuiFormControlLabel-label": {
+    fontSize: "0.875rem"
+  },
+  "& .MuiTypography-h4": {
+    fontSize: "1.5rem"
+  },
+  "& .MuiTypography-h5": {
+    fontSize: "1.15rem"
+  },
+  "& .MuiTypography-h6": {
+    fontSize: "1rem"
+  },
+  "& .MuiTypography-subtitle1": {
+    fontSize: "0.925rem"
+  }
+};
+
 function createEmptyPage(index = 0) {
   return {
     id: `page-new-${Date.now()}-${index}`,
@@ -168,12 +226,12 @@ export default function CreateSurveyPage() {
   };
 
   return (
-    <Container sx={{ mt: 4 }}>
-      <Typography variant="h4" sx={{ mb: 3 }}>
+    <Container sx={compactEditorSx}>
+      <Typography variant="h4" sx={{ mb: 2 }}>
         Создание опроса
       </Typography>
 
-      <Card sx={{ mb: 3 }}>
+      <Card sx={{ mb: 2 }}>
         <CardContent>
           <TextField
             label="Название"
@@ -246,7 +304,7 @@ export default function CreateSurveyPage() {
         </CardContent>
       </Card>
 
-      <Divider sx={{ mb: 3 }} />
+      <Divider sx={{ mb: 2 }} />
 
       <BranchingConditionsEditor
         pages={pages}
@@ -254,7 +312,7 @@ export default function CreateSurveyPage() {
         onChange={setConditions}
       />
 
-      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+      <Box sx={{ display: "flex", alignItems: "center", mb: 1.5 }}>
         <Typography variant="h5" sx={{ flexGrow: 1 }}>
           Страницы
         </Typography>
@@ -265,9 +323,9 @@ export default function CreateSurveyPage() {
       </Box>
 
       {pages.map((page, pageIndex) => (
-        <Card key={page.id} sx={{ mb: 3 }}>
+        <Card key={page.id} sx={{ mb: 2 }}>
           <CardContent>
-            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+            <Box sx={{ display: "flex", alignItems: "center", mb: 1.5 }}>
               <Typography variant="h6" sx={{ flexGrow: 1 }}>
                 Страница {pageIndex + 1}
               </Typography>
@@ -331,7 +389,7 @@ export default function CreateSurveyPage() {
               </SortableContext>
             </DndContext>
 
-            <Box sx={{ mt: 2 }}>
+            <Box sx={{ mt: 1.5 }}>
               <Typography variant="subtitle1" sx={{ mb: 1 }}>
                 Добавить вопрос
               </Typography>
@@ -342,7 +400,7 @@ export default function CreateSurveyPage() {
         </Card>
       ))}
 
-      <Button variant="contained" size="large" onClick={handleSave}>
+      <Button variant="contained" onClick={handleSave}>
         Создать опрос
       </Button>
     </Container>

@@ -42,6 +42,63 @@ import {
   normalizeEditorConditions,
 } from "../utils/branching";
 
+const compactEditorSx = {
+  mt: 2,
+  pb: 3,
+  "& .MuiCard-root": {
+    borderRadius: 1
+  },
+  "& .MuiCardContent-root": {
+    p: 2,
+    "&:last-child": {
+      pb: 2
+    }
+  },
+  "& .MuiInputBase-root": {
+    fontSize: "0.875rem"
+  },
+  "& .MuiInputBase-input": {
+    py: 1
+  },
+  "& .MuiInputLabel-root": {
+    fontSize: "0.875rem"
+  },
+  "& .MuiButton-root": {
+    minHeight: 32,
+    px: 1.5,
+    py: 0.5,
+    fontSize: "0.8125rem"
+  },
+  "& .MuiIconButton-root": {
+    p: 0.5
+  },
+  "& .MuiSvgIcon-root": {
+    fontSize: "1.15rem"
+  },
+  "& .MuiCheckbox-root": {
+    p: 0.5
+  },
+  "& .MuiFormControlLabel-root": {
+    mr: 1,
+    my: 0.25
+  },
+  "& .MuiFormControlLabel-label": {
+    fontSize: "0.875rem"
+  },
+  "& .MuiTypography-h4": {
+    fontSize: "1.5rem"
+  },
+  "& .MuiTypography-h5": {
+    fontSize: "1.15rem"
+  },
+  "& .MuiTypography-h6": {
+    fontSize: "1rem"
+  },
+  "& .MuiTypography-subtitle1": {
+    fontSize: "0.925rem"
+  }
+};
+
 function normalizeQuestions(questions = []) {
   return questions.map((q, qIndex) => ({
     text: q.text || "",
@@ -316,12 +373,12 @@ export default function SurveyEditorPage() {
   };
 
   return (
-    <Container sx={{ mt: 4 }}>
-      <Typography variant="h4" sx={{ mb: 3 }}>
+    <Container sx={compactEditorSx}>
+      <Typography variant="h4" sx={{ mb: 2 }}>
         Редактирование опроса
       </Typography>
 
-      <Card sx={{ mb: 3 }}>
+      <Card sx={{ mb: 2 }}>
         <CardContent>
           <TextField
             label="Название"
@@ -394,7 +451,7 @@ export default function SurveyEditorPage() {
         </CardContent>
       </Card>
 
-      <Divider sx={{ mb: 3 }} />
+      <Divider sx={{ mb: 2 }} />
 
       <BranchingConditionsEditor
         pages={survey.pages}
@@ -402,7 +459,7 @@ export default function SurveyEditorPage() {
         onChange={setConditions}
       />
 
-      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+      <Box sx={{ display: "flex", alignItems: "center", mb: 1.5 }}>
         <Typography variant="h5" sx={{ flexGrow: 1 }}>
           Страницы
         </Typography>
@@ -413,9 +470,9 @@ export default function SurveyEditorPage() {
       </Box>
 
       {survey.pages.map((page, pageIndex) => (
-        <Card key={page.id} sx={{ mb: 3 }}>
+        <Card key={page.id} sx={{ mb: 2 }}>
           <CardContent>
-            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+            <Box sx={{ display: "flex", alignItems: "center", mb: 1.5 }}>
               <Typography variant="h6" sx={{ flexGrow: 1 }}>
                 Страница {pageIndex + 1}
               </Typography>
@@ -479,7 +536,7 @@ export default function SurveyEditorPage() {
               </SortableContext>
             </DndContext>
 
-            <Box sx={{ mt: 2 }}>
+            <Box sx={{ mt: 1.5 }}>
               <Typography variant="subtitle1" sx={{ mb: 1 }}>
                 Добавить вопрос
               </Typography>
@@ -490,7 +547,7 @@ export default function SurveyEditorPage() {
         </Card>
       ))}
 
-      <Button variant="contained" size="large" onClick={handleSave}>
+      <Button variant="contained" onClick={handleSave}>
         {shouldCreateCopy ? "Создать копию опроса" : "Сохранить изменения"}
       </Button>
     </Container>

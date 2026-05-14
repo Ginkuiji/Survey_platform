@@ -883,7 +883,7 @@ export default function SurveyAnalyticsPage() {
   const screening = displayedAnalyticsData.screening ?? {};
 
   return (
-    <Container maxWidth={false} sx={{ mt: 4, width: "100%" }}>
+    <Container maxWidth={false} sx={{ mt: 4, width: "80%" }}>
       <Typography variant="h4" sx={{ mb: 1 }}>
         Аналитика: {displayedAnalyticsData.survey?.title ?? survey.title}
       </Typography>
