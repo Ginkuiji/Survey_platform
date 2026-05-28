@@ -3,6 +3,7 @@ from .models import (
     Survey,
     Question,
     QuestionCondition,
+    QuestionConditionGroup,
     Option,
     Response,
     Answer,
@@ -140,7 +141,7 @@ class SurveyDetailSer(serializers.ModelSerializer):
         qs = (
             QuestionCondition.objects
             .filter(source_question__survey=obj, is_active=True)
-            .select_related("source_question", "question", "page", "target_page", "option")
+            .select_related("source_question", "question", "page", "target_page", "option", "matrix_row", "matrix_column", "group")
             .order_by("priority", "id")
         )
         return QuestionConditionReadSer(qs, many=True).data
@@ -428,7 +429,7 @@ class AdminSurveyDetailSer(serializers.ModelSerializer):
         qs = (
             QuestionCondition.objects
             .filter(source_question__survey=obj)
-            .select_related("source_question", "question", "page", "target_page", "option")
+            .select_related("source_question", "question", "page", "target_page", "option", "matrix_row", "matrix_column", "group")
             .order_by("priority", "id")
         )
         return QuestionConditionReadSer(qs, many=True).data
@@ -449,6 +450,10 @@ class QuestionConditionReadSer(serializers.ModelSerializer):
     page_title = serializers.CharField(source="page.title", read_only=True)
     target_page_title = serializers.CharField(source="target_page.title", read_only=True)
     option_text = serializers.CharField(source="option.text", read_only=True)
+    matrix_row_text = serializers.CharField(source="matrix_row.text", read_only=True)
+    matrix_column_text = serializers.CharField(source="matrix_column.text", read_only=True)
+    group_title = serializers.CharField(source="group.title", read_only=True)
+    group_logic = serializers.CharField(source="group.logic", read_only=True)
 
     class Meta:
         model = QuestionCondition
@@ -468,7 +473,12 @@ class QuestionConditionReadSer(serializers.ModelSerializer):
             "value_number",
             "option",
             "option_text",
-            "group_key",
+            "matrix_row",
+            "matrix_row_text",
+            "matrix_column",
+            "matrix_column_text",
+            "group",
+            "group_title",
             "group_logic",
             "priority",
             "is_active",
@@ -476,6 +486,14 @@ class QuestionConditionReadSer(serializers.ModelSerializer):
         )
 
 class QuestionConditionWriteSer(serializers.ModelSerializer):
+    group_key = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    group_title = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    group_logic = serializers.ChoiceField(
+        choices=QuestionConditionGroup.LOGIC_CHOICES,
+        required=False,
+        write_only=True,
+    )
+
     class Meta:
         model = QuestionCondition
         fields = (
@@ -489,7 +507,11 @@ class QuestionConditionWriteSer(serializers.ModelSerializer):
             "value_text",
             "value_number",
             "option",
+            "matrix_row",
+            "matrix_column",
+            "group",
             "group_key",
+            "group_title",
             "group_logic",
             "priority",
             "is_active",
@@ -497,7 +519,12 @@ class QuestionConditionWriteSer(serializers.ModelSerializer):
         )
 
     def validate(self, attrs):
-        instance = QuestionCondition(**attrs)
+        clean_attrs = {
+            key: value
+            for key, value in attrs.items()
+            if key not in ("group_key", "group_title", "group_logic")
+        }
+        instance = QuestionCondition(**clean_attrs)
         try:
             instance.clean()
         except ValidationError as e:

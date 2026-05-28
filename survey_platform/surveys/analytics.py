@@ -75,7 +75,7 @@ def get_survey_conditions(survey_id: int):
     return list(
         QuestionCondition.objects
         .filter(source_question__survey_id=survey_id, is_active=True)
-        .select_related("source_question", "question", "page", "target_page", "option")
+        .select_related("source_question", "question", "page", "target_page", "option", "matrix_row", "matrix_column", "group")
         .order_by("priority", "id")
     )
 
@@ -204,6 +204,22 @@ def _condition_matches(condition: QuestionCondition, answer_data: Optional[Dict[
             return condition.option_id in value
         return False
 
+    if operator in ("contains_matrix_cell", "matrix_row_equals", "matrix_row_not_equals"):
+        if source_question.qtype not in (Question.MATRIX_SINGLE, Question.MATRIX_MULTI):
+            return False
+        if not condition.matrix_row_id or not condition.matrix_column_id:
+            return False
+        cells = value or []
+        row_matches = [
+            cell
+            for cell in cells
+            if cell.get("row") == condition.matrix_row_id
+        ]
+        has_cell = any(cell.get("column") == condition.matrix_column_id for cell in row_matches)
+        if operator == "contains_matrix_cell":
+            return has_cell
+        return has_cell if operator == "matrix_row_equals" else bool(row_matches) and not has_cell
+
     if operator in ("equals", "not_equals"):
         if condition.option_id:
             expected = condition.option_id
@@ -236,7 +252,7 @@ def _condition_matches(condition: QuestionCondition, answer_data: Optional[Dict[
 def _evaluate_conditions(conditions, answers_by_question: Dict[int, Dict[str, Any]]):
     groups = {}
     for index, condition in enumerate(conditions):
-        group_key = condition.group_key or f"__condition_{condition.id or index}"
+        group_key = condition.group_id or f"__condition_{condition.id or index}"
         groups.setdefault(group_key, []).append(condition)
 
     matched_conditions = []
@@ -249,7 +265,9 @@ def _evaluate_conditions(conditions, answers_by_question: Dict[int, Dict[str, An
             for condition in group_conditions
         ]
 
-        if group_conditions[0].group_logic == "any":
+        group = group_conditions[0].group
+        group_logic = group.logic if group else "all"
+        if group_logic == "any":
             matched_conditions.extend(
                 condition for condition, matches in group_results if matches
             )

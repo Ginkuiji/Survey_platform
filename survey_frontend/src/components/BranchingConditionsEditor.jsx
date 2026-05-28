@@ -23,11 +23,14 @@ import {
 const optionOperators = ["equals", "not_equals", "contains_option"];
 const numericOperators = ["gt", "lt", "gte", "lte"];
 const noValueOperators = ["is_answered", "not_answered"];
+const matrixOperators = ["contains_matrix_cell", "matrix_row_equals", "matrix_row_not_equals"];
 const choiceTypes = ["single", "multi", "dropdown", "yesno", "ranking"];
 const numericTypes = ["scale", "number"];
+const matrixTypes = ["matrix_single", "matrix_multi"];
 
 function getValueMode(condition, sourceQuestion) {
   if (!sourceQuestion || noValueOperators.includes(condition.operator)) return "none";
+  if (matrixOperators.includes(condition.operator) && matrixTypes.includes(sourceQuestion.qtype)) return "matrix";
   if (numericOperators.includes(condition.operator)) return "number";
   if (optionOperators.includes(condition.operator) && choiceTypes.includes(sourceQuestion.qtype)) {
     return "option";
@@ -110,6 +113,8 @@ export default function BranchingConditionsEditor({
                   onChange={e => updateCondition(condition.id, {
                     source_question: e.target.value,
                     option: "",
+                    matrix_row: "",
+                    matrix_column: "",
                   })}
                   disabled={disabled}
                 >
@@ -128,6 +133,8 @@ export default function BranchingConditionsEditor({
                   onChange={e => updateCondition(condition.id, {
                     operator: e.target.value,
                     option: "",
+                    matrix_row: "",
+                    matrix_column: "",
                     value_text: "",
                     value_number: "",
                   })}
@@ -155,6 +162,40 @@ export default function BranchingConditionsEditor({
                       </MenuItem>
                     ))}
                   </TextField>
+                )}
+
+                {valueMode === "matrix" && (
+                  <>
+                    <TextField
+                      select
+                      size="small"
+                      label="Строка матрицы"
+                      value={condition.matrix_row || ""}
+                      onChange={e => updateCondition(condition.id, { matrix_row: e.target.value })}
+                      disabled={disabled || !sourceQuestion}
+                    >
+                      {(sourceQuestion?.matrix_rows || []).map(row => (
+                        <MenuItem key={row.id} value={row.id}>
+                          {row.text}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+
+                    <TextField
+                      select
+                      size="small"
+                      label="Колонка матрицы"
+                      value={condition.matrix_column || ""}
+                      onChange={e => updateCondition(condition.id, { matrix_column: e.target.value })}
+                      disabled={disabled || !sourceQuestion}
+                    >
+                      {(sourceQuestion?.matrix_columns || []).map(column => (
+                        <MenuItem key={column.id} value={column.id}>
+                          {column.text}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </>
                 )}
 
                 {valueMode === "number" && (
@@ -262,8 +303,8 @@ export default function BranchingConditionsEditor({
                 <TextField
                   size="small"
                   label="Ключ группы"
-                  value={condition.group_key || ""}
-                  onChange={e => updateCondition(condition.id, { group_key: e.target.value })}
+                  value={condition.group_title || condition.group_key || ""}
+                  onChange={e => updateCondition(condition.id, { group_title: e.target.value, group_key: e.target.value })}
                   disabled={disabled}
                 />
 

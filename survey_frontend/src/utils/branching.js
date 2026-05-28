@@ -21,6 +21,9 @@ export const CONDITION_OPERATORS = [
   { value: "lte", label: "<=" },
   { value: "is_answered", label: "заполнен" },
   { value: "not_answered", label: "не заполнен" },
+  { value: "contains_matrix_cell", label: "ячейка матрицы выбрана" },
+  { value: "matrix_row_equals", label: "строка матрицы равна" },
+  { value: "matrix_row_not_equals", label: "строка матрицы не равна" },
 ];
 
 export function createEmptyCondition(priority = 0) {
@@ -35,6 +38,9 @@ export function createEmptyCondition(priority = 0) {
     value_text: "",
     value_number: "",
     option: "",
+    matrix_row: "",
+    matrix_column: "",
+    group_title: "",
     group_key: "",
     group_logic: "all",
     priority,
@@ -70,6 +76,8 @@ export function getConditionPaths(condition, pages = []) {
   const page = pageList.find(item => item.id === condition.page);
   const targetPage = pageList.find(item => item.id === condition.target_page);
   const optionIndex = sourceQuestion?.options?.findIndex(option => option.id === condition.option);
+  const matrixRowIndex = sourceQuestion?.matrix_rows?.findIndex(row => row.id === condition.matrix_row);
+  const matrixColumnIndex = sourceQuestion?.matrix_columns?.findIndex(column => column.id === condition.matrix_column);
 
   return {
     source: sourceQuestion
@@ -81,6 +89,8 @@ export function getConditionPaths(condition, pages = []) {
     page: page ? { pageIndex: page.pageIndex } : null,
     targetPage: targetPage ? { pageIndex: targetPage.pageIndex } : null,
     optionIndex: optionIndex >= 0 ? optionIndex : null,
+    matrixRowIndex: matrixRowIndex >= 0 ? matrixRowIndex : null,
+    matrixColumnIndex: matrixColumnIndex >= 0 ? matrixColumnIndex : null,
   };
 }
 
@@ -113,6 +123,12 @@ export function buildConditionPayload(condition, originalPages, savedPages) {
   const option = paths.optionIndex !== null
     ? sourceQuestion.options?.[paths.optionIndex]
     : null;
+  const matrixRow = paths.matrixRowIndex !== null
+    ? sourceQuestion.matrix_rows?.[paths.matrixRowIndex]
+    : null;
+  const matrixColumn = paths.matrixColumnIndex !== null
+    ? sourceQuestion.matrix_columns?.[paths.matrixColumnIndex]
+    : null;
 
   const payload = {
     source_question: sourceQuestion.id,
@@ -124,7 +140,9 @@ export function buildConditionPayload(condition, originalPages, savedPages) {
     value_text: "",
     value_number: null,
     option: null,
-    group_key: condition.group_key || "",
+    matrix_row: null,
+    matrix_column: null,
+    group_title: condition.group_title || condition.group_key || "",
     group_logic: condition.group_logic || "all",
     priority: Number(condition.priority || 0),
     is_active: condition.is_active ?? true,
@@ -147,6 +165,13 @@ export function buildConditionPayload(condition, originalPages, savedPages) {
   if (condition.operator === "contains_option") {
     if (!option || !hasNumericId(option.id)) return null;
     payload.option = option.id;
+    return payload;
+  }
+
+  if (["contains_matrix_cell", "matrix_row_equals", "matrix_row_not_equals"].includes(condition.operator)) {
+    if (!matrixRow || !matrixColumn || !hasNumericId(matrixRow.id) || !hasNumericId(matrixColumn.id)) return null;
+    payload.matrix_row = matrixRow.id;
+    payload.matrix_column = matrixColumn.id;
     return payload;
   }
 
@@ -185,7 +210,10 @@ export function mapServerConditionsToEditor(conditions = []) {
     value_text: condition.value_text || "",
     value_number: condition.value_number ?? "",
     option: cleanId(condition.option) || "",
-    group_key: condition.group_key || "",
+    matrix_row: cleanId(condition.matrix_row) || "",
+    matrix_column: cleanId(condition.matrix_column) || "",
+    group: cleanId(condition.group) || "",
+    group_title: condition.group_title || condition.group_key || "",
     group_logic: condition.group_logic || "all",
     priority: condition.priority ?? index,
     is_active: condition.is_active ?? true,
@@ -204,7 +232,9 @@ export function normalizeEditorConditions(conditions = []) {
     value_text: condition.value_text || "",
     value_number: condition.value_number ?? "",
     option: condition.option || "",
-    group_key: condition.group_key || "",
+    matrix_row: condition.matrix_row || "",
+    matrix_column: condition.matrix_column || "",
+    group_title: condition.group_title || condition.group_key || "",
     group_logic: condition.group_logic || "all",
     priority: condition.priority ?? index,
     is_active: condition.is_active ?? true,
@@ -276,6 +306,14 @@ export function conditionMatches(condition, answers, questionsById) {
     return false;
   }
 
+  if (["contains_matrix_cell", "matrix_row_equals", "matrix_row_not_equals"].includes(condition.operator)) {
+    if (!matrixTypes.includes(sourceQuestion.qtype) || !condition.matrix_row || !condition.matrix_column) return false;
+    const rowCells = (value || []).filter(cell => cell.row === condition.matrix_row);
+    const hasCell = rowCells.some(cell => cell.column === condition.matrix_column);
+    if (condition.operator === "contains_matrix_cell") return hasCell;
+    return condition.operator === "matrix_row_equals" ? hasCell : rowCells.length > 0 && !hasCell;
+  }
+
   if (condition.operator === "equals" || condition.operator === "not_equals") {
     let expected = condition.value_text || "";
     if (condition.option) expected = condition.option;
@@ -307,7 +345,7 @@ export function getMatchedConditions(conditions = [], answers = {}, questionsByI
   conditions
     .filter(condition => condition.is_active !== false)
     .forEach((condition, index) => {
-      const key = condition.group_key || `__condition_${condition.id || index}`;
+      const key = condition.group || condition.group_title || condition.group_key || `__condition_${condition.id || index}`;
       groups.set(key, [...(groups.get(key) || []), condition]);
     });
 

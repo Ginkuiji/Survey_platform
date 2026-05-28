@@ -51,6 +51,9 @@ class QuestionCondition(models.Model):
             ("lte", "Less than or equal"),
             ("is_answered", "Is answered"),
             ("not_answered", "Not answered"),
+            ("contains_matrix_cell", "Contains matrix cell"),
+            ("matrix_row_equals", "Matrix row equals"),
+            ("matrix_row_not_equals", "Matrix row not equals"),
         ]
     
     ACTION_CHOICES = [
@@ -81,10 +84,11 @@ class QuestionCondition(models.Model):
     value_text = models.TextField(blank=True, default='')
     value_number = models.FloatField(null=True, blank=True)
     option = models.ForeignKey("Option", on_delete=models.CASCADE, null=True, blank=True)
+    matrix_row = models.ForeignKey("MatrixRow", on_delete=models.CASCADE, null=True, blank=True)
+    matrix_column = models.ForeignKey("MatrixColumn", on_delete=models.CASCADE, null=True, blank=True)
     # Для группировки нескольких условий в одно правило
     # Например: group_key="screenout_1", group_logic="all"
-    group_key = models.CharField(max_length=64, blank=True, default="")
-    group_logic = models.CharField(max_length=8, choices=LOGIC_CHOICES, default="all")
+    group = models.ForeignKey("QuestionConditionGroup", on_delete=models.CASCADE, null=True, blank=True, related_name="conditions")
     priority = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     # Сообщение для скрининга
@@ -140,8 +144,17 @@ class QuestionCondition(models.Model):
         if self.target_page_id and self.target_page.survey_id != survey_id:
             raise ValidationError({"target_page": "target_page must belong to the same survey as source_question"})
 
+        if self.group_id and self.group.survey_id != survey_id:
+            raise ValidationError({"group": "group must belong to the same survey as source_question"})
+
         if self.option_id and self.option.question_id != self.source_question_id:
             raise ValidationError({"option": "option must belong to source_question"})
+
+        if self.matrix_row_id and self.matrix_row.question_id != self.source_question_id:
+            raise ValidationError({"matrix_row": "matrix_row must belong to source_question"})
+        
+        if self.matrix_column_id and self.matrix_column.question_id != self.source_question_id:
+            raise ValidationError({"matrix_column": "matrix_column must belong to source_question"})
 
         # Проверка типа значения для операторов
         if self.operator in ("contains_option",) and not self.option_id:
@@ -161,12 +174,45 @@ class QuestionCondition(models.Model):
                 raise ValidationError(
                     "is_answered/not_answered must not use option, value_text, or value_number."
                 )
+            
+        if self.operator in ("contains_matrix_cell",) and not (self.matrix_row_id and self.matrix_column_id):
+            raise ValidationError({"matrix_row": "matrix_row and matrix_column are required for contains_matrix_cell"})
+
+        if self.operator in ("matrix_row_equals", "matrix_row_not_equals") and not (self.matrix_row_id and self.matrix_column_id):
+            raise ValidationError({"matrix_row": "matrix_row and matrix_column are required for matrix row operators"})
 
         if self.action == "terminate" and self.terminate_message and len(self.terminate_message) > 2000:
             raise ValidationError({"terminate_message": "terminate_message is too long"})
 
+
     def __str__(self):
         return f"{self.action} from question {self.source_question_id}"
+
+class QuestionConditionGroup(models.Model):
+
+    LOGIC_CHOICES = [
+        ("all", "All conditions in group must match"),
+        ("any", "Any condition in group may match"),
+    ]
+    survey = models.ForeignKey(
+        Survey,
+        on_delete=models.CASCADE,
+        related_name="condition_groups"
+    )
+    title = models.CharField(max_length=255, blank=True, default="")
+    logic = models.CharField(max_length=8, choices=LOGIC_CHOICES, default="all")
+    priority = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["priority", "id"]
+        indexes = [
+            models.Index(fields=["survey", "priority"]),
+            models.Index(fields=["survey", "is_active"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=["survey", "title"], name="unique_condition_group_title_per_survey")
+        ]
 
 class Option(models.Model):
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name="options")

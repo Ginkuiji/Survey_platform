@@ -18,6 +18,7 @@ from .models import (
     Answer,
     Question,
     QuestionCondition,
+    QuestionConditionGroup,
     Option,
     SurveyPage,
     MatrixRow,
@@ -253,6 +254,20 @@ def condition_matches(condition, source_question, answer_data):
             return condition.option_id in value
         return False
 
+    if operator in ("contains_matrix_cell", "matrix_row_equals", "matrix_row_not_equals"):
+        if source_question.qtype not in MATRIX_QTYPES or not condition.matrix_row_id or not condition.matrix_column_id:
+            return False
+        cells = value or []
+        row_matches = [
+            cell
+            for cell in cells
+            if cell.get("row") == condition.matrix_row_id
+        ]
+        has_cell = any(cell.get("column") == condition.matrix_column_id for cell in row_matches)
+        if operator == "contains_matrix_cell":
+            return has_cell
+        return has_cell if operator == "matrix_row_equals" else bool(row_matches) and not has_cell
+
     if operator in ("equals", "not_equals"):
         if condition.option_id:
             expected = condition.option_id
@@ -285,7 +300,7 @@ def condition_matches(condition, source_question, answer_data):
 def evaluate_conditions(conditions, answers_by_question, questions_by_id):
     groups = {}
     for index, condition in enumerate(conditions):
-        group_key = condition.group_key or f"__condition_{condition.id or index}"
+        group_key = condition.group_id or f"__condition_{condition.id or index}"
         groups.setdefault(group_key, []).append(condition)
 
     matched_conditions = []
@@ -303,7 +318,8 @@ def evaluate_conditions(conditions, answers_by_question, questions_by_id):
                 condition_matches(condition, source_question, answer_data),
             ))
 
-        group_logic = group_conditions[0].group_logic
+        group = group_conditions[0].group
+        group_logic = group.logic if group else "all"
         if group_logic == "any":
             matched_conditions.extend(
                 condition for condition, matches in group_results if matches
@@ -411,7 +427,7 @@ class SurveyViewSet(viewsets.ReadOnlyModelViewSet):
         conditions = list(
             QuestionCondition.objects
             .filter(source_question__survey=resp.survey, is_active=True)
-            .select_related("source_question", "question", "page", "target_page", "option")
+            .select_related("source_question", "question", "page", "target_page", "option", "matrix_row", "matrix_column", "group")
             .order_by("priority", "id")
         )
         questions_by_id = {
@@ -934,8 +950,27 @@ class AdminSurveyViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             QuestionCondition.objects.filter(source_question__survey=survey).delete()
+            QuestionConditionGroup.objects.filter(survey=survey).delete()
 
             for cd in conditions_data:
+                cd.pop("group", None)
+                group_key = cd.pop("group_key", "")
+                group_title = cd.pop("group_title", "") or group_key
+                group_logic = cd.pop("group_logic", "all")
+                if group_title and not cd.get("group"):
+                    group, _ = QuestionConditionGroup.objects.get_or_create(
+                        survey=survey,
+                        title=group_title,
+                        defaults={
+                            "logic": group_logic,
+                            "priority": cd.get("priority", 0),
+                            "is_active": cd.get("is_active", True),
+                        },
+                    )
+                    if group.logic != group_logic:
+                        group.logic = group_logic
+                        group.save(update_fields=["logic"])
+                    cd["group"] = group
                 condition = QuestionCondition(**cd)
                 condition.full_clean()
                 condition.save()
@@ -943,7 +978,7 @@ class AdminSurveyViewSet(viewsets.ModelViewSet):
         qs = (
             QuestionCondition.objects
             .filter(source_question__survey=survey)
-            .select_related("source_question", "question", "page", "target_page", "option")
+            .select_related("source_question", "question", "page", "target_page", "option", "matrix_row", "matrix_column", "group")
             .order_by("priority", "id")
         )
         return DRFResponse(
