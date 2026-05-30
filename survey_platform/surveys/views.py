@@ -1,9 +1,9 @@
 # surveys/views.py
 import json
-import secrets, datetime as dt
+import secrets
 from django.http import HttpResponse
 from django.utils import timezone
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.db import transaction, models
 from django.db.models import Count
@@ -21,10 +21,6 @@ from .models import (
     QuestionConditionGroup,
     Option,
     SurveyPage,
-    MatrixRow,
-    MatrixColumn,
-    MatrixAnswerCell,
-    RankingAnswerItem,
     AnalysisReport,
     AnalyticResults
 )
@@ -35,8 +31,17 @@ from .serializers import (
     AnalysisReportListSer, AnalysisReportDetailSer, AnalyticResultsListSer, AnalyticResultsDetailSer,
     AnalyticsCsvExportSer, AnalyticsPdfExportSer, AnalyticsXlsxExportSer
 )
-from .permissions import IsAdminRole, IsOrganizerOrAdmin, IsOrganizer
+from .permissions import IsAdminRole, IsOrganizerOrAdmin
 from .analytics import question_distribution, survey_distribution
+from .answer_services import (
+    CHOICE_QTYPES,
+    MATRIX_QTYPES,
+    MULTI_CHOICE_QTYPES,
+    add_matrix_cells,
+    add_ranking_items,
+    answer_has_value,
+    validate_answer_payload,
+)
 from .advanced_analytics_serializers import (
     ChiSquareAnalysisSer,
     ClusterAnalysisSer,
@@ -71,308 +76,10 @@ from .advanced_analytics_charts import build_report_section_chart
 from .pdf_export import build_analytics_pdf
 from .csv_export import build_analytics_csv
 from .xlsx_export import build_analytics_xlsx
+from .branching_services import evaluate_conditions
+from .survey_builder import create_question_items
 
 User = get_user_model()
-
-MATRIX_QTYPES = {Question.MATRIX_SINGLE, Question.MATRIX_MULTI}
-CHOICE_QTYPES = {Question.SINGLE, Question.DROPDOWN, Question.YESNO}
-MULTI_CHOICE_QTYPES = {Question.MULTI}
-TEXT_QTYPES = {Question.TEXT, Question.DATE}
-NUMERIC_QTYPES = {Question.SCALE, Question.NUMBER}
-RANKING_QTYPES = {Question.RANKING}
-
-ANSWER_FIELDS = {"selected_options", "text", "num", "matrix_cells", "ranking_items"}
-ALLOWED_ANSWER_FIELDS = {
-    Question.SINGLE: {"selected_options"},
-    Question.DROPDOWN: {"selected_options"},
-    Question.YESNO: {"selected_options"},
-    Question.MULTI: {"selected_options"},
-    Question.TEXT: {"text"},
-    Question.DATE: {"text"},
-    Question.SCALE: {"num"},
-    Question.NUMBER: {"num"},
-    Question.MATRIX_SINGLE: {"matrix_cells"},
-    Question.MATRIX_MULTI: {"matrix_cells"},
-    Question.RANKING: {"ranking_items"},
-}
-
-YESNO_DEFAULT_OPTIONS = (
-    {"text": "Да", "value": "yes", "order": 0},
-    {"text": "Нет", "value": "no", "order": 1},
-)
-
-
-def create_question_items(question, question_data):
-    options = question_data.get("options", [])
-    if question.qtype == Question.YESNO and not options:
-        options = YESNO_DEFAULT_OPTIONS
-
-    for opt_order, opt in enumerate(options):
-        Option.objects.create(
-            question=question,
-            text=opt["text"],
-            value=opt.get("value", ""),
-            order=opt.get("order", opt_order),
-        )
-
-    for row_order, row in enumerate(question_data.get("matrix_rows", [])):
-        MatrixRow.objects.create(
-            question=question,
-            text=row["text"],
-            value=row.get("value", ""),
-            order=row.get("order", row_order),
-        )
-
-    for column_order, column in enumerate(question_data.get("matrix_columns", [])):
-        MatrixColumn.objects.create(
-            question=question,
-            text=column["text"],
-            value=column.get("value", ""),
-            order=column.get("order", column_order),
-        )
-
-
-def add_matrix_cells(answer, question, cells_data):
-    if not isinstance(cells_data, list):
-        return "matrix_cells must be a list"
-    if any(not isinstance(cell, dict) for cell in cells_data):
-        return "matrix_cells must contain objects"
-
-    rows = {
-        row.id: row
-        for row in MatrixRow.objects.filter(question=question, id__in=[cell.get("row") for cell in cells_data])
-    }
-    columns = {
-        column.id: column
-        for column in MatrixColumn.objects.filter(question=question, id__in=[cell.get("column") for cell in cells_data])
-    }
-
-    seen_pairs = set()
-    seen_rows = set()
-    cells = []
-    for cell in cells_data:
-        row_id = cell.get("row")
-        column_id = cell.get("column")
-        if row_id not in rows or column_id not in columns:
-            return "matrix row or column does not belong to question"
-
-        pair = (row_id, column_id)
-        if pair in seen_pairs:
-            continue
-        seen_pairs.add(pair)
-
-        if question.qtype == Question.MATRIX_SINGLE:
-            if row_id in seen_rows:
-                return "matrix_single allows only one column per row"
-            seen_rows.add(row_id)
-
-        cell_obj = MatrixAnswerCell(answer=answer, row=rows[row_id], column=columns[column_id])
-        cell_obj.full_clean()
-        cells.append(cell_obj)
-
-    MatrixAnswerCell.objects.bulk_create(cells)
-    return None
-
-
-def is_full_ranking_question(question):
-    return question.qsettings.get("full_ranking", True)
-
-
-def add_ranking_items(answer, question, items_data):
-    options = {
-        option.id: option
-        for option in Option.objects.filter(question=question, id__in=[item.get("option") for item in items_data])
-    }
-
-    ranking_items = []
-    for item in items_data:
-        option_id = item.get("option")
-        if option_id not in options:
-            return "ranking option does not belong to question"
-
-        ranking_item = RankingAnswerItem(
-            answer=answer,
-            option=options[option_id],
-            rank=item["rank"],
-        )
-        ranking_item.full_clean()
-        ranking_items.append(ranking_item)
-
-    RankingAnswerItem.objects.bulk_create(ranking_items)
-    return None
-
-
-def answer_has_value(question, answer_data):
-    if question.qtype in CHOICE_QTYPES | MULTI_CHOICE_QTYPES:
-        return bool(answer_data.get("selected_options"))
-    if question.qtype in TEXT_QTYPES:
-        return bool((answer_data.get("text") or "").strip())
-    if question.qtype in NUMERIC_QTYPES:
-        return answer_data.get("num") is not None
-    if question.qtype in MATRIX_QTYPES:
-        return bool(answer_data.get("matrix_cells"))
-    if question.qtype in RANKING_QTYPES:
-        return bool(answer_data.get("ranking_items"))
-    return False
-
-
-def extract_answer_value(question, answer_data):
-    if not answer_data:
-        return None
-    if question.qtype in CHOICE_QTYPES:
-        selected_options = answer_data.get("selected_options") or []
-        return selected_options[0] if selected_options else None
-    if question.qtype in MULTI_CHOICE_QTYPES:
-        return answer_data.get("selected_options") or []
-    if question.qtype in TEXT_QTYPES:
-        return (answer_data.get("text") or "").strip()
-    if question.qtype in NUMERIC_QTYPES:
-        return answer_data.get("num")
-    if question.qtype in MATRIX_QTYPES:
-        return answer_data.get("matrix_cells") or []
-    if question.qtype in RANKING_QTYPES:
-        return answer_data.get("ranking_items") or []
-    return None
-
-
-def condition_matches(condition, source_question, answer_data):
-    operator = condition.operator
-
-    if operator == "is_answered":
-        return bool(answer_data) and answer_has_value(source_question, answer_data)
-    if operator == "not_answered":
-        return not answer_data or not answer_has_value(source_question, answer_data)
-
-    value = extract_answer_value(source_question, answer_data)
-
-    if operator == "contains_option":
-        if not condition.option_id:
-            return False
-        if source_question.qtype in CHOICE_QTYPES:
-            return value == condition.option_id
-        if source_question.qtype in MULTI_CHOICE_QTYPES:
-            return condition.option_id in value
-        return False
-
-    if operator in ("contains_matrix_cell", "matrix_row_equals", "matrix_row_not_equals"):
-        if source_question.qtype not in MATRIX_QTYPES or not condition.matrix_row_id or not condition.matrix_column_id:
-            return False
-        cells = value or []
-        row_matches = [
-            cell
-            for cell in cells
-            if cell.get("row") == condition.matrix_row_id
-        ]
-        has_cell = any(cell.get("column") == condition.matrix_column_id for cell in row_matches)
-        if operator == "contains_matrix_cell":
-            return has_cell
-        return has_cell if operator == "matrix_row_equals" else bool(row_matches) and not has_cell
-
-    if operator in ("equals", "not_equals"):
-        if condition.option_id:
-            expected = condition.option_id
-        elif condition.value_number is not None:
-            expected = condition.value_number
-        else:
-            expected = condition.value_text
-        result = value == expected
-        return result if operator == "equals" else not result
-
-    if operator in ("gt", "lt", "gte", "lte"):
-        if value is None or condition.value_number is None:
-            return False
-        try:
-            value = float(value)
-        except (TypeError, ValueError):
-            return False
-        if operator == "gt":
-            return value > condition.value_number
-        if operator == "lt":
-            return value < condition.value_number
-        if operator == "gte":
-            return value >= condition.value_number
-        if operator == "lte":
-            return value <= condition.value_number
-
-    return False
-
-
-def evaluate_conditions(conditions, answers_by_question, questions_by_id):
-    groups = {}
-    for index, condition in enumerate(conditions):
-        group_key = condition.group_id or f"__condition_{condition.id or index}"
-        groups.setdefault(group_key, []).append(condition)
-
-    matched_conditions = []
-    for group_conditions in groups.values():
-        group_results = []
-        for condition in group_conditions:
-            source_question = questions_by_id.get(condition.source_question_id)
-            if not source_question:
-                group_results.append((condition, False))
-                continue
-
-            answer_data = answers_by_question.get(condition.source_question_id)
-            group_results.append((
-                condition,
-                condition_matches(condition, source_question, answer_data),
-            ))
-
-        group = group_conditions[0].group
-        group_logic = group.logic if group else "all"
-        if group_logic == "any":
-            matched_conditions.extend(
-                condition for condition, matches in group_results if matches
-            )
-        elif all(matches for _, matches in group_results):
-            matched_conditions.extend(group_conditions)
-
-    return matched_conditions
-
-
-def validate_answer_payload(question, answer_data):
-    present_fields = {field for field in ANSWER_FIELDS if field in answer_data}
-    allowed_fields = ALLOWED_ANSWER_FIELDS.get(question.qtype, set())
-    disallowed_fields = present_fields - allowed_fields
-
-    if disallowed_fields:
-        fields = ", ".join(sorted(disallowed_fields))
-        return f"Question {question.id} ({question.qtype}) does not allow fields: {fields}"
-
-    if question.required and not answer_has_value(question, answer_data):
-        return f"Question {question.id} is required"
-
-    if question.qtype in CHOICE_QTYPES:
-        selected_options = answer_data.get("selected_options", [])
-        if len(selected_options) > 1:
-            return f"Question {question.id} allows only one selected option"
-
-    if question.qtype in CHOICE_QTYPES | MULTI_CHOICE_QTYPES and "selected_options" in answer_data:
-        selected_options = answer_data.get("selected_options") or []
-        if len(selected_options) != len(set(selected_options)):
-            return f"Question {question.id} contains duplicate selected options"
-
-    if question.qtype in MATRIX_QTYPES and "matrix_cells" not in answer_data and question.required:
-        return f"Question {question.id} is required"
-
-    if question.qtype == Question.RANKING and "ranking_items" in answer_data:
-        ranking_items = answer_data.get("ranking_items") or []
-        option_ids = [item["option"] for item in ranking_items]
-        ranks = [item["rank"] for item in ranking_items]
-
-        if len(option_ids) != len(set(option_ids)):
-            return f"Question {question.id} contains duplicate ranking options"
-        if len(ranks) != len(set(ranks)):
-            return f"Question {question.id} contains duplicate ranks"
-
-        options_count = question.options.count()
-        if is_full_ranking_question(question):
-            if len(ranking_items) != options_count:
-                return f"Question {question.id} requires ranking all options"
-            if set(ranks) != set(range(1, options_count + 1)):
-                return f"Question {question.id} requires ranks from 1 to {options_count}"
-
-    return None
 
 class SurveyViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Survey.objects.all()
