@@ -1,0 +1,231 @@
+import {
+  Alert,
+  Box,
+  Card,
+  CardContent,
+  Chip,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Typography,
+} from "@mui/material";
+
+function formatValue(value) {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "boolean") return value ? "да" : "нет";
+  if (typeof value === "number") return Number.isInteger(value) ? String(value) : value.toFixed(4);
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined) return "—";
+  return `${formatValue(value)}%`;
+}
+
+function DataQualityBlock({ dataQuality }) {
+  if (!dataQuality) return null;
+
+  const survey = dataQuality.survey || {};
+  const dataset = dataQuality.dataset || {};
+  const answers = dataQuality.answers || {};
+  const variables = dataQuality.variables || {};
+  const time = dataQuality.time || {};
+  const datasetSize = dataset.dataset_size ?? dataQuality.dataset_size;
+  const analysisN = dataset.analysis_n ?? dataQuality.n;
+  const issues = [
+    ...(variables.zero_variance_variables || []).map((item) => ({
+      type: "Нулевая дисперсия",
+      label: item.label || item.code,
+      value: `${formatValue(item.unique_values_count)} уникальных значений`,
+    })),
+    ...(variables.high_missing_variables || []).map((item) => ({
+      type: "Высокий уровень пропусков",
+      label: item.label || item.code,
+      value: formatPercent(item.missing_rate),
+    })),
+    ...(answers.high_missing_questions || []).map((item) => ({
+      type: "Пропуски по вопросу",
+      label: item.label || item.question_id,
+      value: formatPercent(item.missing_rate),
+    })),
+  ];
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>Качество данных</Typography>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Chip label={`Всего прохождений: ${formatValue(survey.total_started)}`} />
+          <Chip label={`Завершено полностью: ${formatValue(survey.total_completed)}`} />
+          <Chip label={`Отсечено: ${formatValue(survey.total_screened_out)}`} />
+          <Chip label={`Активных незавершенных: ${formatValue(survey.total_active_unfinished)}`} />
+          <Chip label={`Размер набора данных: ${formatValue(datasetSize)}`} />
+          <Chip label={`Наблюдений в расчете: ${formatValue(analysisN)}`} />
+          <Chip label={`Средняя полнота: ${formatPercent(answers.average_completeness_rate)}`} />
+          <Chip label={`Вопросов с высокими пропусками: ${formatValue(answers.high_missing_questions_count)}`} />
+          <Chip label={`Переменных с нулевой дисперсией: ${formatValue(variables.zero_variance_variables_count)}`} />
+          <Chip label={`Слишком быстрых прохождений: ${formatValue(time.too_fast_responses_count)}`} />
+        </Stack>
+
+        {(dataQuality.notes || []).map((note) => (
+          <Alert severity="info" key={String(note)} sx={{ mt: 1 }}>{String(note)}</Alert>
+        ))}
+
+        {!!issues.length && (
+          <Box sx={{ mt: 2, overflowX: "auto" }}>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>Проблемные переменные и вопросы</Typography>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Тип</TableCell>
+                  <TableCell>Переменная или вопрос</TableCell>
+                  <TableCell>Значение</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {issues.map((item, index) => (
+                  <TableRow key={`${item.type}-${item.label}-${index}`}>
+                    <TableCell>{item.type}</TableCell>
+                    <TableCell>{item.label}</TableCell>
+                    <TableCell>{item.value}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function practicalSeverity(level) {
+  if (level === "high") return "success";
+  if (level === "limited") return "warning";
+  return "info";
+}
+
+function confidenceSeverity(level) {
+  if (level === "high") return "success";
+  if (level === "low") return "warning";
+  return "info";
+}
+
+function InterpretationBlock({ interpretation }) {
+  if (!interpretation) return null;
+
+  const significance = interpretation.statistical_significance;
+  const effect = interpretation.effect_interpretation;
+  const practical = interpretation.practical_significance;
+  const confidence = interpretation.confidence;
+  const hasExtendedInterpretation = significance || effect || practical || confidence;
+  if (!hasExtendedInterpretation) return null;
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>Интерпретация результата</Typography>
+        <Stack spacing={1}>
+          {significance?.interpretation && (
+            <Alert severity="info">{significance.interpretation}</Alert>
+          )}
+          {effect?.interpretation && (
+            <Alert severity="info">{effect.interpretation}</Alert>
+          )}
+          {practical?.interpretation && (
+            <Alert severity={practicalSeverity(practical.level)}>{practical.interpretation}</Alert>
+          )}
+          {confidence?.interpretation && (
+            <Alert severity={confidenceSeverity(confidence.level)}>{confidence.interpretation}</Alert>
+          )}
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function StandardizedResultSummary({ result }) {
+  if (!result) return null;
+
+  const indicators = Object.entries(result.main_results || {}).filter(
+    ([, value]) => value !== null && value !== undefined && !Array.isArray(value),
+  );
+
+  return (
+    <Stack spacing={2} sx={{ mb: 3 }}>
+      <Box>
+        <Typography variant="h6">{result.title}</Typography>
+        {result.purpose && <Alert severity="info" sx={{ mt: 1 }}>{result.purpose}</Alert>}
+      </Box>
+
+      {result.interpretation?.summary && (
+        <Card variant="outlined">
+          <CardContent>
+            <Typography variant="subtitle1">Краткий вывод</Typography>
+            <Typography>{result.interpretation.summary}</Typography>
+          </CardContent>
+        </Card>
+      )}
+
+      <InterpretationBlock interpretation={result.interpretation} />
+
+      <DataQualityBlock dataQuality={result.data_quality} />
+
+      {!!indicators.length && (
+        <Box>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>Главные показатели</Typography>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {indicators.map(([name, value]) => (
+              <Chip key={name} label={`${name}: ${formatValue(value)}`} />
+            ))}
+          </Stack>
+        </Box>
+      )}
+
+      {result.effect_size?.name && (
+        <Chip
+          color="primary"
+          variant="outlined"
+          label={`${result.effect_size.name}: ${formatValue(result.effect_size.value ?? result.effect_size.values)}${result.effect_size.interpretation ? ` — ${result.effect_size.interpretation}` : ""}`}
+        />
+      )}
+
+      {(result.warnings || []).map((warning, index) => (
+        <Alert severity="warning" key={`${String(warning)}-${index}`}>{String(warning)}</Alert>
+      ))}
+
+      {!!result.interpretation?.limitations?.length && (
+        <Box>
+          <Typography variant="subtitle1">Ограничения интерпретации</Typography>
+          <ul>
+            {result.interpretation.limitations.map((item) => <li key={String(item)}>{String(item)}</li>)}
+          </ul>
+        </Box>
+      )}
+
+      {!!result.recommendations?.length && (
+        <Box>
+          <Typography variant="subtitle1">Рекомендации</Typography>
+          <ul>
+            {result.recommendations.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </Box>
+      )}
+
+      {!!result.visualizations?.length && (
+        <Box>
+          <Typography variant="subtitle1">Рекомендуемые визуализации</Typography>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+            {result.visualizations.map((item) => (
+              <Chip key={`${item.type}-${item.title}`} label={item.title || item.type} />
+            ))}
+          </Stack>
+        </Box>
+      )}
+    </Stack>
+  );
+}

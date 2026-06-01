@@ -1,4 +1,5 @@
 from .advanced_analytics_dataset import build_analysis_dataset
+from .analytics_result_format import standardize_analysis_result
 from .advanced_analytics_methods import (
     compute_chi_square,
     compute_correlation_matrix,
@@ -28,13 +29,20 @@ from .analytics import (
 from .models import Response
 
 
-def _with_metadata(survey_id: int, analysis_type: str, dataset, result: dict) -> dict:
-    return {
+def _with_metadata(survey_id: int, analysis_type: str, dataset, result: dict, payload=None) -> dict:
+    full_result = {
         "survey_id": survey_id,
         "analysis_type": analysis_type,
         "dataset_size": len(dataset.rows),
         **result,
     }
+    full_result["standardized_result"] = standardize_analysis_result(
+        analysis_type,
+        full_result,
+        payload=payload,
+        dataset=dataset,
+    )
+    return full_result
 
 
 def _single_variable(dataset, role: str):
@@ -54,7 +62,7 @@ def run_correlation_analysis(payload: dict) -> dict:
         dataset.variables,
         method=payload.get("method", "pearson"),
     )
-    return _with_metadata(survey_id, "correlation", dataset, result)
+    return _with_metadata(survey_id, "correlation", dataset, result, payload)
 
 
 def run_crosstab_analysis(payload: dict) -> dict:
@@ -74,7 +82,7 @@ def run_crosstab_analysis(payload: dict) -> dict:
         row_variable=row_variable,
         column_variable=column_variable,
     )
-    return _with_metadata(survey_id, "crosstab", dataset, {"crosstab": result})
+    return _with_metadata(survey_id, "crosstab", dataset, {"crosstab": result}, payload)
 
 
 def run_chi_square_analysis(payload: dict) -> dict:
@@ -105,6 +113,7 @@ def run_chi_square_analysis(payload: dict) -> dict:
             "chi_square": chi_square,
             "cramers_v": cramers_v,
         },
+        payload,
     )
 
 
@@ -130,7 +139,7 @@ def run_correspondence_analysis(payload: dict) -> dict:
         column_variable=column_variable,
         n_dimensions=payload.get("n_dimensions", 2),
     )
-    return _with_metadata(survey_id, "correspondence_analysis", dataset, result)
+    return _with_metadata(survey_id, "correspondence_analysis", dataset, result, payload)
 
 
 def run_regression_analysis(payload: dict) -> dict:
@@ -169,7 +178,7 @@ def run_regression_analysis(payload: dict) -> dict:
     result["variables"] = list(variables_meta.values())
     result["variables_by_code"] = variables_meta
     
-    return _with_metadata(survey_id, "regression", dataset, result)
+    return _with_metadata(survey_id, "regression", dataset, result, payload)
 
 
 def run_logistic_regression_analysis(payload: dict) -> dict:
@@ -221,7 +230,7 @@ def run_logistic_regression_analysis(payload: dict) -> dict:
     result["variables"] = list(variables_meta.values())
     result["variables_by_code"] = variables_meta
 
-    return _with_metadata(survey_id, "logistic_regression", dataset, result)
+    return _with_metadata(survey_id, "logistic_regression", dataset, result, payload)
 
 
 def run_factor_analysis(payload: dict) -> dict:
@@ -250,7 +259,7 @@ def run_factor_analysis(payload: dict) -> dict:
         standardize=payload.get("standardize", True),
         include_factor_scores=payload.get("include_factor_scores", False),
     )
-    return _with_metadata(survey_id, "factor_analysis", dataset, result)
+    return _with_metadata(survey_id, "factor_analysis", dataset, result, payload)
 
 
 def run_cluster_analysis(payload: dict) -> dict:
@@ -283,7 +292,7 @@ def run_cluster_analysis(payload: dict) -> dict:
         }
         for variable in profile_dataset.variables
     ]
-    return _with_metadata(survey_id, "cluster_analysis", dataset, result)
+    return _with_metadata(survey_id, "cluster_analysis", dataset, result, payload)
 
 
 def run_group_comparison(payload: dict) -> dict:
@@ -315,7 +324,7 @@ def run_group_comparison(payload: dict) -> dict:
         post_hoc_method=payload.get("post_hoc_method", "auto"),
         p_adjust=payload.get("p_adjust", "bonferroni"),
     )
-    return _with_metadata(survey_id, "group_comparison", dataset, result)
+    return _with_metadata(survey_id, "group_comparison", dataset, result, payload)
 
 
 def run_time_analysis(payload: dict) -> dict:
@@ -354,12 +363,14 @@ def run_time_analysis(payload: dict) -> dict:
         bucket_size_seconds=payload.get("bucket_size_seconds", 60),
         max_buckets=payload.get("max_buckets", 30),
     )
-    return {
+    full_result = {
         "survey_id": survey_id,
         "analysis_type": "time_analysis",
         "dataset_size": result.get("n", len(response_items)),
         **result,
     }
+    full_result["standardized_result"] = standardize_analysis_result("time_analysis", full_result, payload=payload)
+    return full_result
 
 
 def run_reliability_analysis(payload: dict) -> dict:
@@ -383,7 +394,7 @@ def run_reliability_analysis(payload: dict) -> dict:
         dataset.variables,
         standardize=payload.get("standardize", False),
     )
-    return _with_metadata(survey_id, "reliability_analysis", dataset, result)
+    return _with_metadata(survey_id, "reliability_analysis", dataset, result, payload)
 
 
 def run_scale_index_analysis(payload: dict) -> dict:
@@ -425,7 +436,7 @@ def run_scale_index_analysis(payload: dict) -> dict:
         include_cronbach_alpha=payload.get("include_cronbach_alpha", True),
     )
 
-    return _with_metadata(survey_id, "scale_index", dataset, result)
+    return _with_metadata(survey_id, "scale_index", dataset, result, payload)
 
 
 def run_missing_analysis(payload: dict) -> dict:
@@ -513,9 +524,11 @@ def run_missing_analysis(payload: dict) -> dict:
             )
         result["screened_out_context"] = context
 
-    return {
+    full_result = {
         "survey_id": survey_id,
         "analysis_type": "missing_analysis",
         "dataset_size": len(completed_responses),
         **result,
     }
+    full_result["standardized_result"] = standardize_analysis_result("missing_analysis", full_result, payload=payload)
+    return full_result

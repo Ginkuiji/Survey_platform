@@ -41,6 +41,7 @@ import {
   TimeDistributionChart,
   TimeScreenoutReasonsChart,
 } from "./reportCharts";
+import StandardizedResultSummary from "./StandardizedResultSummary";
 
 const SECTION_LABELS = {
   correlation: "Корреляционный анализ",
@@ -223,6 +224,7 @@ function ReportSectionCard({ section, children, onRequestChart, serverChart }) {
           </Box>
         )}
 
+        <StandardizedResultSummary result={section.result?.standardized_result} />
         {children}
       </CardContent>
     </Card>
