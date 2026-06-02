@@ -396,6 +396,9 @@ export function buildSectionPayload(surveyId, section, questionsById) {
       rotation: section.rotation || "varimax",
       standardize: section.standardize ?? true,
       include_factor_scores: section.include_factor_scores ?? false,
+      parallel_analysis: section.parallel_analysis ?? true,
+      parallel_iterations: section.parallel_iterations ?? 100,
+      parallel_percentile: section.parallel_percentile ?? 95,
     };
   }
 

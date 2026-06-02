@@ -3289,16 +3289,82 @@ def _factor_scores(response_ids, z_matrix, loadings, n_factors):
     score_means = np.mean(scores, axis=0)
     nonzero = score_stds > 0
     scores[:, nonzero] = (scores[:, nonzero] - score_means[nonzero]) / score_stds[nonzero]
-    return [
-        {
+    rows = []
+    for row_index, response_id in enumerate(response_ids):
+        score_items = [
+            {"factor": f"Фактор {index + 1}", "value": float(scores[row_index, index])}
+            for index in range(n_factors)
+        ]
+        rows.append({
             "response_id": response_id,
-            "scores": [
-                {"factor": f"Фактор {index + 1}", "value": float(scores[row_index, index])}
-                for index in range(n_factors)
-            ],
+            "scores": score_items,
+            **{item["factor"]: item["value"] for item in score_items},
+        })
+    return rows
+
+
+SALIENT_LOADING_THRESHOLD = 0.4
+MAX_FACTOR_SCORE_ROWS = 500
+
+
+def _scree_elbow_n_factors(eigenvalues):
+    if len(eigenvalues) < 3:
+        return None
+    drops = np.diff(eigenvalues) * -1
+    if not len(drops) or max(drops) <= 0:
+        return None
+    index = int(np.argmax(drops))
+    next_drop = drops[index + 1] if index + 1 < len(drops) else None
+    if next_drop is None or drops[index] < max(0.15, next_drop * 1.5):
+        return None
+    return index + 1
+
+
+def compute_parallel_analysis(matrix, n_iter=100, percentile=95, random_state=42) -> dict:
+    if np is None:
+        return {
+            "enabled": False,
+            "recommended_n_factors": None,
+            "components": [],
+            "interpretation": "Parallel analysis недоступен.",
         }
-        for row_index, response_id in enumerate(response_ids)
-    ]
+    try:
+        n, p = matrix.shape
+        rng = np.random.default_rng(random_state)
+        random_eigenvalues = []
+        for _ in range(n_iter):
+            random_matrix = rng.normal(size=(n, p))
+            random_eigenvalues.append(np.linalg.eigvalsh(np.corrcoef(random_matrix, rowvar=False))[::-1])
+        random_eigenvalues = np.asarray(random_eigenvalues)
+        real_eigenvalues = np.linalg.eigvalsh(np.corrcoef(matrix, rowvar=False))[::-1]
+        means = np.mean(random_eigenvalues, axis=0)
+        thresholds = np.percentile(random_eigenvalues, percentile, axis=0)
+        components = [
+            {
+                "component": index + 1,
+                "real_eigenvalue": float(real_eigenvalues[index]),
+                "random_mean_eigenvalue": float(means[index]),
+                "random_percentile_eigenvalue": float(thresholds[index]),
+                "keep": bool(real_eigenvalues[index] > thresholds[index]),
+            }
+            for index in range(p)
+        ]
+        recommended = sum(item["keep"] for item in components)
+        return {
+            "enabled": True,
+            "n_iter": n_iter,
+            "percentile": percentile,
+            "recommended_n_factors": recommended,
+            "components": components,
+            "interpretation": f"Parallel analysis рекомендует оставить {recommended} факторов.",
+        }
+    except (ValueError, np.linalg.LinAlgError):
+        return {
+            "enabled": False,
+            "recommended_n_factors": None,
+            "components": [],
+            "interpretation": "Parallel analysis недоступен для выбранных данных.",
+        }
 
 
 def compute_factor_analysis(
@@ -3308,6 +3374,9 @@ def compute_factor_analysis(
     rotation="varimax",
     standardize=True,
     include_factor_scores=False,
+    parallel_analysis=True,
+    parallel_iterations=100,
+    parallel_percentile=95,
 ) -> dict:
     if np is None:
         raise ValueError("Для факторного анализа требуется установленный пакет numpy.")
@@ -3329,6 +3398,7 @@ def compute_factor_analysis(
 
     x_matrix = np.array(complete_cases, dtype=float)
     warnings = []
+    notes = []
     if n < max(20, 5 * p):
         warnings.append("Малый объем выборки для факторного анализа; интерпретируйте результаты с осторожностью.")
 
@@ -3353,6 +3423,10 @@ def compute_factor_analysis(
     eigenvectors = eigenvectors[:, order]
     eigenvalues = np.maximum(eigenvalues, 0)
 
+    off_diagonal = correlation_matrix[np.triu_indices(p, 1)]
+    if len(off_diagonal) and float(np.mean(np.abs(off_diagonal))) < 0.3:
+        warnings.append("Средние корреляции между переменными низкие; факторная структура может быть слабой.")
+
     selected_eigenvalues = eigenvalues[:n_factors]
     loadings = eigenvectors[:, :n_factors] * np.sqrt(selected_eigenvalues)
     if rotation == "varimax" and n_factors > 1:
@@ -3372,25 +3446,157 @@ def compute_factor_analysis(
             "eigenvalue": float(value),
             "explained_variance": explained_value,
             "cumulative_explained_variance": float(cumulative),
+            "kaiser_keep": bool(value > 1.0),
+            "kaiser_threshold": 1.0,
         })
-    kaiser_n_factors = sum(1 for value in eigenvalues if value > 1.0) or 1
-    if kaiser_n_factors == n_factors:
-        recommendation_message = "Выбранное число факторов совпадает с критерием Кайзера."
-    else:
-        recommendation_message = f"По критерию Кайзера рекомендуется {kaiser_n_factors} факторов; сейчас выбрано {n_factors}."
+    raw_kaiser_n_factors = sum(1 for value in eigenvalues if value > 1.0)
+    kaiser_n_factors = raw_kaiser_n_factors or 1
+    if not raw_kaiser_n_factors:
+        warnings.append("По критерию Kaiser компоненты с eigenvalue > 1 не обнаружены; факторная структура может быть слабой.")
+    scree_elbow_n_factors = _scree_elbow_n_factors(eigenvalues)
+    if scree_elbow_n_factors is None:
+        notes.append("Локоть на scree plot выражен неявно; число факторов следует выбирать с учетом содержательной интерпретации.")
+    parallel_result = (
+        compute_parallel_analysis(z_matrix, parallel_iterations, parallel_percentile)
+        if parallel_analysis
+        else {
+            "enabled": False,
+            "recommended_n_factors": None,
+            "components": [],
+            "interpretation": "Parallel analysis отключен в настройках отчета.",
+        }
+    )
+    parallel_n_factors = parallel_result.get("recommended_n_factors")
+    if parallel_result.get("enabled") and not parallel_n_factors:
+        notes.append("Parallel analysis не выделил компоненты выше случайного порога; факторное решение требует осторожной содержательной проверки.")
+    recommended_n_factors = parallel_n_factors or scree_elbow_n_factors or kaiser_n_factors
+    recommendation_method = "parallel_analysis" if parallel_n_factors else "scree_elbow" if scree_elbow_n_factors else "kaiser"
+    recommendation_message = f"Рекомендуемое число факторов: {recommended_n_factors}. Использован ориентир: {recommendation_method}."
 
     explained = [
         float(value / total_eigenvalue) if total_eigenvalue else 0
         for value in selected_eigenvalues
     ]
     communalities = np.sum(loadings ** 2, axis=1)
+    uniquenesses = np.maximum(0, 1 - communalities)
     kmo = compute_kmo(correlation_matrix, variables)
     bartlett = compute_bartlett_sphericity(correlation_matrix, n, p)
+    kmo["per_variable"] = kmo["variables"]
+    low_kmo_variables = [item for item in kmo["variables"] if item.get("kmo") is not None and item["kmo"] < 0.6]
+    if kmo.get("overall") is not None and kmo["overall"] < 0.6:
+        kmo["warnings"].append("KMO ниже 0.6, данные могут быть недостаточно пригодны для факторного анализа.")
+    if low_kmo_variables:
+        kmo["warnings"].append("У отдельных переменных низкий KMO; они могут плохо согласовываться с общей факторной структурой.")
+    if bartlett.get("significant") is False:
+        bartlett["warnings"].append("Критерий Бартлетта незначим; факторный анализ может быть неинформативен.")
+    if float(sum(explained)) < 0.5:
+        warnings.append("Выбранные факторы объясняют небольшую долю дисперсии; факторное решение может быть слабым.")
+
+    communalities_result = []
+    loadings_result = []
+    flattened_loadings = []
+    factor_structure = []
+    weak_variables = []
+    cross_loading_variables = []
+    for row_index, variable in enumerate(variables):
+        communality = float(communalities[row_index])
+        uniqueness = float(uniquenesses[row_index])
+        factor_items = []
+        salient_count = 0
+        for index in range(n_factors):
+            loading = float(loadings[row_index, index])
+            is_salient = abs(loading) >= SALIENT_LOADING_THRESHOLD
+            salient_count += int(is_salient)
+            factor_item = {
+                "factor": f"Фактор {index + 1}",
+                "loading": loading,
+                "abs_loading": abs(loading),
+                "is_salient": is_salient,
+                "direction": "positive" if loading >= 0 else "negative",
+            }
+            factor_items.append(factor_item)
+            flattened_loadings.append({
+                "variable": variable.code,
+                "label": variable.label,
+                **factor_item,
+                "communality": communality,
+                "uniqueness": uniqueness,
+            })
+        if salient_count == 0:
+            weak_variables.append({"variable": variable.code, "label": variable.label})
+        if salient_count >= 2:
+            cross_loading_variables.append({"variable": variable.code, "label": variable.label})
+        interpretation = (
+            "Переменная плохо объясняется выделенными факторами."
+            if communality < 0.3
+            else "Переменная хорошо объясняется выделенными факторами."
+            if communality >= 0.6
+            else "Переменная умеренно объясняется выделенными факторами."
+        )
+        communalities_result.append({
+            "variable": variable.code,
+            "label": variable.label,
+            "communality": communality,
+            "uniqueness": uniqueness,
+            "interpretation": interpretation,
+        })
+        loadings_result.append({
+            "variable": variable.code,
+            "label": variable.label,
+            "factors": factor_items,
+            "communality": communality,
+            "uniqueness": uniqueness,
+        })
+    if weak_variables:
+        warnings.append("Некоторые переменные не имеют существенных нагрузок ни на один фактор.")
+    if cross_loading_variables:
+        warnings.append("Некоторые переменные имеют высокие нагрузки сразу на несколько факторов; их интерпретация может быть неоднозначной.")
+    if any(item["communality"] < 0.3 for item in communalities_result):
+        warnings.append("Некоторые переменные имеют низкую communality; они плохо объясняются выделенными факторами.")
+
+    for index in range(n_factors):
+        factor_name = f"Фактор {index + 1}"
+        variables_for_factor = sorted(
+            [item for item in flattened_loadings if item["factor"] == factor_name and item["is_salient"]],
+            key=lambda item: item["abs_loading"],
+            reverse=True,
+        )
+        top_variables = [
+            {key: item[key] for key in ("variable", "label", "loading", "direction")}
+            for item in variables_for_factor[:5]
+        ]
+        labels = ", ".join(f"«{item['label']}»" for item in top_variables)
+        factor_structure.append({
+            "factor": factor_name,
+            "explained_variance": explained[index],
+            "top_variables": top_variables,
+            "positive_variables": [item for item in top_variables if item["direction"] == "positive"],
+            "negative_variables": [item for item in top_variables if item["direction"] == "negative"],
+            "cross_loading_variables": cross_loading_variables,
+            "weak_variables": weak_variables,
+            "interpretation_hint": (
+                f"{factor_name} объединяет вопросы с существенными нагрузками: {labels}. "
+                "Его можно рассматривать как возможную основу шкалы после содержательной проверки."
+                if labels else f"Для {factor_name} существенные нагрузки не выделены; содержательная интерпретация ограничена."
+            ),
+            "suggested_label": None,
+        })
     factor_scores = []
     if include_factor_scores:
-        factor_scores = _factor_scores(response_ids, z_matrix, loadings, n_factors)
-        if n > 500:
-            warnings.append("Факторные значения рассчитаны для большого числа ответов; экспорт может быть объемным.")
+        factor_scores = _factor_scores(response_ids, z_matrix, loadings, n_factors)[:MAX_FACTOR_SCORE_ROWS]
+        if n > MAX_FACTOR_SCORE_ROWS:
+            notes.append("Для отображения сохранена ограниченная выборка факторных значений.")
+    biplot = {
+        "available": bool(include_factor_scores and n_factors >= 2 and factor_scores),
+        "points": [
+            {"response_id": item["response_id"], "x": item.get("Фактор 1"), "y": item.get("Фактор 2")}
+            for item in factor_scores
+        ] if n_factors >= 2 else [],
+        "vectors": [
+            {"variable": variable.code, "label": variable.label, "x": float(loadings[index, 0]), "y": float(loadings[index, 1])}
+            for index, variable in enumerate(variables)
+        ] if n_factors >= 2 else [],
+    }
 
     return {
         "method": "pca_factor_extraction",
@@ -3404,32 +3610,42 @@ def compute_factor_analysis(
             for variable in variables
         ],
         "eigenvalues": [float(value) for value in eigenvalues],
+        "eigenvalue_details": scree,
         "scree": scree,
+        "parallel_analysis": parallel_result,
         "factor_recommendations": {
+            "requested_n_factors": n_factors,
             "kaiser_n_factors": int(kaiser_n_factors),
+            "scree_elbow_n_factors": scree_elbow_n_factors,
+            "parallel_analysis_n_factors": parallel_n_factors,
+            "recommended_n_factors": recommended_n_factors,
+            "method": recommendation_method,
             "selected_n_factors": n_factors,
             "message": recommendation_message,
         },
         "explained_variance": [
-            {"factor": f"Фактор {index + 1}", "value": value}
+            {
+                "factor": f"Фактор {index + 1}",
+                "value": value,
+                "eigenvalue": float(selected_eigenvalues[index]),
+                "explained_variance": value,
+                "cumulative_explained_variance": float(sum(explained[:index + 1])),
+            }
             for index, value in enumerate(explained)
         ],
         "cumulative_explained_variance": float(sum(explained)),
-        "loadings": [
-            {
-                "variable": variable.code,
-                "label": variable.label,
-                "factors": [
-                    {"factor": f"Фактор {index + 1}", "loading": float(loadings[row_index, index])}
-                    for index in range(n_factors)
-                ],
-                "communality": float(communalities[row_index]),
-            }
-            for row_index, variable in enumerate(variables)
-        ],
+        "loadings": loadings_result,
+        "loadings_matrix": flattened_loadings,
+        "communalities": communalities_result,
+        "uniquenesses": [{"variable": item["variable"], "label": item["label"], "uniqueness": item["uniqueness"]} for item in communalities_result],
+        "weak_variables": weak_variables,
+        "cross_loading_variables": cross_loading_variables,
+        "factor_structure": factor_structure,
         "correlation_matrix": correlation_matrix.tolist(),
         "kmo": kmo,
         "bartlett": bartlett,
         "factor_scores": factor_scores,
+        "biplot": biplot,
         "warnings": warnings,
+        "notes": notes,
     }

@@ -5,7 +5,7 @@ from unittest.mock import patch
 from .analytics import classify_question_response_state
 from .analytics_result_format import standardize_analysis_result
 from .analytics_descriptive_profile import describe_numeric_values
-from .advanced_analytics_methods import compute_chi_square, compute_cramers_v, compute_group_comparison, compute_linear_regression, compute_logistic_regression
+from .advanced_analytics_methods import compute_chi_square, compute_cramers_v, compute_factor_analysis, compute_group_comparison, compute_linear_regression, compute_logistic_regression
 
 
 class StandardizedAnalysisResultTests(SimpleTestCase):
@@ -78,6 +78,29 @@ class StandardizedAnalysisResultTests(SimpleTestCase):
         self.assertEqual(regression["main_results"]["adjusted_r2"], 0.38)
         self.assertEqual(regression["effect_size"]["value"], 0.42)
         self.assertEqual(factor["effect_size"]["value"], 0.71)
+
+    def test_factor_analysis_contains_interpretation_diagnostics(self):
+        variables = [
+            SimpleNamespace(code="q_1", label="Качество"),
+            SimpleNamespace(code="q_2", label="Скорость"),
+            SimpleNamespace(code="q_3", label="Поддержка"),
+            SimpleNamespace(code="q_4", label="Удобство"),
+        ]
+        rows = [
+            {"response_id": index, "q_1": index, "q_2": index + (index % 3), "q_3": 20 - index, "q_4": 21 - index + (index % 2)}
+            for index in range(1, 20)
+        ]
+
+        result = compute_factor_analysis(rows, variables, include_factor_scores=True, parallel_iterations=20)
+
+        self.assertEqual(result["kmo"]["per_variable"], result["kmo"]["variables"])
+        self.assertTrue(result["parallel_analysis"]["enabled"])
+        self.assertIn("recommended_n_factors", result["factor_recommendations"])
+        self.assertEqual(len(result["communalities"]), 4)
+        self.assertEqual(len(result["uniquenesses"]), 4)
+        self.assertEqual(len(result["factor_structure"]), 2)
+        self.assertIn("Фактор 1", result["factor_scores"][0])
+        self.assertTrue(result["biplot"]["available"])
 
     def test_dataset_quality_detects_missing_values_and_zero_variance(self):
         variables = [

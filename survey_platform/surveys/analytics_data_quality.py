@@ -289,6 +289,17 @@ def _method_specific_checks(analysis_type, result, dataset):
             "cases_per_variable": round(n / n_variables, 2) if n is not None and n_variables else None,
             "kmo_overall": kmo.get("overall"),
             "bartlett_p_value": bartlett.get("p_value"),
+            "low_kmo_variables": [
+                item for item in (kmo.get("per_variable") or kmo.get("variables") or [])
+                if item.get("kmo") is not None and item["kmo"] < 0.6
+            ],
+            "low_communality_variables": [
+                item for item in result.get("communalities") or []
+                if item.get("communality") is not None and item["communality"] < 0.3
+            ],
+            "cross_loading_variables": result.get("cross_loading_variables") or [],
+            "weak_variables": result.get("weak_variables") or [],
+            "cumulative_explained_variance": result.get("cumulative_explained_variance"),
         }
     if analysis_type == "cluster_analysis":
         sizes = _cluster_sizes(result)
@@ -480,6 +491,16 @@ def build_applicability_warnings(analysis_type, result, payload=None, dataset=No
             warnings.append("KMO ниже 0.6, данные могут быть плохо пригодны для факторного анализа.")
         if checks.get("bartlett_p_value") is not None and checks["bartlett_p_value"] >= 0.05:
             warnings.append("Критерий Бартлетта незначим, факторный анализ может быть неинформативен.")
+        if checks.get("low_kmo_variables"):
+            warnings.append("У отдельных переменных низкий KMO; они могут плохо согласовываться с общей факторной структурой.")
+        if checks.get("low_communality_variables"):
+            warnings.append("Некоторые переменные имеют низкую communality; они плохо объясняются выделенными факторами.")
+        if checks.get("cross_loading_variables"):
+            warnings.append("Некоторые переменные имеют высокие нагрузки сразу на несколько факторов; их интерпретация может быть неоднозначной.")
+        if checks.get("weak_variables"):
+            warnings.append("Некоторые переменные не имеют существенных нагрузок ни на один фактор.")
+        if checks.get("cumulative_explained_variance") is not None and checks["cumulative_explained_variance"] < 0.5:
+            warnings.append("Выбранные факторы объясняют небольшую долю дисперсии; факторное решение может быть слабым.")
     elif analysis_type == "cluster_analysis":
         if checks.get("silhouette_score") is not None and checks["silhouette_score"] < 0.25:
             warnings.append("Silhouette score низкий, кластеры могут быть плохо разделены.")

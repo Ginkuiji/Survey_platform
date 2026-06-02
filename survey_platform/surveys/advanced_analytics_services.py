@@ -270,6 +270,9 @@ def run_factor_analysis(payload: dict) -> dict:
         rotation=payload.get("rotation", "varimax"),
         standardize=payload.get("standardize", True),
         include_factor_scores=payload.get("include_factor_scores", False),
+        parallel_analysis=payload.get("parallel_analysis", True),
+        parallel_iterations=payload.get("parallel_iterations", 100),
+        parallel_percentile=payload.get("parallel_percentile", 95),
     )
     return _with_metadata(survey_id, "factor_analysis", dataset, result, payload)
 

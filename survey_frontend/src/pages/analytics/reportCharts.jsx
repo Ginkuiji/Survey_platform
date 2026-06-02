@@ -437,10 +437,12 @@ export function LogisticProbabilityHistogram({ result }) {
 }
 
 export function FactorScreeChart({ result }) {
+  const parallelByComponent = new Map((result?.parallel_analysis?.components || []).map((item) => [item.component, item.random_percentile_eigenvalue]));
   const scree = (result?.scree || []).map((item) => ({
     component: item.component,
     eigenvalue: Number(item.eigenvalue),
     explainedPercent: toPercent(item.explained_variance),
+    randomPercentile: parallelByComponent.get(item.component),
   }));
   const fallback = (result?.eigenvalues || []).map((value, index) => ({
     component: `Component ${index + 1}`,
@@ -462,6 +464,7 @@ export function FactorScreeChart({ result }) {
           <ReferenceLine yAxisId="left" y={1} stroke="#666" strokeDasharray="4 4" />
           <Bar yAxisId="right" dataKey="explainedPercent" name="Explained variance, %" fill="#56ccf2" />
           <Line yAxisId="left" type="monotone" dataKey="eigenvalue" name="Eigenvalue" stroke="#eb5757" strokeWidth={2} />
+          <Line yAxisId="left" type="monotone" dataKey="randomPercentile" name="Случайный порог" stroke="#9b51e0" strokeDasharray="4 4" />
         </ComposedChart>
       </ResponsiveContainer>
     </ChartBox>
@@ -478,6 +481,7 @@ export function FactorLoadingsHeatmap({ result }) {
   return (
     <Box sx={{ width: "100%", overflowX: "auto" }}>
       <Typography variant="subtitle1" sx={{ mb: 1 }}>Тепловая карта факторных нагрузок</Typography>
+      {!!result?.cross_loading_variables?.length && <Alert severity="warning" sx={{ mb: 1 }}>Есть переменные с существенными нагрузками сразу на несколько факторов.</Alert>}
       <Table size="small" sx={{ minWidth: Math.max(640, factors.length * 110) }}>
         <TableHead>
           <TableRow>
@@ -496,7 +500,7 @@ export function FactorLoadingsHeatmap({ result }) {
                 {factors.map((factor) => {
                   const value = factorsByName.get(factor);
                   return (
-                    <TableCell key={factor} align="right" sx={{ backgroundColor: heatColor(value, "absolute") }}>
+                    <TableCell key={factor} align="right" sx={{ backgroundColor: heatColor(value, "absolute"), fontWeight: Math.abs(Number(value)) >= 0.4 ? 700 : 400 }}>
                       {formatNumber(value)}
                     </TableCell>
                   );
@@ -508,6 +512,39 @@ export function FactorLoadingsHeatmap({ result }) {
       </Table>
     </Box>
   );
+}
+
+export function ParallelAnalysisChart({ result }) {
+  const data = (result?.parallel_analysis?.components || []).map((item) => ({
+    component: item.component,
+    real: Number(item.real_eigenvalue),
+    random: Number(item.random_percentile_eigenvalue),
+  })).filter((item) => !Number.isNaN(item.real) && !Number.isNaN(item.random));
+  if (!data.length) return chartEmpty("Parallel analysis недоступен для этого результата.");
+  return <ChartBox><ResponsiveContainer><LineChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="component" /><YAxis /><Tooltip /><Legend /><Line dataKey="real" name="Реальные eigenvalues" stroke="#2f80ed" strokeWidth={2} /><Line dataKey="random" name="Случайный порог" stroke="#eb5757" strokeDasharray="4 4" /></LineChart></ResponsiveContainer></ChartBox>;
+}
+
+export function ExplainedVarianceChart({ result }) {
+  const data = (result?.explained_variance || []).map((item) => ({ factor: item.factor, variance: toPercent(item.explained_variance ?? item.value), cumulative: toPercent(item.cumulative_explained_variance) }));
+  if (!data.length) return chartEmpty("Нет данных об объясненной дисперсии.");
+  return <ChartBox><ResponsiveContainer><ComposedChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="factor" /><YAxis /><Tooltip /><Legend /><Bar dataKey="variance" name="Дисперсия, %" fill="#2f80ed" /><Line dataKey="cumulative" name="Накопленная доля, %" stroke="#eb5757" /></ComposedChart></ResponsiveContainer></ChartBox>;
+}
+
+export function CommunalitiesChart({ result }) {
+  const data = (result?.communalities || []).map((item) => ({ label: truncateLabel(item.label || item.variable, 20), communality: Number(item.communality) })).filter((item) => !Number.isNaN(item.communality));
+  if (!data.length) return chartEmpty("Communalities недоступны для этого результата.");
+  return <ChartBox minWidth={Math.max(640, data.length * 80)}><ResponsiveContainer><BarChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" tick={axisTick} interval={0} /><YAxis domain={[0, 1]} /><Tooltip /><ReferenceLine y={0.3} stroke="#eb5757" strokeDasharray="4 4" /><Bar dataKey="communality" name="Communality" fill="#27ae60" /></BarChart></ResponsiveContainer></ChartBox>;
+}
+
+export function FactorScoreScatterPlot({ result }) {
+  const data = (result?.factor_scores || []).map((item) => ({ x: Number(item["Фактор 1"] ?? item.scores?.[0]?.value), y: Number(item["Фактор 2"] ?? item.scores?.[1]?.value) })).filter((item) => !Number.isNaN(item.x) && !Number.isNaN(item.y));
+  if (!data.length) return chartEmpty("Факторные значения не были сохранены. Включите расчет factor scores.");
+  return <ChartBox><ResponsiveContainer><ScatterChart><CartesianGrid /><XAxis type="number" dataKey="x" name="Фактор 1" /><YAxis type="number" dataKey="y" name="Фактор 2" /><Tooltip cursor={{ strokeDasharray: "3 3" }} /><Scatter data={data} fill="#2f80ed" /></ScatterChart></ResponsiveContainer></ChartBox>;
+}
+
+export function PcaBiplotChart({ result }) {
+  if (!result?.biplot?.available) return chartEmpty("Для biplot требуется не менее двух факторов и сохраненные factor scores.");
+  return <Stack spacing={1}><FactorScoreScatterPlot result={result} /><Typography variant="subtitle2">Векторы переменных</Typography>{(result.biplot.vectors || []).map((item) => <Typography variant="body2" key={item.variable}>{item.label || item.variable}: ({formatNumber(item.x)}; {formatNumber(item.y)})</Typography>)}</Stack>;
 }
 
 export function ClusterSizeChart({ result }) {

@@ -63,7 +63,13 @@ RECOMMENDATIONS = {
         "ROC-AUC помогает оценить способность модели различать классы независимо от одного выбранного порога.",
         "Проверьте events per variable: при малом числе событий коэффициенты могут быть нестабильными.",
     ],
-    "factor_analysis": ["Для выбора числа факторов учитывайте scree plot, объясненную дисперсию и содержательную интерпретацию факторов."],
+    "factor_analysis": [
+        "Проверьте KMO и критерий Бартлетта перед содержательной интерпретацией факторов.",
+        "Используйте scree plot и parallel analysis для выбора числа факторов.",
+        "Интерпретируйте фактор по вопросам с наибольшими абсолютными нагрузками.",
+        "Переменные с низкой communality или cross-loading стоит проверить и при необходимости исключить из шкалы.",
+        "После выбора набора вопросов для шкалы рекомендуется проверить надежность шкалы с помощью alpha Кронбаха.",
+    ],
     "missing_analysis": ["Для вопросов с высокой долей пропусков проверьте формулировку, обязательность заполнения и условия ветвления."],
 }
 
@@ -102,7 +108,15 @@ VISUALIZATIONS = {
         {"type": "calibration_plot", "title": "Калибровка вероятностей", "recommended": False},
         {"type": "threshold_metrics", "title": "Метрики при разных порогах", "recommended": False},
     ],
-    "factor_analysis": [("scree_plot", "Каменистая осыпь"), ("loadings_heatmap", "Тепловая карта факторных нагрузок")],
+    "factor_analysis": [
+        {"type": "scree_plot", "title": "Scree plot", "recommended": True, "description": "Показывает eigenvalues компонентов и помогает выбрать число факторов."},
+        {"type": "parallel_analysis_plot", "title": "Parallel analysis", "recommended": True, "description": "Сравнивает eigenvalues реальных данных со случайными данными."},
+        {"type": "factor_loadings_heatmap", "title": "Тепловая карта факторных нагрузок", "recommended": True},
+        {"type": "explained_variance_bar", "title": "Объясненная дисперсия", "recommended": True},
+        {"type": "communalities_bar", "title": "Communalities", "recommended": True},
+        {"type": "factor_score_scatterplot", "title": "Диаграмма факторных значений", "recommended": False},
+        {"type": "pca_biplot", "title": "PCA biplot", "recommended": False},
+    ],
     "cluster_analysis": [("cluster_sizes", "Размеры кластеров"), ("cluster_profiles", "Профили кластеров")],
     "group_comparison": [
         {"type": "group_boxplot", "title": "Boxplot по группам", "recommended": True, "description": "Показывает медиану, квартильный размах и выбросы в каждой группе."},
@@ -321,7 +335,13 @@ def build_main_results(analysis_type, result):
             "top_coefficients": result.get("coefficients", [])[:5],
         }
     if analysis_type == "factor_analysis":
-        return {key: result.get(key) for key in ("n", "n_factors", "cumulative_explained_variance")}
+        recommendations = result.get("factor_recommendations") or {}
+        return {
+            **{key: result.get(key) for key in ("n", "n_variables", "n_factors", "cumulative_explained_variance")},
+            "kmo_overall": (result.get("kmo") or {}).get("overall"),
+            "bartlett_p_value": (result.get("bartlett") or {}).get("p_value"),
+            "recommended_n_factors": recommendations.get("recommended_n_factors", recommendations.get("kaiser_n_factors")),
+        }
     if analysis_type == "cluster_analysis":
         return {"n_clusters": result.get("n_clusters"), "cluster_sizes": result.get("clusters", []), "silhouette_score": result.get("silhouette_score")}
     if analysis_type == "group_comparison":
@@ -390,7 +410,9 @@ def build_effect_size_summary(analysis_type, result):
         value = result["silhouette_score"]
         return {"name": "Silhouette score", "value": value, "interpretation": interpret_silhouette(value)}
     if analysis_type == "factor_analysis" and result.get("cumulative_explained_variance") is not None:
-        return {"name": "Накопленная объясненная дисперсия", "value": result["cumulative_explained_variance"]}
+        value = result["cumulative_explained_variance"]
+        interpretation = "факторы объясняют небольшую долю вариации" if value < 0.5 else "факторы объясняют заметную долю вариации"
+        return {"name": "Накопленная объясненная дисперсия", "value": value, "interpretation": interpretation}
     if analysis_type == "reliability_analysis" and result.get("alpha") is not None:
         return {"name": "α Кронбаха", "value": result["alpha"], "interpretation": interpret_cronbach_alpha(result["alpha"])}
     if analysis_type == "scale_index":
@@ -480,6 +502,35 @@ def _build_base_interpretation(analysis_type, result, effect_size):
             "summary": "Логистическая регрессия оценивает связь факторов с вероятностью наступления бинарного события. Odds ratio больше 1 соответствует увеличению шансов события, меньше 1 — уменьшению шансов при прочих равных условиях. Модель не доказывает причинно-следственную зависимость.",
             "details": ["Odds ratio показывает изменение шансов события при увеличении предиктора на одну единицу.", "ROC-AUC оценивает способность модели различать классы.", "Матрица ошибок показывает правильные и ошибочные классификации.", "Калибровка сопоставляет предсказанные вероятности с наблюдаемой частотой события."],
             "limitations": ["Логистическая регрессия показывает статистическую связь, но не доказывает причинность.", "При дисбалансе классов accuracy может быть завышенной.", "При малом числе событий на предиктор коэффициенты могут быть нестабильными."],
+        }
+    if analysis_type == "factor_analysis":
+        kmo = (result.get("kmo") or {}).get("overall")
+        bartlett = (result.get("bartlett") or {}).get("significant")
+        variance = result.get("cumulative_explained_variance")
+        summary = "Факторный анализ указывает на возможную скрытую структуру связей между выбранными переменными."
+        if kmo is not None:
+            summary += f" Общий KMO равен {kmo:.3f}."
+        if bartlett is True:
+            summary += " Критерий Бартлетта статистически значим."
+        elif bartlett is False:
+            summary += " Критерий Бартлетта незначим, поэтому решение следует интерпретировать осторожно."
+        if variance is not None:
+            summary += f" Выбранные факторы объясняют {variance * 100:.2f}% вариации."
+        return {
+            "summary": summary,
+            "details": [
+                "KMO оценивает пригодность данных для факторного анализа.",
+                "Критерий Бартлетта проверяет, отличается ли корреляционная матрица от единичной.",
+                "Factor loadings показывают связь переменных с факторами.",
+                "Communality показывает, насколько хорошо переменная объясняется выделенными факторами.",
+                "Parallel analysis сравнивает eigenvalues реальных данных со случайными данными.",
+            ],
+            "limitations": [
+                "Факторный анализ не доказывает существование скрытых причин, а только выявляет структуру связей между переменными.",
+                "Названия факторов должны задаваться исследователем на основе смысла вопросов с высокими нагрузками.",
+                "При малой выборке или низком KMO факторное решение может быть нестабильным.",
+                "Переменные с cross-loading могут затруднять интерпретацию факторов.",
+            ],
         }
     return {
         "summary": ANALYSIS_PURPOSES.get(analysis_type, "Результат метода подготовлен для дальнейшей интерпретации."),
@@ -709,6 +760,8 @@ def collect_warnings(result):
     warnings = list(result.get("warnings") or [])
     chi_square = result.get("chi_square") or {}
     warnings.extend(chi_square.get("warnings") or [])
+    warnings.extend((result.get("kmo") or {}).get("warnings") or [])
+    warnings.extend((result.get("bartlett") or {}).get("warnings") or [])
     if "p_value" in chi_square and chi_square.get("p_value") is None:
         warnings.append("Для данного метода не удалось рассчитать p-value.")
     return warnings

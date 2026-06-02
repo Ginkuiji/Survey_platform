@@ -36,6 +36,11 @@ import {
   CrosstabStackedBar,
   FactorLoadingsHeatmap,
   FactorScreeChart,
+  ParallelAnalysisChart,
+  ExplainedVarianceChart,
+  CommunalitiesChart,
+  FactorScoreScatterPlot,
+  PcaBiplotChart,
   GroupBoxplotApproxChart,
   GroupMeanCiChart,
   LogisticProbabilityHistogram,
@@ -819,19 +824,22 @@ function renderFactorAnalysisSection(section) {
   const recommendations = result.factor_recommendations || {};
   const scree = result.scree || [];
   const factorScores = result.factor_scores || [];
+  const communalities = result.communalities || [];
+  const factorStructure = result.factor_structure || [];
 
   return (
     <Stack spacing={3}>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-        <Chip label={`Метод: ${result.method || "вЂ”"}`} />
+        <Chip label={`Метод: ${result.method || "—"}`} />
         <Chip label={`n: ${formatNumber(result.n)}`} />
         <Chip label={`Переменных: ${formatNumber(result.n_variables)}`} />
         <Chip label={`Факторов: ${formatNumber(result.n_factors)}`} />
-        <Chip label={`Вращение: ${result.rotation || "вЂ”"}`} />
+        <Chip label={`Вращение: ${result.rotation || "—"}`} />
         <Chip label={`Накопленная объясненная дисперсия: ${formatPercent(result.cumulative_explained_variance)}`} />
         <Chip label={`KMO: ${formatNumber(kmo.overall)}`} />
         <Chip label={`p-value Бартлетта: ${formatNumber(bartlett.p_value)}`} />
         <Chip label={`Kaiser: ${formatNumber(recommendations.kaiser_n_factors)}`} />
+        <Chip label={`Рекомендуется факторов: ${formatNumber(recommendations.recommended_n_factors ?? recommendations.kaiser_n_factors)}`} />
       </Stack>
 
       {(result.warnings || []).map((warning) => (
@@ -845,13 +853,22 @@ function renderFactorAnalysisSection(section) {
       ))}
 
       <FactorScreeChart result={result} />
+      <ParallelAnalysisChart result={result} />
+      <ExplainedVarianceChart result={result} />
       <FactorLoadingsHeatmap result={result} />
+      <CommunalitiesChart result={result} />
 
       <Box>
         <Typography variant="subtitle1">Рекомендация числа факторов</Typography>
         <Typography color="text.secondary" variant="body2">
           {recommendations.message || "—"}
         </Typography>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+          <Chip label={`Запрошено: ${formatNumber(recommendations.requested_n_factors ?? recommendations.selected_n_factors)}`} />
+          <Chip label={`Kaiser: ${formatNumber(recommendations.kaiser_n_factors)}`} />
+          <Chip label={`Scree elbow: ${formatNumber(recommendations.scree_elbow_n_factors)}`} />
+          <Chip label={`Parallel analysis: ${formatNumber(recommendations.parallel_analysis_n_factors)}`} />
+        </Stack>
       </Box>
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
@@ -879,6 +896,34 @@ function renderFactorAnalysisSection(section) {
           </TableBody>
         </Table>
       </Box>
+
+      {!!factorStructure.length && (
+        <Stack spacing={2}>
+          <Typography variant="subtitle1">Структура факторов</Typography>
+          {factorStructure.map((factor) => (
+            <Card variant="outlined" key={factor.factor}><CardContent>
+              <Typography variant="subtitle1">{factor.factor}</Typography>
+              <Typography color="text.secondary">Объясненная дисперсия: {formatPercent(factor.explained_variance)}</Typography>
+              {(factor.top_variables || []).map((item) => <Typography variant="body2" key={item.variable}>{item.label || item.variable}: {formatNumber(item.loading)} ({item.direction === "negative" ? "отрицательная" : "положительная"})</Typography>)}
+              {factor.interpretation_hint && <Alert severity="info" sx={{ mt: 1 }}>{factor.interpretation_hint}</Alert>}
+            </CardContent></Card>
+          ))}
+        </Stack>
+      )}
+
+      {!!communalities.length && (
+        <Box sx={{ width: "100%", overflowX: "auto" }}>
+          <Typography variant="subtitle1">Communalities и uniqueness</Typography>
+          <Table size="small"><TableHead><TableRow><TableCell>Переменная</TableCell><TableCell align="right">Communality</TableCell><TableCell align="right">Uniqueness</TableCell><TableCell>Интерпретация</TableCell></TableRow></TableHead>
+            <TableBody>{communalities.map((item) => <TableRow key={item.variable}><TableCell>{item.label || item.variable}</TableCell><TableCell align="right">{formatNumber(item.communality)}</TableCell><TableCell align="right">{formatNumber(item.uniqueness)}</TableCell><TableCell>{item.interpretation || "—"}</TableCell></TableRow>)}</TableBody>
+          </Table>
+        </Box>
+      )}
+
+      <FactorScoreScatterPlot result={result} />
+      <PcaBiplotChart result={result} />
+
+      {(result.notes || []).map((note) => <Alert key={note} severity="info">{note}</Alert>)}
 
       <Box>
         <Typography variant="subtitle1">Критерий сферичности Бартлетта</Typography>

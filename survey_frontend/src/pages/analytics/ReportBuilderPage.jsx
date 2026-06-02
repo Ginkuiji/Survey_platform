@@ -174,6 +174,9 @@ function createSection(type) {
       rotation: "varimax",
       standardize: true,
       include_factor_scores: false,
+      parallel_analysis: true,
+      parallel_iterations: 100,
+      parallel_percentile: 95,
     };
   }
 
@@ -676,6 +679,23 @@ function SectionFields({ section, questions, updateSection }) {
           }
           label="Рассчитать факторные оценки"
         />
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={section.parallel_analysis ?? true}
+              onChange={(event) => updateSection(section.id, { parallel_analysis: event.target.checked })}
+            />
+          }
+          label="Выполнить parallel analysis"
+        />
+
+        {(section.parallel_analysis ?? true) && (
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+            <TextField fullWidth type="number" label="Итерации parallel analysis" inputProps={{ min: 20, max: 500 }} value={section.parallel_iterations ?? 100} onChange={(event) => updateSection(section.id, { parallel_iterations: Number(event.target.value) })} />
+            <TextField fullWidth type="number" label="Перцентиль случайных eigenvalues" inputProps={{ min: 50, max: 99 }} value={section.parallel_percentile ?? 95} onChange={(event) => updateSection(section.id, { parallel_percentile: Number(event.target.value) })} />
+          </Stack>
+        )}
 
         {section.include_factor_scores && (
           <Alert severity="info">

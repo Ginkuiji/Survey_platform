@@ -128,6 +128,9 @@ class FactorAnalysisSer(serializers.Serializer):
     rotation = serializers.ChoiceField(choices=("none", "varimax"), required=False, default="varimax")
     standardize = serializers.BooleanField(default=True)
     include_factor_scores = serializers.BooleanField(default=False)
+    parallel_analysis = serializers.BooleanField(default=True)
+    parallel_iterations = serializers.IntegerField(min_value=20, max_value=500, default=100)
+    parallel_percentile = serializers.IntegerField(min_value=50, max_value=99, default=95)
 
     def validate_variables(self, value):
         if len(value) < 3:

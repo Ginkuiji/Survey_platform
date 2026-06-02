@@ -220,6 +220,7 @@ export default function StandardizedResultSummary({ result }) {
         {result.purpose && <Alert severity="info" sx={{ mt: 1 }}>{result.purpose}</Alert>}
         {result.analysis_type === "regression" && <Alert severity="info" sx={{ mt: 1 }}>Для регрессии важно учитывать качество модели, мультиколлинеарность и диагностику остатков, а не только значимость коэффициентов.</Alert>}
         {result.analysis_type === "logistic_regression" && <Alert severity="info" sx={{ mt: 1 }}>Odds ratio показывает изменение шансов события, а ROC-AUC и матрица ошибок помогают оценить качество классификации.</Alert>}
+        {result.analysis_type === "factor_analysis" && <Alert severity="info" sx={{ mt: 1 }}>Факторный анализ помогает определить, можно ли объединить несколько вопросов в скрытые факторы или шкалы. Названия факторов должны задаваться исследователем на основе содержания вопросов с высокими нагрузками.</Alert>}
       </Box>
 
       {result.interpretation?.summary && (
