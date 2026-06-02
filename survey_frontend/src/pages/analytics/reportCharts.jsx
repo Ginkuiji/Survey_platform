@@ -147,6 +147,32 @@ export function CorrelationHeatmap({ result }) {
   );
 }
 
+export function CorrelationScatterPlot({ result }) {
+  const variables = result?.variables || [];
+  const data = (result?.scatter_pairs || [])
+    .map((pair) => ({ x: Number(pair.x), y: Number(pair.y) }))
+    .filter((pair) => !Number.isNaN(pair.x) && !Number.isNaN(pair.y));
+  if (variables.length !== 2) return null;
+  if (!data.length) return chartEmpty("Нет совместных числовых наблюдений для диаграммы рассеяния.");
+
+  return (
+    <Box>
+      <Typography variant="subtitle1" sx={{ mb: 1 }}>Диаграмма рассеяния</Typography>
+      <ChartBox minWidth={640}>
+        <ResponsiveContainer>
+          <ScatterChart margin={{ top: 12, right: 24, left: 8, bottom: 24 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis type="number" dataKey="x" name={variables[0]?.label || variables[0]?.code} />
+            <YAxis type="number" dataKey="y" name={variables[1]?.label || variables[1]?.code} />
+            <Tooltip cursor={{ strokeDasharray: "3 3" }} />
+            <Scatter data={data} fill="#2f80ed" />
+          </ScatterChart>
+        </ResponsiveContainer>
+      </ChartBox>
+    </Box>
+  );
+}
+
 export function CrosstabStackedBar({ crosstab }) {
   const rows = crosstab?.rows || [];
   if (!rows.length) return chartEmpty();
@@ -529,6 +555,42 @@ export function MissingAnalysisChart({ result }) {
         </ResponsiveContainer>
       </ChartBox>
       <Alert severity="info">Не показан из-за ветвления не считается реальным пропуском.</Alert>
+    </Stack>
+  );
+}
+
+export function MissingStackedStatusChart({ result }) {
+  const detailed = result?.detailed_missing_analysis;
+  const { data, note } = topItems((detailed?.questions || []).map((question) => ({
+    label: question.label || question.question_id,
+    shortLabel: truncateLabel(question.label || question.question_id),
+    answered: Number(question.counts?.answered) || 0,
+    skippedAfterShown: Number(question.counts?.skipped_after_shown) || 0,
+    notShownByBranching: Number(question.counts?.not_shown_by_branching) || 0,
+    notReached: Number(question.counts?.not_reached) || 0,
+    screenedOut: Number(question.counts?.screened_out) || 0,
+  })), 15);
+  if (!data.length) return null;
+
+  return (
+    <Stack spacing={1}>
+      <Typography variant="subtitle1">Причины отсутствия ответов</Typography>
+      <ChartBox minWidth={Math.max(760, data.length * 90)} note={note}>
+        <ResponsiveContainer>
+          <BarChart data={data} margin={{ top: 12, right: 24, left: 8, bottom: 60 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="shortLabel" tick={axisTick} interval={0} />
+            <YAxis allowDecimals={false} />
+            <Tooltip labelFormatter={(_, payload) => payload?.[0]?.payload?.label || ""} />
+            <Legend />
+            <Bar dataKey="answered" stackId="missing-status" name="Ответили" fill="#27ae60" />
+            <Bar dataKey="skippedAfterShown" stackId="missing-status" name="Пропустили после показа" fill="#eb5757" />
+            <Bar dataKey="notShownByBranching" stackId="missing-status" name="Не показан из-за ветвления" fill="#f2c94c" />
+            <Bar dataKey="notReached" stackId="missing-status" name="Не дошли" fill="#56ccf2" />
+            <Bar dataKey="screenedOut" stackId="missing-status" name="Отсев" fill="#9b51e0" />
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartBox>
     </Stack>
   );
 }

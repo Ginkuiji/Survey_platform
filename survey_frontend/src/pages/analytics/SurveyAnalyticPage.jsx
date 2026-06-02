@@ -184,17 +184,30 @@ function ScreeningBlock({ screening }) {
 
 function QuestionBase({ base }) {
   return (
-    <Stack direction={{ xs: "column", sm: "row" }} spacing={2} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
-      <Metric label="Завершили опрос" value={base?.total_completed ?? 0} />
-      <Metric label="Видели вопрос" value={base?.shown_count ?? 0} />
-      <Metric label="Ответили" value={base?.answered_count ?? 0} />
-      <Metric label="Пропустили" value={base?.skipped_count ?? 0} />
-    </Stack>
+    <Box sx={{ mb: 2 }}>
+      <Alert severity="info" sx={{ mb: 2 }}>
+        База расчёта: вопрос был показан {base?.shown_count ?? 0} респондентам,
+        ответили {base?.answered_count ?? 0}, пропустили {base?.skipped_count ?? 0}.
+        Проценты по вариантам можно смотреть от ответивших, от видевших вопрос и от всех завершивших опрос.
+      </Alert>
+      {(base?.not_shown_count ?? 0) > 0 && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Вопрос был показан не всем респондентам из-за логики ветвления; проценты следует интерпретировать с учетом базы «видели вопрос».
+        </Alert>
+      )}
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} flexWrap="wrap" useFlexGap>
+        <Metric label="Завершили опрос" value={base?.total_completed ?? 0} />
+        <Metric label="Видели вопрос" value={base?.shown_count ?? 0} />
+        <Metric label="Ответили" value={base?.answered_count ?? 0} />
+        <Metric label="Пропустили" value={base?.skipped_count ?? 0} />
+      </Stack>
+    </Box>
   );
 }
 
 function ChoiceAnalytics({ question }) {
   const options = question.result?.options ?? [];
+  const useHorizontalBar = options.length > 4;
 
   if (!options.length) {
     return (
@@ -238,11 +251,21 @@ function ChoiceAnalytics({ question }) {
       </Grid>
 
       <Grid item xs={12} md={7} sx={{ minWidth: 0 }}>
+        {useHorizontalBar && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Для данного вопроса горизонтальная столбчатая диаграмма предпочтительнее круговой диаграммы.
+          </Alert>
+        )}
         <Box sx={{ mb: 2, width: "100%", overflowX: "auto" }}>
-          <BarChart width={BAR_CHART_WIDTH} height={CHART_HEIGHT} data={options}>
+          <BarChart
+            width={BAR_CHART_WIDTH}
+            height={useHorizontalBar ? Math.max(CHART_HEIGHT, options.length * 42) : CHART_HEIGHT}
+            data={options}
+            layout={useHorizontalBar ? "vertical" : "horizontal"}
+          >
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="text" />
-              <YAxis allowDecimals={false} />
+              {useHorizontalBar ? <XAxis type="number" /> : <XAxis dataKey="text" />}
+              {useHorizontalBar ? <YAxis dataKey="text" type="category" width={150} /> : <YAxis allowDecimals={false} />}
               <Tooltip />
               <Legend />
               <Bar dataKey="count" name="Ответов" fill="#2f80ed" />
@@ -255,7 +278,7 @@ function ChoiceAnalytics({ question }) {
               <Stack direction="row" justifyContent="space-between" spacing={2}>
                 <Typography>{option.text}</Typography>
                 <Typography color="text.secondary">
-                  {option.count} · {option.percent_answered}% от ответивших · {option.percent_total}% от завершивших
+                  {option.count} · {option.percent_answered}% от ответивших · {option.percent_shown ?? option.percent_answered}% от видевших · {option.percent_total}% от завершивших
                 </Typography>
               </Stack>
               <LinearProgress
@@ -268,6 +291,28 @@ function ChoiceAnalytics({ question }) {
         </Stack>
       </Grid>
     </Grid>
+  );
+}
+
+function NumericInterpretationAlerts({ result }) {
+  const asymmetric = result.std && Math.abs(result.average - result.median) > 0.5 * result.std;
+  const hasOutliers = (result.outliers?.count ?? 0) > 0;
+  return (
+    <Stack spacing={1} sx={{ mb: 2 }}>
+      <Alert severity="info">
+        Среднее показывает общий уровень признака, медиана - типичное значение, IQR - разброс центральных 50% наблюдений.
+      </Alert>
+      {asymmetric && (
+        <Alert severity="warning">
+          Среднее и медиана заметно различаются; распределение может быть асимметричным или содержать выбросы.
+        </Alert>
+      )}
+      {hasOutliers && (
+        <Alert severity="warning">
+          Обнаружены выбросы по правилу IQR; проверьте, являются ли они ошибками ввода или содержательно важными наблюдениями.
+        </Alert>
+      )}
+    </Stack>
   );
 }
 
@@ -304,7 +349,14 @@ function ScaleAnalytics({ question }) {
 
   return (
     <Box>
+      <NumericInterpretationAlerts result={result} />
       <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid item xs={6} md={3}>
+          <Metric label="Наблюдений" value={formatNumber(result.n ?? result.answered_count)} />
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <Metric label="Пропусков" value={`${formatNumber(result.missing_count)} (${formatNumber(result.missing_rate)}%)`} />
+        </Grid>
         <Grid item xs={6} md={3}>
           <Metric label="Среднее" value={formatNumber(result.average)} />
         </Grid>
@@ -316,6 +368,18 @@ function ScaleAnalytics({ question }) {
         </Grid>
         <Grid item xs={6} md={3}>
           <Metric label="Максимум" value={formatNumber(result.max)} />
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <Metric label="Стандартное отклонение" value={formatNumber(result.std)} />
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <Metric label="Q1 / Q3" value={`${formatNumber(result.q1)} / ${formatNumber(result.q3)}`} />
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <Metric label="IQR" value={formatNumber(result.iqr)} />
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <Metric label="Выбросы по IQR" value={formatNumber(result.outliers?.count)} />
         </Grid>
       </Grid>
 
@@ -345,7 +409,14 @@ function NumberAnalytics({ question }) {
 
   return (
     <Box>
+      <NumericInterpretationAlerts result={result} />
       <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid item xs={6} md={3}>
+          <Metric label="Наблюдений" value={formatNumber(result.n ?? result.answered_count)} />
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <Metric label="Пропусков" value={`${formatNumber(result.missing_count)} (${formatNumber(result.missing_rate)}%)`} />
+        </Grid>
         <Grid item xs={6} md={3}>
           <Metric label="Среднее" value={formatNumber(result.average)} />
         </Grid>
@@ -357,6 +428,18 @@ function NumberAnalytics({ question }) {
         </Grid>
         <Grid item xs={6} md={3}>
           <Metric label="Максимум" value={formatNumber(result.max)} />
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <Metric label="Стандартное отклонение" value={formatNumber(result.std)} />
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <Metric label="Q1 / Q3" value={`${formatNumber(result.q1)} / ${formatNumber(result.q3)}`} />
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <Metric label="IQR" value={formatNumber(result.iqr)} />
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <Metric label="Выбросы по IQR" value={formatNumber(result.outliers?.count)} />
         </Grid>
       </Grid>
 
@@ -460,10 +543,10 @@ function MatrixAnalytics({ question }) {
                 {row.text}
               </TableCell>
               {row.columns.map(column => (
-                <TableCell key={column.id} align="center">
+                <TableCell key={column.id} align="center" sx={{ bgcolor: `rgba(47, 128, 237, ${Math.min((column.percent_shown ?? 0) / 100, 0.65)})` }}>
                   <Typography>{column.count}</Typography>
                   <Typography color="text.secondary" variant="caption">
-                    {column.percent_answered}% / {column.percent_total}%
+                    {column.percent_answered_row ?? column.percent_answered}% от ответивших по строке / {column.percent_shown ?? column.percent_answered}% от видевших
                   </Typography>
                 </TableCell>
               ))}
@@ -515,13 +598,13 @@ function MatrixMultiAnalytics({ question }) {
                 {columns.map(column => {
                   const cell = cellsByKey.get(`${row.id}:${column.id}`) || {};
                   return (
-                    <TableCell key={column.id} align="center" sx={wrapCellSx}>
+                    <TableCell key={column.id} align="center" sx={{ ...wrapCellSx, bgcolor: `rgba(47, 128, 237, ${Math.min((cell.percent_shown ?? 0) / 100, 0.65)})` }}>
                       <Typography>{cell.count ?? 0}</Typography>
                       <Typography color="text.secondary" variant="caption" component="div">
-                        {formatNumber(cell.percent_answered ?? 0)}%
+                        {formatNumber(cell.percent_answered_row ?? cell.percent_answered ?? 0)}% от ответивших по строке
                       </Typography>
                       <Typography color="text.secondary" variant="caption" component="div">
-                        {formatNumber(cell.percent_total ?? 0)}%
+                        {formatNumber(cell.percent_shown ?? cell.percent_answered ?? 0)}% от видевших
                       </Typography>
                     </TableCell>
                   );
@@ -610,6 +693,8 @@ function RankingAnalytics({ question }) {
             <TableCell>Вариант</TableCell>
             <TableCell align="center">Среднее место</TableCell>
             <TableCell align="center">Первое место</TableCell>
+            <TableCell align="center">Медианный ранг</TableCell>
+            <TableCell align="center">Последнее место</TableCell>
             <TableCell>Распределение мест</TableCell>
           </TableRow>
         </TableHead>
@@ -625,6 +710,8 @@ function RankingAnalytics({ question }) {
               <TableCell align="center">
                 {option.first_place_count ?? 0}
               </TableCell>
+              <TableCell align="center">{formatNumber(option.median_rank)}</TableCell>
+              <TableCell align="center">{option.last_place_count ?? 0}</TableCell>
               <TableCell>
                 {(option.rank_distribution || []).length
                   ? option.rank_distribution

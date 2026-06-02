@@ -1,7 +1,10 @@
 from django.test import SimpleTestCase
 from types import SimpleNamespace
+from unittest.mock import patch
 
+from .analytics import classify_question_response_state
 from .analytics_result_format import standardize_analysis_result
+from .analytics_descriptive_profile import describe_numeric_values
 
 
 class StandardizedAnalysisResultTests(SimpleTestCase):
@@ -21,14 +24,20 @@ class StandardizedAnalysisResultTests(SimpleTestCase):
             set(standardized),
             {
                 "analysis_type", "title", "purpose", "input_summary",
-                "data_quality", "main_results", "effect_size",
+                "data_quality", "descriptive_profile", "main_results", "effect_size",
                 "interpretation", "visualizations", "warnings",
-                "recommendations", "raw_result",
+                "recommendations", "raw_result", "method_hint",
             },
         )
         self.assertEqual(standardized["effect_size"]["value"], 0.53)
         self.assertTrue(any("Размер выборки меньше 30" in warning for warning in standardized["warnings"]))
         self.assertIn("dataset", standardized["data_quality"])
+        relationship = standardized["main_results"]["strongest_relationships"][0]
+        self.assertEqual(relationship["direction"], "положительная")
+        self.assertEqual(relationship["strength"], "заметная связь")
+        self.assertTrue(relationship["significant"])
+        self.assertEqual(standardized["method_hint"]["method"], "pearson")
+        self.assertEqual(len(standardized["main_results"]["network"]["edges"]), 1)
 
     def test_unknown_analysis_type_returns_base_format(self):
         standardized = standardize_analysis_result("custom_method", {"n": 50})
@@ -146,3 +155,86 @@ class StandardizedAnalysisResultTests(SimpleTestCase):
         )
 
         self.assertEqual(standardized["interpretation"]["confidence"]["level"], "low")
+
+    def test_numeric_descriptive_profile_contains_quartiles_and_outliers(self):
+        profile = describe_numeric_values([1, 2, 2, 3, 100, None])
+
+        self.assertEqual(profile["n"], 5)
+        self.assertEqual(profile["missing_count"], 1)
+        self.assertEqual(profile["median"], 2)
+        self.assertEqual(profile["q1"], 2)
+        self.assertEqual(profile["q3"], 3)
+        self.assertEqual(profile["outliers"]["count"], 1)
+
+    def test_standardized_result_contains_dataset_descriptive_profile(self):
+        dataset = SimpleNamespace(
+            variables=[
+                SimpleNamespace(
+                    code="q_1",
+                    label="Оценка",
+                    question_id=1,
+                    qtype="scale",
+                    encoding="numeric",
+                    measure="interval",
+                    value_labels=None,
+                ),
+            ],
+            rows=[{"q_1": 1}, {"q_1": 2}, {"q_1": 5}, {"q_1": None}],
+        )
+
+        standardized = standardize_analysis_result("custom_method", {"dataset_size": 4}, dataset=dataset)
+        variable = standardized["descriptive_profile"]["variables"][0]
+
+        self.assertEqual(variable["kind"], "numeric")
+        self.assertEqual(variable["missing_count"], 1)
+        self.assertEqual(variable["outliers"]["method"], "iqr")
+
+    @patch("surveys.analytics._response_seen_question_ids", return_value=set())
+    def test_missing_state_classifier_distinguishes_branching_progress_and_screenout(self, _seen):
+        question = SimpleNamespace(id=1)
+        pages = []
+        conditions = []
+
+        self.assertEqual(
+            classify_question_response_state(
+                SimpleNamespace(screened_out=False, is_complete=True),
+                question,
+                pages,
+                conditions,
+                answers_by_question={},
+            ),
+            "not_shown_by_branching",
+        )
+        self.assertEqual(
+            classify_question_response_state(
+                SimpleNamespace(screened_out=False, is_complete=False),
+                question,
+                pages,
+                conditions,
+                answers_by_question={},
+            ),
+            "not_reached",
+        )
+        self.assertEqual(
+            classify_question_response_state(
+                SimpleNamespace(screened_out=True, is_complete=True),
+                question,
+                pages,
+                conditions,
+                answers_by_question={},
+            ),
+            "screened_out",
+        )
+
+    def test_missing_state_classifier_marks_visible_unanswered_as_real_missing(self):
+        self.assertEqual(
+            classify_question_response_state(
+                SimpleNamespace(screened_out=False, is_complete=True),
+                SimpleNamespace(id=1),
+                [],
+                [],
+                answers_by_question={},
+                seen_question_ids={1},
+            ),
+            "skipped_after_shown",
+        )

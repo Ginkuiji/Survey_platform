@@ -371,12 +371,36 @@ def build_applicability_warnings(analysis_type, result, payload=None, dataset=No
 
     if analysis_type == "correlation":
         variables_count = len(result.get("variables") or [])
+        n_matrix = result.get("n_matrix") or []
+        p_values = result.get("p_values") or []
+        pair_ns = [
+            n_matrix[row_index][column_index]
+            for row_index in range(len(n_matrix))
+            for column_index in range(row_index + 1, len(n_matrix[row_index]))
+            if n_matrix[row_index][column_index] is not None
+        ]
+        pair_p_values = [
+            p_values[row_index][column_index]
+            for row_index in range(len(p_values))
+            for column_index in range(row_index + 1, len(p_values[row_index]))
+        ]
         if variables_count < 2:
             warnings.append("Для корреляционного анализа требуется не менее двух переменных.")
-        if any(value is not None and value < 3 for row in result.get("n_matrix") or [] for value in row):
+        if any(value < 3 for value in pair_ns):
             warnings.append("Для части пар переменных недостаточно полных наблюдений для надежной оценки корреляции.")
-        if any(value is None for row in result.get("p_values") or [] for value in row):
+        if any(3 <= value < 30 for value in pair_ns):
+            warnings.append("Для части пар переменных меньше 30 совместных наблюдений; оценки корреляции могут быть нестабильными.")
+        if any(value is None for value in pair_p_values):
             warnings.append("Для части корреляций p-value недоступен.")
+        if any(
+            row_index < len(n_matrix[row_index])
+            and any(
+                n_matrix[row_index][column_index] < min(n_matrix[row_index][row_index], n_matrix[column_index][column_index])
+                for column_index in range(row_index + 1, len(n_matrix[row_index]))
+            )
+            for row_index in range(len(n_matrix))
+        ):
+            warnings.append("Для части пар применено попарное исключение наблюдений с пропусками; значения n различаются между корреляциями.")
     elif analysis_type == "crosstab":
         rows, columns, counts = _crosstab_shape(result)
         if rows < 2 or columns < 2:

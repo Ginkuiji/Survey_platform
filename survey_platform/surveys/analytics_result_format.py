@@ -5,6 +5,11 @@ from .analytics_data_quality import (
     build_data_quality_summary,
     deduplicate_warnings,
 )
+from .analytics_descriptive_profile import (
+    build_descriptive_profile,
+    build_descriptive_recommendations,
+    collect_descriptive_warnings,
+)
 
 ANALYSIS_TITLES = {
     "correlation": "Корреляционный анализ",
@@ -46,7 +51,12 @@ RECOMMENDATIONS = {
 }
 
 VISUALIZATIONS = {
-    "correlation": [("heatmap", "Тепловая карта корреляций"), ("scatter_plot", "Диаграмма рассеяния")],
+    "correlation": [
+        ("correlation_heatmap", "Тепловая карта корреляций"),
+        ("correlation_scatterplot", "Диаграмма рассеяния"),
+        ("ranked_scatterplot", "Ранговая диаграмма рассеяния"),
+        ("correlation_network", "Сеть сильных корреляций"),
+    ],
     "crosstab": [("stacked_bar", "Составная столбчатая диаграмма")],
     "chi_square": [("stacked_bar", "Составная столбчатая диаграмма"), ("residual_heatmap", "Тепловая карта стандартизированных остатков")],
     "correspondence_analysis": [("correspondence_map", "Карта соответствий"), ("inertia_chart", "Объясненная инерция")],
@@ -58,7 +68,16 @@ VISUALIZATIONS = {
     "time_analysis": [("time_distribution", "Распределение времени прохождения")],
     "reliability_analysis": [("item_statistics", "Статистики пунктов шкалы")],
     "scale_index": [("score_distribution", "Распределение индекса шкалы")],
-    "missing_analysis": [("missing_rate", "Доля пропусков по вопросам")],
+    "missing_analysis": [
+        ("missing_rate", "Доля пропусков по вопросам"),
+        ("missing_stacked_status", "Причины отсутствия ответов"),
+    ],
+}
+
+CORRELATION_METHOD_HINTS = {
+    "pearson": "Pearson оценивает линейную связь числовых переменных. Проверьте диаграмму рассеяния и выбросы.",
+    "spearman": "Spearman оценивает монотонную связь по рангам и подходит для порядковых данных или нелинейной монотонной зависимости.",
+    "kendall": "Kendall оценивает ранговую согласованность и полезен для порядковых данных, небольших выборок и большого числа совпадающих рангов.",
 }
 
 
@@ -168,19 +187,62 @@ def _strongest_correlations(result):
             if value is None:
                 continue
             right = variables[column_index]
+            p_value = p_values[row_index][column_index] if row_index < len(p_values) and column_index < len(p_values[row_index]) else None
             relationships.append({
                 "left": left.get("code"),
                 "right": right.get("code"),
+                "left_label": left.get("label") or left.get("code"),
+                "right_label": right.get("label") or right.get("code"),
                 "coefficient": value,
-                "p_value": p_values[row_index][column_index] if row_index < len(p_values) and column_index < len(p_values[row_index]) else None,
+                "absolute_coefficient": abs(value),
+                "direction": correlation_direction(value),
+                "strength": interpret_correlation(value),
+                "p_value": p_value,
+                "significant": p_value is not None and p_value < 0.05,
                 "n": n_matrix[row_index][column_index] if row_index < len(n_matrix) and column_index < len(n_matrix[row_index]) else None,
+                "interpretation": (
+                    f"Связь {correlation_direction(value)} и {interpret_correlation(value)}. "
+                    + ("Статистически значима при α = 0,05." if p_value is not None and p_value < 0.05 else "Статистическая значимость при α = 0,05 не подтверждена.")
+                ),
             })
     return sorted(relationships, key=lambda item: abs(item["coefficient"]), reverse=True)[:5]
 
 
+def build_correlation_method_hint(result):
+    method = result.get("method") or "pearson"
+    return {
+        "method": method,
+        "text": CORRELATION_METHOD_HINTS.get(method, "Метод корреляции следует выбирать с учетом шкалы данных и формы связи."),
+    }
+
+
+def build_correlation_network(result):
+    return {
+        "nodes": [
+            {"id": variable.get("code"), "label": variable.get("label") or variable.get("code")}
+            for variable in result.get("variables") or []
+        ],
+        "edges": [
+            {
+                "source": item["left"],
+                "target": item["right"],
+                "coefficient": item["coefficient"],
+                "strength": item["strength"],
+            }
+            for item in _strongest_correlations(result)
+            if item["absolute_coefficient"] >= 0.3
+        ],
+    }
+
+
 def build_main_results(analysis_type, result):
     if analysis_type == "correlation":
-        return {"method": result.get("method"), "strongest_relationships": _strongest_correlations(result)}
+        return {
+            "method": result.get("method"),
+            "method_hint": build_correlation_method_hint(result),
+            "strongest_relationships": _strongest_correlations(result),
+            "network": build_correlation_network(result),
+        }
     if analysis_type == "chi_square":
         chi_square = result.get("chi_square") or {}
         p_value = chi_square.get("p_value")
@@ -195,7 +257,9 @@ def build_main_results(analysis_type, result):
         return {"n_clusters": result.get("n_clusters"), "cluster_sizes": result.get("clusters", []), "silhouette_score": result.get("silhouette_score")}
     if analysis_type == "group_comparison":
         return {"method": result.get("method"), "n": result.get("n"), "test": result.get("test")}
-    if analysis_type in ("time_analysis", "missing_analysis", "scale_index"):
+    if analysis_type == "missing_analysis":
+        return result.get("detailed_missing_analysis") or result.get("summary") or {}
+    if analysis_type in ("time_analysis", "scale_index"):
         return result.get("summary") or {}
     if analysis_type == "reliability_analysis":
         return {key: result.get(key) for key in ("n", "n_items", "alpha", "standardized_alpha")}
@@ -492,8 +556,10 @@ def collect_warnings(result):
 def standardize_analysis_result(analysis_type, result, payload=None, dataset=None):
     raw_result = _clean_raw_result(result)
     data_quality = build_data_quality_summary(analysis_type, raw_result, payload, dataset)
+    descriptive_profile = build_descriptive_profile(raw_result, payload, dataset, raw_result.get("survey_id"))
     warnings = collect_warnings(raw_result)
     warnings.extend(build_applicability_warnings(analysis_type, raw_result, payload, dataset, data_quality))
+    warnings.extend(collect_descriptive_warnings(descriptive_profile))
     warnings = deduplicate_warnings(warnings)
     effect_size = build_effect_size_summary(analysis_type, raw_result)
     interpretation = build_interpretation(analysis_type, raw_result, effect_size, data_quality, warnings)
@@ -503,13 +569,16 @@ def standardize_analysis_result(analysis_type, result, payload=None, dataset=Non
             ["Интерпретируйте результат вместе с подробными таблицами и графиками метода."],
         ),
         *build_common_recommendations(analysis_type, interpretation, warnings),
+        *build_descriptive_recommendations(descriptive_profile),
+        *((raw_result.get("detailed_missing_analysis") or {}).get("recommendations") or []),
     ]
-    return {
+    standardized_result = {
         "analysis_type": analysis_type,
         "title": ANALYSIS_TITLES.get(analysis_type, analysis_type.replace("_", " ").title()),
         "purpose": ANALYSIS_PURPOSES.get(analysis_type, "Аналитический метод."),
         "input_summary": build_input_summary(raw_result, payload, dataset),
         "data_quality": data_quality,
+        "descriptive_profile": descriptive_profile,
         "main_results": build_main_results(analysis_type, raw_result),
         "effect_size": effect_size,
         "interpretation": interpretation,
@@ -521,3 +590,6 @@ def standardize_analysis_result(analysis_type, result, payload=None, dataset=Non
         "recommendations": deduplicate_warnings(recommendations),
         "raw_result": raw_result,
     }
+    if analysis_type == "correlation":
+        standardized_result["method_hint"] = build_correlation_method_hint(raw_result)
+    return standardized_result

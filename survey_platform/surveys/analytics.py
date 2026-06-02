@@ -1,6 +1,6 @@
 # surveys/analytics.py
 from collections import Counter
-from statistics import median
+from statistics import median, stdev
 from typing import Any, Callable, Dict, Iterable, Optional
 
 from .models import AnalyticResults, Answer, MatrixAnswerCell, MatrixColumn, MatrixRow, Option, Question, QuestionCondition, Response, Survey, SurveyPage
@@ -125,11 +125,54 @@ def build_question_base(question: Question, completed_responses, answers, shown_
         "answered_count": len(shown_answered_response_ids),
         "shown_count": shown_count,
         "skipped_count": max(shown_count - len(shown_answered_response_ids), 0),
+        "not_shown_count": max(total_completed - shown_count, 0),
+        "shown_rate_completed": percent(shown_count, total_completed),
     }
 
 
 def percent(part: int, whole: int) -> float:
     return round(part / whole * 100, 2) if whole else 0
+
+
+def _percentile(values, fraction):
+    if not values:
+        return None
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * fraction
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
+
+
+def describe_numeric_answers(values, total_count):
+    q1 = _percentile(values, 0.25)
+    q3 = _percentile(values, 0.75)
+    iqr = q3 - q1 if q1 is not None and q3 is not None else None
+    lower_fence = q1 - 1.5 * iqr if iqr is not None else None
+    upper_fence = q3 + 1.5 * iqr if iqr is not None else None
+    outliers_count = sum(value < lower_fence or value > upper_fence for value in values) if values else 0
+    missing_count = max(total_count - len(values), 0)
+    return {
+        "answered_count": len(values),
+        "n": len(values),
+        "missing_count": missing_count,
+        "missing_rate": percent(missing_count, total_count),
+        "average": round(sum(values) / len(values), 2) if values else None,
+        "median": median(values) if values else None,
+        "std": round(stdev(values), 2) if len(values) > 1 else None,
+        "min": min(values) if values else None,
+        "max": max(values) if values else None,
+        "q1": q1,
+        "q3": q3,
+        "iqr": iqr,
+        "outliers": {
+            "method": "iqr",
+            "lower_fence": lower_fence,
+            "upper_fence": upper_fence,
+            "count": outliers_count,
+            "rate": percent(outliers_count, len(values)),
+        },
+    }
 
 
 def _answer_to_condition_data(answer: Answer) -> Dict[str, Any]:
@@ -369,6 +412,150 @@ def build_visibility_by_question(completed_responses, pages, conditions) -> Dict
     return visibility_by_question
 
 
+def classify_question_response_state(
+    response: Response,
+    question: Question,
+    pages,
+    conditions,
+    answers_by_question=None,
+    seen_question_ids=None,
+) -> str:
+    if answers_by_question is None:
+        answers_by_question = {
+            answer.question_id: answer
+            for answer in response.answers.all()
+        }
+    answer = answers_by_question.get(question.id)
+    if answer is not None and _answer_has_value(question, answer):
+        return "answered"
+
+    seen_question_ids = (
+        set(seen_question_ids)
+        if seen_question_ids is not None
+        else _response_seen_question_ids(response, pages, conditions)
+    )
+    if question.id in seen_question_ids:
+        return "skipped_after_shown"
+    if response.screened_out:
+        return "screened_out"
+    if not response.is_complete:
+        return "not_reached"
+    return "not_shown_by_branching"
+
+
+def _detailed_missing_interpretation(counts, rates) -> str:
+    if rates["real_missing_rate"] >= 30:
+        return "Высокая доля реальных пропусков среди респондентов, которым вопрос был показан."
+    if rates["not_reached_rate"] >= 20:
+        return "Заметная часть начавших опрос не дошла до вопроса."
+    if rates["not_shown_by_branching_rate"] >= 50:
+        return "Вопрос часто не показывается из-за логики ветвления; это не следует считать обычным пропуском."
+    if counts["screened_out"]:
+        return "Часть респондентов не дошла до вопроса из-за корректного отсева."
+    return "Критичных особенностей заполнения вопроса не обнаружено."
+
+
+def build_detailed_missing_analysis(survey_id: int, questions=None, pages=None, conditions=None) -> Dict[str, Any]:
+    responses = list(
+        get_started_responses(survey_id)
+        .prefetch_related(
+            "answers",
+            "answers__selected_options",
+            "answers__matrix_cells__row",
+            "answers__matrix_cells__column",
+            "answers__ranking_items",
+        )
+        .order_by("id")
+    )
+    questions = questions or list(get_survey_questions(survey_id).select_related("page"))
+    pages = pages or get_survey_pages(survey_id)
+    conditions = conditions or get_survey_conditions(survey_id)
+    response_contexts = []
+    for response in responses:
+        response_contexts.append({
+            "response": response,
+            "answers": {answer.question_id: answer for answer in response.answers.all()},
+            "seen_question_ids": _response_seen_question_ids(response, pages, conditions),
+        })
+
+    question_items = []
+    warnings = []
+    for question in questions:
+        counts = Counter({
+            "answered": 0,
+            "skipped_after_shown": 0,
+            "not_shown_by_branching": 0,
+            "not_reached": 0,
+            "screened_out": 0,
+        })
+        for context in response_contexts:
+            state = classify_question_response_state(
+                context["response"],
+                question,
+                pages,
+                conditions,
+                answers_by_question=context["answers"],
+                seen_question_ids=context["seen_question_ids"],
+            )
+            counts[state] += 1
+
+        shown_count = counts["answered"] + counts["skipped_after_shown"]
+        count_payload = dict(counts)
+        rates = {
+            "answered_rate": percent(counts["answered"], len(responses)),
+            "real_missing_rate": percent(counts["skipped_after_shown"], shown_count),
+            "not_shown_by_branching_rate": percent(counts["not_shown_by_branching"], len(responses)),
+            "not_reached_rate": percent(counts["not_reached"], len(responses)),
+            "screened_out_rate": percent(counts["screened_out"], len(responses)),
+        }
+        if rates["real_missing_rate"] >= 30:
+            warnings.append(f"У вопроса «{question.text}» высокая доля реальных пропусков: {rates['real_missing_rate']}%.")
+        if rates["not_reached_rate"] >= 20:
+            warnings.append(f"До вопроса «{question.text}» не дошли {rates['not_reached_rate']}% начавших опрос.")
+        if rates["not_shown_by_branching_rate"] >= 50:
+            warnings.append(f"Вопрос «{question.text}» часто скрывается ветвлением: {rates['not_shown_by_branching_rate']}%.")
+
+        question_items.append({
+            "question_id": question.id,
+            "label": question.text,
+            "qtype": question.qtype,
+            "required": question.required,
+            "page_id": question.page_id,
+            "page_title": getattr(getattr(question, "page", None), "title", None),
+            "base": len(responses),
+            "shown_count": shown_count,
+            "counts": count_payload,
+            "rates": rates,
+            "interpretation": _detailed_missing_interpretation(count_payload, rates),
+        })
+
+    summary = {
+        "total_started": len(responses),
+        "total_completed_normal": sum(response.is_complete and not response.screened_out for response in responses),
+        "total_screened_out": sum(response.screened_out for response in responses),
+        "total_active_unfinished": sum(not response.is_complete for response in responses),
+        "questions_count": len(question_items),
+        "questions_with_high_real_missing": sum(item["rates"]["real_missing_rate"] >= 30 for item in question_items),
+        "questions_with_high_not_reached": sum(item["rates"]["not_reached_rate"] >= 20 for item in question_items),
+        "questions_mostly_hidden_by_branching": sum(item["rates"]["not_shown_by_branching_rate"] >= 50 for item in question_items),
+    }
+    recommendations = []
+    if summary["questions_with_high_real_missing"]:
+        recommendations.append("Проверьте формулировки и обязательность вопросов с высокой долей реальных пропусков.")
+    if summary["questions_with_high_not_reached"]:
+        recommendations.append("Проверьте длину анкеты и точки выхода: часть респондентов не доходит до поздних вопросов.")
+    if summary["questions_mostly_hidden_by_branching"]:
+        recommendations.append("Сверьте условия ветвления для часто скрытых вопросов; структурные пропуски не являются ошибкой заполнения.")
+
+    return {
+        "summary": summary,
+        "questions": question_items,
+        "warnings": warnings,
+        "recommendations": recommendations,
+        "note": "Реальными пропусками считаются только пропуски после показа вопроса. Ветвление, незавершенное прохождение и отсев учитываются отдельно.",
+    }
+
+
 # ---- Question type analysis layer ----------------------------------------
 
 def _option_payload(option: Option, count: int, base: Dict[str, int]) -> Dict[str, Any]:
@@ -378,6 +565,7 @@ def _option_payload(option: Option, count: int, base: Dict[str, int]) -> Dict[st
         "value": option.value,
         "count": count,
         "percent_answered": percent(count, base["answered_count"]),
+        "percent_shown": percent(count, base["shown_count"]),
         "percent_total": percent(count, base["total_completed"]),
     }
 
@@ -412,6 +600,7 @@ def analyze_multi_choice(question: Question, answers, base: Dict[str, int]) -> D
     return {
         "options": options,
         "total_choices": total_choices,
+        "average_selected_options": round(total_choices / base["answered_count"], 2) if base["answered_count"] else 0,
     }
 
 
@@ -447,11 +636,7 @@ def analyze_scale(question: Question, answers, base: Dict[str, int]) -> Dict[str
     distribution = Counter(values)
 
     return {
-        "answered_count": len(values),
-        "average": round(sum(values) / len(values), 2) if values else None,
-        "median": median(values) if values else None,
-        "min": min(values) if values else None,
-        "max": max(values) if values else None,
+        **describe_numeric_answers(values, base["shown_count"]),
         "distribution": [
             {"value": value, "count": distribution[value]}
             for value in sorted(distribution)
@@ -486,6 +671,8 @@ def analyze_matrix(question: Question, answers, base: Dict[str, int]) -> Dict[st
                         "value": column.value,
                         "count": counts[(row.id, column.id)],
                         "percent_answered": percent(counts[(row.id, column.id)], base["answered_count"]),
+                        "percent_answered_row": percent(counts[(row.id, column.id)], row_answer_counts[row.id]),
+                        "percent_shown": percent(counts[(row.id, column.id)], base["shown_count"]),
                         "percent_total": percent(counts[(row.id, column.id)], base["total_completed"]),
                     }
                     for column in columns
@@ -566,6 +753,8 @@ def matrix_multi_distribution(question: Question, responses, shown_response_ids=
                 "column_text": column.text,
                 "count": count,
                 "percent_answered": percent(count, base["answered_count"]),
+                "percent_answered_row": percent(count, len(row_respondents[row.id])),
+                "percent_shown": percent(count, base["shown_count"]),
                 "percent_total": percent(count, base["total_completed"]),
             })
 
@@ -611,6 +800,7 @@ def analyze_ranking(question: Question, answers, base: Dict[str, int]) -> Dict[s
         for option in question.options.all()
     }
     first_place_counts = Counter()
+    last_place_counts = Counter()
 
     for answer in answers:
         for item in answer.ranking_items.all():
@@ -618,6 +808,8 @@ def analyze_ranking(question: Question, answers, base: Dict[str, int]) -> Dict[s
             rank_distribution.setdefault(item.option_id, Counter())[item.rank] += 1
             if item.rank == 1:
                 first_place_counts[item.option_id] += 1
+            if item.rank == len(ranks_by_option):
+                last_place_counts[item.option_id] += 1
 
     return {
         "options": [
@@ -631,11 +823,16 @@ def analyze_ranking(question: Question, answers, base: Dict[str, int]) -> Dict[s
                     else None
                 ),
                 "first_place_count": first_place_counts[option.id],
+                "last_place_count": last_place_counts[option.id],
+                "median_rank": median(ranks_by_option[option.id]) if ranks_by_option[option.id] else None,
+                "min_rank": min(ranks_by_option[option.id]) if ranks_by_option[option.id] else None,
+                "max_rank": max(ranks_by_option[option.id]) if ranks_by_option[option.id] else None,
                 "rank_distribution": [
                     {
                         "rank": rank,
                         "count": count,
                         "percent_answered": percent(count, base["answered_count"]),
+                        "percent_shown": percent(count, base["shown_count"]),
                         "percent_total": percent(count, base["total_completed"]),
                     }
                     for rank, count in sorted(rank_distribution[option.id].items())

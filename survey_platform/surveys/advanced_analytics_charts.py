@@ -94,6 +94,31 @@ def _numeric(value):
     return numeric if math.isfinite(numeric) else None
 
 
+def _rank_values(values):
+    sorted_pairs = sorted((value, index) for index, value in enumerate(values))
+    ranks = [0.0] * len(values)
+    position = 0
+    while position < len(sorted_pairs):
+        end = position
+        while end + 1 < len(sorted_pairs) and sorted_pairs[end + 1][0] == sorted_pairs[position][0]:
+            end += 1
+        average_rank = (position + end + 2) / 2
+        for _, original_index in sorted_pairs[position:end + 1]:
+            ranks[original_index] = average_rank
+        position = end + 1
+    return ranks
+
+
+def _linear_trend(values_x, values_y):
+    mean_x = sum(values_x) / len(values_x)
+    mean_y = sum(values_y) / len(values_y)
+    denominator = sum((value - mean_x) ** 2 for value in values_x)
+    if denominator == 0:
+        return None
+    slope = sum((x_value - mean_x) * (y_value - mean_y) for x_value, y_value in zip(values_x, values_y)) / denominator
+    return slope, mean_y - slope * mean_x
+
+
 def _default_spec(question, analysis_type, role="variable"):
     qtype = question.qtype
 
@@ -213,21 +238,45 @@ def build_correlation_chart(report, config, result, chart_type):
     if len(specs) < 2:
         raise ValueError("Correlation chart requires at least two variables.")
     dataset = build_analysis_dataset(report.survey_id, specs)
+    if chart_type in {"network", "correlation_network"}:
+        raise ValueError("Сетевой граф корреляций доступен в JSON-результате отчета; PNG-визуализация для него пока не поддерживается.")
+    if chart_type in {"heatmap", "correlation_heatmap"}:
+        matrix = result.get("matrix")
+        labels = [item.get("label") or item.get("code") for item in result.get("variables", [])]
+        if not matrix or not labels:
+            raise ValueError("Correlation matrix is not available for heatmap.")
+        return _matrix_heatmap(matrix, labels, labels, "Correlation heatmap", vmin=-1, vmax=1, cmap="coolwarm")
 
     if len(dataset.variables) == 2:
         left, right = dataset.variables
         pairs = clean_numeric_pairs(get_column(dataset.rows, left.code), get_column(dataset.rows, right.code))
         if not pairs:
             raise ValueError("Not enough numeric pairs for correlation scatter plot.")
-        x_values, y_values = zip(*pairs)
+        x_values, y_values = map(list, zip(*pairs))
+        is_ranked = chart_type in {"ranked_scatterplot", "ranked_scatter_plot"}
+        if is_ranked:
+            x_values = _rank_values(x_values)
+            y_values = _rank_values(y_values)
         fig, ax = plt.subplots(figsize=(7, 5))
         ax.scatter(x_values, y_values, alpha=0.72)
+        trend = _linear_trend(x_values, y_values)
+        if trend:
+            slope, intercept = trend
+            x_min, x_max = min(x_values), max(x_values)
+            ax.plot([x_min, x_max], [intercept + slope * x_min, intercept + slope * x_max], color="#d62728", label="Trend line")
+            ax.legend()
         ax.set_xlabel(_truncate(left.label))
         ax.set_ylabel(_truncate(right.label))
-        ax.set_title("Correlation scatter plot")
+        coefficient = (result.get("matrix") or [[None, None], [None, None]])[0][1]
+        p_value = (result.get("p_values") or [[None, None], [None, None]])[0][1]
+        n = (result.get("n_matrix") or [[None, None], [None, None]])[0][1]
+        title = "Ranked correlation scatter plot" if is_ranked else "Correlation scatter plot"
+        ax.set_title(f"{title}\nr={_numeric(coefficient)}, p={_numeric(p_value)}, n={n}")
         ax.grid(alpha=0.25)
         return figure_to_png(fig)
 
+    if chart_type in {"scatterplot", "correlation_scatterplot", "ranked_scatterplot", "ranked_scatter_plot"}:
+        raise ValueError("Scatter plot requires exactly two expanded correlation variables.")
     matrix = result.get("matrix")
     labels = [item.get("label") or item.get("code") for item in result.get("variables", [])]
     if not matrix or not labels:

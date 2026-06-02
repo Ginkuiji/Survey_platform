@@ -1,6 +1,7 @@
 from .advanced_analytics_dataset import build_analysis_dataset
 from .analytics_result_format import standardize_analysis_result
 from .advanced_analytics_methods import (
+    clean_numeric_pairs,
     compute_chi_square,
     compute_correlation_matrix,
     compute_correspondence_analysis,
@@ -15,9 +16,11 @@ from .advanced_analytics_methods import (
     compute_missing_analysis,
     compute_scale_index,
     compute_time_analysis,
+    get_column,
 )
 from .analytics import (
     _answer_has_value,
+    build_detailed_missing_analysis,
     build_visibility_by_question,
     get_completed_normal_responses,
     get_question_answers,
@@ -62,6 +65,15 @@ def run_correlation_analysis(payload: dict) -> dict:
         dataset.variables,
         method=payload.get("method", "pearson"),
     )
+    if len(dataset.variables) == 2:
+        left, right = dataset.variables
+        result["scatter_pairs"] = [
+            {"x": x_value, "y": y_value}
+            for x_value, y_value in clean_numeric_pairs(
+                get_column(dataset.rows, left.code),
+                get_column(dataset.rows, right.code),
+            )[:500]
+        ]
     return _with_metadata(survey_id, "correlation", dataset, result, payload)
 
 
@@ -492,6 +504,16 @@ def run_missing_analysis(payload: dict) -> dict:
         group_variable=group_variable,
         include_group_breakdown=payload.get("include_group_breakdown", False),
     )
+    result["detailed_missing_analysis"] = build_detailed_missing_analysis(
+        survey_id,
+        questions=questions,
+        pages=pages,
+        conditions=conditions,
+    )
+    result["warnings"] = [
+        *(result.get("warnings") or []),
+        *(result["detailed_missing_analysis"].get("warnings") or []),
+    ]
 
     if payload.get("include_screened_out", False):
         screened_out_responses = list(

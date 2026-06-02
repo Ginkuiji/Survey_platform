@@ -148,6 +148,64 @@ function InterpretationBlock({ interpretation }) {
   );
 }
 
+function DescriptiveProfileBlock({ profile }) {
+  if (!profile?.variables?.length) return null;
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>Описательный профиль переменных</Typography>
+        {(profile.notes || []).map((note) => (
+          <Alert severity="info" key={String(note)} sx={{ mb: 1 }}>{String(note)}</Alert>
+        ))}
+        <Box sx={{ overflowX: "auto" }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Переменная</TableCell>
+                <TableCell>Тип</TableCell>
+                <TableCell align="right">n</TableCell>
+                <TableCell align="right">Пропуски</TableCell>
+                <TableCell align="right">Среднее</TableCell>
+                <TableCell align="right">Медиана</TableCell>
+                <TableCell align="right">Std</TableCell>
+                <TableCell align="right">Min / Max</TableCell>
+                <TableCell align="right">Q1 / Q3</TableCell>
+                <TableCell align="right">IQR</TableCell>
+                <TableCell align="right">Выбросы</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {profile.variables.map((variable) => (
+                <TableRow key={variable.code}>
+                  <TableCell>
+                    <Typography>{variable.label || variable.code}</Typography>
+                    {(variable.interpretation?.notes || []).map((note) => (
+                      <Typography color="text.secondary" variant="caption" component="div" key={note}>
+                        {note}
+                      </Typography>
+                    ))}
+                  </TableCell>
+                  <TableCell>{variable.kind}</TableCell>
+                  <TableCell align="right">{formatValue(variable.n)}</TableCell>
+                  <TableCell align="right">{formatValue(variable.missing_count)} ({formatPercent(variable.missing_rate)})</TableCell>
+                  <TableCell align="right">{formatValue(variable.mean)}</TableCell>
+                  <TableCell align="right">{formatValue(variable.median)}</TableCell>
+                  <TableCell align="right">{formatValue(variable.std)}</TableCell>
+                  <TableCell align="right">{formatValue(variable.min)} / {formatValue(variable.max)}</TableCell>
+                  <TableCell align="right">{formatValue(variable.q1)} / {formatValue(variable.q3)}</TableCell>
+                  <TableCell align="right">{formatValue(variable.iqr)}</TableCell>
+                  <TableCell align="right">{formatValue(variable.outliers?.count)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function StandardizedResultSummary({ result }) {
   if (!result) return null;
 
@@ -172,6 +230,8 @@ export default function StandardizedResultSummary({ result }) {
       )}
 
       <InterpretationBlock interpretation={result.interpretation} />
+
+      <DescriptiveProfileBlock profile={result.descriptive_profile} />
 
       <DataQualityBlock dataQuality={result.data_quality} />
 

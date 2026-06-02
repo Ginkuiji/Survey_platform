@@ -28,6 +28,7 @@ import {
   ClusterTopFeaturesChart,
   CorrespondenceInertiaChart,
   CorrelationHeatmap,
+  CorrelationScatterPlot,
   CrosstabStackedBar,
   FactorLoadingsHeatmap,
   FactorScreeChart,
@@ -35,6 +36,7 @@ import {
   LogisticOddsRatioChart,
   LogisticProbabilityHistogram,
   MissingAnalysisChart,
+  MissingStackedStatusChart,
   RegressionCoefficientChart,
   ReliabilityItemChart,
   ScaleIndexDistributionChart,
@@ -233,6 +235,9 @@ function ReportSectionCard({ section, children, onRequestChart, serverChart }) {
 
 function renderCorrelationSection(section) {
   const result = section.result;
+  const standardized = result?.standardized_result || {};
+  const methodHint = standardized.method_hint || standardized.main_results?.method_hint;
+  const strongestRelationships = standardized.main_results?.strongest_relationships || [];
   const variables = result?.variables || [];
   const matrix = result?.matrix || [];
   const pValues = result?.p_values || [];
@@ -245,7 +250,38 @@ function renderCorrelationSection(section) {
         <Chip label={`Датасет: ${result?.dataset_size ?? "—"}`} />
       </Stack>
 
+      {methodHint?.text && <Alert severity="info">{methodHint.text}</Alert>}
+
       <CorrelationHeatmap result={result} />
+      <CorrelationScatterPlot result={result} />
+
+      {!!strongestRelationships.length && (
+        <Box sx={{ width: "100%", overflowX: "auto" }}>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>Наиболее выраженные связи</Typography>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Переменные</TableCell>
+                <TableCell align="right">Коэффициент</TableCell>
+                <TableCell>Направление и сила</TableCell>
+                <TableCell align="right">p-value</TableCell>
+                <TableCell align="right">n</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {strongestRelationships.map((item) => (
+                <TableRow key={`${item.left}-${item.right}`}>
+                  <TableCell>{item.left_label} / {item.right_label}</TableCell>
+                  <TableCell align="right">{formatNumber(item.coefficient)}</TableCell>
+                  <TableCell>{item.direction}, {item.strength}</TableCell>
+                  <TableCell align="right">{formatNumber(item.p_value)}</TableCell>
+                  <TableCell align="right">{formatNumber(item.n)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Table size="small">
@@ -1655,9 +1691,50 @@ function renderMissingShortTable(title, rows, helperText = "") {
   );
 }
 
+function renderDetailedMissingTable(detailed) {
+  const questions = detailed?.questions || [];
+  if (!questions.length) return null;
+
+  return (
+    <Box sx={{ width: "100%", overflowX: "auto" }}>
+      <Typography variant="subtitle1" sx={{ mb: 1 }}>Подробные причины отсутствия ответов</Typography>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Вопрос</TableCell>
+            <TableCell align="right">Ответили</TableCell>
+            <TableCell align="right">Пропустили после показа</TableCell>
+            <TableCell align="right">Не показан ветвлением</TableCell>
+            <TableCell align="right">Не дошли</TableCell>
+            <TableCell align="right">Отсев</TableCell>
+            <TableCell align="right">Реальные пропуски</TableCell>
+            <TableCell>Интерпретация</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {questions.map((item) => (
+            <TableRow key={`detailed-${item.question_id}`}>
+              <TableCell>{item.label || item.question_id}</TableCell>
+              <TableCell align="right">{formatNumber(item.counts?.answered)}</TableCell>
+              <TableCell align="right">{formatNumber(item.counts?.skipped_after_shown)}</TableCell>
+              <TableCell align="right">{formatNumber(item.counts?.not_shown_by_branching)}</TableCell>
+              <TableCell align="right">{formatNumber(item.counts?.not_reached)}</TableCell>
+              <TableCell align="right">{formatNumber(item.counts?.screened_out)}</TableCell>
+              <TableCell align="right">{formatNumber(item.rates?.real_missing_rate)}%</TableCell>
+              <TableCell>{item.interpretation || "—"}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Box>
+  );
+}
+
 function renderMissingAnalysisSection(section) {
   const result = section.result || {};
   const summary = result.summary || {};
+  const detailed = result.detailed_missing_analysis;
+  const detailedSummary = detailed?.summary || {};
   const screenedOut = result.screened_out_context;
   const summaryRows = [
     ["total_shown_slots", summary.total_shown_slots],
@@ -1681,12 +1758,24 @@ function renderMissingAnalysisSection(section) {
       <Alert severity="info">
         Структурные пропуски из-за ветвления не считаются реальными пропусками.
       </Alert>
+      {detailed?.note && <Alert severity="info">{detailed.note}</Alert>}
+
+      {detailed && (
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Chip label={`Начали: ${formatNumber(detailedSummary.total_started)}`} />
+          <Chip label={`Не завершили: ${formatNumber(detailedSummary.total_active_unfinished)}`} />
+          <Chip label={`Отсеяны: ${formatNumber(detailedSummary.total_screened_out)}`} />
+          <Chip label={`Высокие реальные пропуски: ${formatNumber(detailedSummary.questions_with_high_real_missing)}`} />
+        </Stack>
+      )}
 
       {(result.warnings || []).map((warning) => (
         <Alert key={warning} severity="warning">{warning}</Alert>
       ))}
 
       <MissingAnalysisChart result={result} />
+      <MissingStackedStatusChart result={result} />
+      {renderDetailedMissingTable(detailed)}
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
