@@ -374,6 +374,69 @@ def compute_correspondence_analysis(crosstab_result, row_variable=None, column_v
     }
 
 
+RESIDUAL_IMPORTANT_THRESHOLD = 2.0
+TOP_CHI_CELLS_LIMIT = 10
+
+
+def build_expected_frequency_diagnostics(expected) -> dict:
+    values = [float(value) for row in expected for value in row if value is not None]
+    below_five = [value for value in values if value < 5]
+    below_one = [value for value in values if value < 1]
+    below_five_rate = round(len(below_five) / len(values) * 100, 2) if values else 0
+    return {
+        "cells_count": len(values),
+        "below_5_count": len(below_five),
+        "below_5_rate": below_five_rate,
+        "below_1_count": len(below_one),
+        "min_expected": min(values) if values else None,
+        "assumption_warning": below_five_rate > 20 or bool(below_one),
+    }
+
+
+def _chi_square_cell_details(crosstab_result, observed, expected):
+    residuals = []
+    contributions = []
+    top_cells = []
+    rows = crosstab_result.get("rows") or []
+    for row_index, observed_row in enumerate(observed):
+        residual_row = []
+        contribution_row = []
+        for column_index, observed_value in enumerate(observed_row):
+            expected_value = expected[row_index][column_index]
+            residual = None if expected_value == 0 else (observed_value - expected_value) / math.sqrt(expected_value)
+            contribution = None if expected_value == 0 else (observed_value - expected_value) ** 2 / expected_value
+            residual_row.append(residual)
+            contribution_row.append(contribution)
+            if contribution is None:
+                continue
+            row = rows[row_index] if row_index < len(rows) else {}
+            columns = row.get("columns") or []
+            column = columns[column_index] if column_index < len(columns) else {}
+            direction = "higher_than_expected" if observed_value > expected_value else "lower_than_expected"
+            relation = "выше" if direction == "higher_than_expected" else "ниже"
+            row_label = row.get("value", row.get("raw_value", row_index))
+            column_label = column.get("value", column.get("raw_value", column_index))
+            top_cells.append({
+                "row_index": row_index,
+                "column_index": column_index,
+                "row_value": row.get("raw_value", row_label),
+                "row_label": row_label,
+                "column_value": column.get("raw_value", column_label),
+                "column_label": column_label,
+                "observed": observed_value,
+                "expected": expected_value,
+                "standardized_residual": residual,
+                "important_residual": abs(residual) >= RESIDUAL_IMPORTANT_THRESHOLD if residual is not None else False,
+                "contribution": contribution,
+                "direction": direction,
+                "interpretation": f"В категории «{row_label} × {column_label}» наблюдаемая частота {relation} ожидаемой.",
+            })
+        residuals.append(residual_row)
+        contributions.append(contribution_row)
+    top_cells.sort(key=lambda item: item["contribution"], reverse=True)
+    return residuals, contributions, top_cells[:TOP_CHI_CELLS_LIMIT]
+
+
 def compute_chi_square(crosstab_result) -> dict:
     observed = _contingency_from_crosstab(crosstab_result)
     if len(observed) < 2 or not observed or len(observed[0]) < 2:
@@ -381,35 +444,52 @@ def compute_chi_square(crosstab_result) -> dict:
 
     if stats is not None:
         chi2, p_value, dof, expected = stats.chi2_contingency(observed)
-        return {
-            "chi2": float(chi2),
-            "p_value": float(p_value),
-            "dof": int(dof),
-            "expected": [[float(value) for value in row] for row in expected],
-        }
+        expected = [[float(value) for value in row] for row in expected]
+        chi2 = float(chi2)
+        p_value = float(p_value)
+        dof = int(dof)
 
-    row_totals = [sum(row) for row in observed]
-    column_totals = [sum(observed[row_index][col_index] for row_index in range(len(observed))) for col_index in range(len(observed[0]))]
-    total = sum(row_totals)
-    if total == 0:
-        raise ValueError("Для χ²-критерия нужна непустая таблица сопряженности.")
+    else:
+        row_totals = [sum(row) for row in observed]
+        column_totals = [sum(observed[row_index][col_index] for row_index in range(len(observed))) for col_index in range(len(observed[0]))]
+        total = sum(row_totals)
+        if total == 0:
+            raise ValueError("Для χ²-критерия нужна непустая таблица сопряженности.")
 
-    expected = [
-        [row_total * column_total / total for column_total in column_totals]
-        for row_total in row_totals
-    ]
-    chi2 = 0.0
-    for row_index, row in enumerate(observed):
-        for col_index, observed_value in enumerate(row):
-            expected_value = expected[row_index][col_index]
-            if expected_value:
-                chi2 += (observed_value - expected_value) ** 2 / expected_value
+        expected = [
+            [row_total * column_total / total for column_total in column_totals]
+            for row_total in row_totals
+        ]
+        chi2 = 0.0
+        for row_index, row in enumerate(observed):
+            for col_index, observed_value in enumerate(row):
+                expected_value = expected[row_index][col_index]
+                if expected_value:
+                    chi2 += (observed_value - expected_value) ** 2 / expected_value
+        p_value = None
+        dof = (len(observed) - 1) * (len(observed[0]) - 1)
+
+    residuals, contributions, top_cells = _chi_square_cell_details(crosstab_result, observed, expected)
+    diagnostics = build_expected_frequency_diagnostics(expected)
+    warnings = []
+    if diagnostics["below_5_count"]:
+        warnings.append("Для χ²-критерия часть ожидаемых частот меньше 5; результат следует интерпретировать осторожно.")
+    if diagnostics["below_5_rate"] > 20:
+        warnings.append("Более 20% ожидаемых частот меньше 5; χ²-критерий может быть ненадёжен.")
+    if diagnostics["below_1_count"]:
+        warnings.append("В таблице есть ожидаемые частоты меньше 1; χ²-критерий может быть неприменим.")
 
     return {
         "chi2": chi2,
-        "p_value": None,
-        "dof": (len(observed) - 1) * (len(observed[0]) - 1),
+        "p_value": p_value,
+        "dof": dof,
+        "observed": observed,
         "expected": expected,
+        "standardized_residuals": residuals,
+        "cell_contributions": contributions,
+        "expected_diagnostics": diagnostics,
+        "top_contributing_cells": top_cells,
+        "warnings": warnings,
     }
 
 
@@ -455,6 +535,8 @@ def compute_cramers_v(crosstab_result, chi_square_result=None) -> dict:
         "rows": rows,
         "columns": columns,
         "interpretation": interpret_cramers_v(value),
+        "effect_size_name": "Cramér’s V",
+        "effect_size_description": "Показывает силу связи между двумя категориальными переменными.",
     }
 
 
@@ -1531,12 +1613,55 @@ def _sample_std(values):
     return math.sqrt(sum((value - mean) ** 2 for value in values) / (n - 1))
 
 
-def _describe_group(group_value, values, value_labels=None):
+def _group_percentile(ordered_values, fraction):
+    if not ordered_values:
+        return None
+    position = (len(ordered_values) - 1) * fraction
+    lower = int(position)
+    upper = min(lower + 1, len(ordered_values) - 1)
+    return ordered_values[lower] + (ordered_values[upper] - ordered_values[lower]) * (position - lower)
+
+
+def _mean_confidence_interval(values, confidence=0.95):
+    std = _sample_std(values)
+    if std is None or stats is None:
+        return None
+    mean = sum(values) / len(values)
+    critical = float(stats.t.ppf((1 + confidence) / 2, len(values) - 1))
+    margin = critical * std / math.sqrt(len(values))
+    return {"low": float(mean - margin), "high": float(mean + margin)}
+
+
+def _mean_difference_confidence_interval(first, second, confidence=0.95):
+    std1 = _sample_std(first)
+    std2 = _sample_std(second)
+    if std1 is None or std2 is None or stats is None:
+        return None
+    variance = std1 ** 2 / len(first) + std2 ** 2 / len(second)
+    if variance <= 0:
+        return None
+    numerator = variance ** 2
+    denominator = (
+        (std1 ** 2 / len(first)) ** 2 / (len(first) - 1)
+        + (std2 ** 2 / len(second)) ** 2 / (len(second) - 1)
+    )
+    dof = numerator / denominator if denominator else len(first) + len(second) - 2
+    margin = float(stats.t.ppf((1 + confidence) / 2, dof)) * math.sqrt(variance)
+    difference = sum(first) / len(first) - sum(second) / len(second)
+    return {"low": float(difference - margin), "high": float(difference + margin)}
+
+
+def _describe_group(group_value, values, value_labels=None, missing_count=0):
     ordered = sorted(values)
     n = len(values)
     mean = sum(values) / n
     middle = n // 2
     median = ordered[middle] if n % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+    q1 = _group_percentile(ordered, 0.25)
+    q3 = _group_percentile(ordered, 0.75)
+    iqr = q3 - q1
+    lower_fence = q1 - 1.5 * iqr
+    upper_fence = q3 + 1.5 * iqr
     label = None
     if value_labels:
         label = value_labels.get(group_value)
@@ -1547,13 +1672,21 @@ def _describe_group(group_value, values, value_labels=None):
                 label = None
     return {
         "group": group_value,
+        "group_value": group_value,
         "label": label or str(group_value),
+        "group_label": label or str(group_value),
         "n": n,
         "mean": float(mean),
         "median": float(median),
         "std": _sample_std(values),
         "min": float(min(values)),
         "max": float(max(values)),
+        "q1": float(q1),
+        "q3": float(q3),
+        "iqr": float(iqr),
+        "missing_count": missing_count,
+        "outliers_count": sum(value < lower_fence or value > upper_fence for value in values),
+        "confidence_interval_95": _mean_confidence_interval(values),
     }
 
 
@@ -1657,6 +1790,37 @@ def _interpret_rank_biserial(value):
     return "Большой эффект"
 
 
+def _variance_diagnostics(group_values):
+    variances = [
+        std ** 2
+        for std in (_sample_std(values) for values in group_values)
+        if std is not None
+    ]
+    positive_variances = [value for value in variances if value > 0]
+    ratio = max(positive_variances) / min(positive_variances) if positive_variances else None
+    return {
+        "variance_ratio": ratio,
+        "variances_comparable": ratio is None or ratio <= 4,
+    }
+
+
+def _two_group_differences(group_items, group_values=None):
+    if len(group_items) != 2:
+        return {}
+    first, second = group_items
+    mean_difference = first["mean"] - second["mean"]
+    median_difference = first["median"] - second["median"]
+    higher = first if first["mean"] >= second["mean"] else second
+    lower = second if higher is first else first
+    return {
+        "mean_difference": float(mean_difference),
+        "median_difference": float(median_difference),
+        "higher_mean_group": higher["label"],
+        "lower_mean_group": lower["label"],
+        "confidence_interval_95": _mean_difference_confidence_interval(*group_values) if group_values else None,
+    }
+
+
 def _empty_post_hoc(enabled=False, method=None, p_adjust="bonferroni", alpha=0.05, warnings=None):
     return {
         "enabled": enabled,
@@ -1729,7 +1893,7 @@ def compute_post_hoc_comparisons(
             post_hoc_method,
             p_adjust,
             alpha,
-            ["Post-hoc comparisons are not needed for two-group tests."],
+            ["Post-hoc сравнения не требуются для тестов с двумя группами."],
         )
     if n_groups < 3:
         return _empty_post_hoc(
@@ -1737,7 +1901,7 @@ def compute_post_hoc_comparisons(
             post_hoc_method,
             p_adjust,
             alpha,
-            ["Post-hoc comparisons are usually needed for three or more groups."],
+            ["Post-hoc сравнения обычно применяются для трех и более групп."],
         )
 
     resolved_method = post_hoc_method
@@ -1773,6 +1937,7 @@ def compute_post_hoc_comparisons(
                 effect_value = _cohens_d([values_a, values_b])
                 effect_size = None if effect_value is None else {
                     "type": "cohens_d",
+                    "name": "Cohen’s d",
                     "value": float(effect_value),
                     "interpretation": _interpret_cohens_d(effect_value),
                 }
@@ -1789,6 +1954,8 @@ def compute_post_hoc_comparisons(
                     "mean_a": float(mean_a),
                     "mean_b": float(mean_b),
                     "difference": float(mean_a - mean_b),
+                    "mean_difference": float(mean_a - mean_b),
+                    "median_difference": float(_profile_median(values_a) - _profile_median(values_b)),
                     "effect_size": effect_size,
                 }
             else:
@@ -1809,8 +1976,11 @@ def compute_post_hoc_comparisons(
                     "median_a": float(median_a),
                     "median_b": float(median_b),
                     "difference": float(median_a - median_b),
+                    "mean_difference": float(sum(values_a) / len(values_a) - sum(values_b) / len(values_b)),
+                    "median_difference": float(median_a - median_b),
                     "effect_size": None if rbc is None else {
                         "type": "rank_biserial_correlation",
+                        "name": "Rank-biserial correlation",
                         "value": float(rbc),
                         "abs_value": float(abs(rbc)),
                         "interpretation": _interpret_rank_biserial(rbc),
@@ -1858,11 +2028,15 @@ def compute_group_comparison(
         raise ValueError("Неподдерживаемый метод сравнения групп.")
 
     groups = defaultdict(list)
+    missing_by_group = Counter()
     warnings = []
     for row in rows:
         group_value = row.get(group_var.code)
         value = row.get(value_var.code)
-        if _is_missing(group_value) or _is_missing(value):
+        if _is_missing(group_value):
+            continue
+        if _is_missing(value):
+            missing_by_group[group_value] += 1
             continue
         if not _is_numeric(value):
             raise ValueError("Зависимая переменная для сравнения групп должна содержать числовые значения.")
@@ -1891,8 +2065,10 @@ def compute_group_comparison(
         effect_value = _cohens_d(group_values)
         effect_size = None if effect_value is None else {
             "type": "cohens_d",
+            "name": "Cohen’s d",
             "value": float(effect_value),
             "interpretation": _interpret_cohens_d(effect_value),
+            "description": "Показывает выраженность различия средних значений между двумя группами.",
         }
     elif method == "anova":
         result = stats.f_oneway(*group_values)
@@ -1901,15 +2077,25 @@ def compute_group_comparison(
         effect_value = _eta_squared(group_values)
         effect_size = None if effect_value is None else {
             "type": "eta_squared",
+            "name": "Eta squared",
             "value": float(effect_value),
             "interpretation": _interpret_eta_squared(effect_value),
+            "description": "Показывает долю вариации показателя, связанную с различиями между группами.",
         }
     elif method == "mann_whitney":
         result = stats.mannwhitneyu(group_values[0], group_values[1], alternative="two-sided")
         method_name = "Mann-Whitney U"
         groups_compared = [ordered_group_keys[0], ordered_group_keys[1]]
-        effect_size = None
-        warnings.append("Для критерия Манна-Уитни размер эффекта в этой версии не возвращается.")
+        statistic = _finite_or_none(result.statistic)
+        denominator = len(group_values[0]) * len(group_values[1])
+        effect_value = None if statistic is None or denominator <= 0 else 1 - (2 * statistic) / denominator
+        effect_size = None if effect_value is None else {
+            "type": "rank_biserial_correlation",
+            "name": "Rank-biserial correlation",
+            "value": float(effect_value),
+            "interpretation": _interpret_rank_biserial(effect_value),
+            "description": "Показывает выраженность различия рангов между двумя группами.",
+        }
     else:
         result = stats.kruskal(*group_values)
         method_name = "Kruskal-Wallis"
@@ -1919,8 +2105,10 @@ def compute_group_comparison(
         effect_value = None if statistic is None or denominator <= 0 else (statistic - n_groups + 1) / denominator
         effect_size = None if effect_value is None else {
             "type": "epsilon_squared",
+            "name": "Epsilon squared",
             "value": float(max(0.0, effect_value)),
             "interpretation": _interpret_eta_squared(max(0.0, effect_value)),
+            "description": "Показывает выраженность различий рангов между несколькими группами.",
         }
 
     statistic = _finite_or_none(result.statistic)
@@ -1940,12 +2128,28 @@ def compute_group_comparison(
             post_hoc_method=post_hoc_method,
         )
 
+    group_items = [
+        _describe_group(group_key, groups[group_key], group_var.value_labels, missing_by_group[group_key])
+        for group_key in ordered_group_keys
+    ]
+    variance_diagnostics = _variance_diagnostics(group_values)
+    if any(len(values) < 5 for values in group_values):
+        warnings.append("В одной или нескольких группах меньше 5 наблюдений; сравнение групп может быть ненадёжным.")
+    sizes = [len(values) for values in group_values]
+    if min(sizes) and max(sizes) / min(sizes) >= 3:
+        warnings.append("Размеры групп сильно различаются; результаты следует интерпретировать осторожно.")
+    if method in ("t_test", "anova") and not variance_diagnostics["variances_comparable"]:
+        warnings.append("Дисперсии групп заметно различаются; результаты параметрических тестов следует интерпретировать осторожно.")
+    if effect_size is None:
+        warnings.append("Размер эффекта не удалось рассчитать из-за недостаточной вариативности данных.")
+
     return {
         "method": method,
         "method_name": method_name,
         "alpha": alpha,
         "n": n,
         "n_groups": n_groups,
+        "groups_count": n_groups,
         "group_variable": {
             "code": group_var.code,
             "label": group_var.label,
@@ -1954,10 +2158,7 @@ def compute_group_comparison(
             "code": value_var.code,
             "label": value_var.label,
         },
-        "groups": [
-            _describe_group(group_key, groups[group_key], group_var.value_labels)
-            for group_key in ordered_group_keys
-        ],
+        "groups": group_items,
         "test": {
             "statistic": statistic,
             "p_value": p_value,
@@ -1966,6 +2167,8 @@ def compute_group_comparison(
             "groups_compared": groups_compared,
         },
         "effect_size": effect_size,
+        "differences": _two_group_differences(group_items, group_values if method == "t_test" else None),
+        "variance_diagnostics": variance_diagnostics,
         "post_hoc": post_hoc_result,
         "warnings": warnings,
     }

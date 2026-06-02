@@ -442,7 +442,7 @@ export function buildSectionPayload(surveyId, section, questionsById) {
       value: getSpec(valueQuestion, "group_comparison", "value", "Показатель"),
       method: section.method || "anova",
       alpha: section.alpha ?? 0.05,
-      post_hoc: section.post_hoc ?? false,
+      post_hoc: ["t_test", "mann_whitney"].includes(section.method) ? false : (section.post_hoc ?? false),
       post_hoc_method: section.post_hoc_method || "auto",
       p_adjust: section.p_adjust || "bonferroni",
     };

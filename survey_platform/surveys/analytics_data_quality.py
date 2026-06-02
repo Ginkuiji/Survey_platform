@@ -222,13 +222,25 @@ def compute_vif_for_dataset(rows, feature_codes):
 
 
 def _expected_checks(result):
-    expected = (result.get("chi_square") or {}).get("expected") or []
+    chi_square = result.get("chi_square") or {}
+    diagnostics = chi_square.get("expected_diagnostics")
+    if diagnostics:
+        return {
+            "expected_cells_count": diagnostics.get("cells_count"),
+            "expected_below_5_count": diagnostics.get("below_5_count"),
+            "expected_below_5_rate": diagnostics.get("below_5_rate"),
+            "expected_below_1_count": diagnostics.get("below_1_count"),
+            "min_expected": diagnostics.get("min_expected"),
+            "assumption_warning": diagnostics.get("assumption_warning"),
+        }
+    expected = chi_square.get("expected") or []
     values = [value for row in expected for value in row if value is not None]
     below_five = [value for value in values if value < 5]
     return {
         "expected_cells_count": len(values),
         "expected_below_5_count": len(below_five),
         "expected_below_5_rate": _percent(len(below_five), len(values)),
+        "expected_below_1_count": len([value for value in values if value < 1]),
         "min_expected": min(values) if values else None,
     }
 
@@ -412,6 +424,8 @@ def build_applicability_warnings(analysis_type, result, payload=None, dataset=No
             warnings.append("Для χ²-критерия часть ожидаемых частот меньше 5; результат следует интерпретировать осторожно.")
         if checks.get("expected_below_5_rate", 0) > 20:
             warnings.append("Более 20% ожидаемых частот меньше 5; χ²-критерий может быть ненадежен.")
+        if checks.get("expected_below_1_count", 0) > 0:
+            warnings.append("В таблице есть ожидаемые частоты меньше 1; χ²-критерий может быть неприменим.")
         rows, columns, _ = _crosstab_shape(result)
         if rows == 2 and columns == 2 and checks.get("expected_below_5_count", 0):
             warnings.append("Для таблицы 2x2 при малых частотах рекомендуется использовать точный критерий Фишера.")

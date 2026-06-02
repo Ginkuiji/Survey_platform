@@ -342,6 +342,37 @@ def build_group_comparison_chart(report, config, result, chart_type):
     groups = [(label, values) for label, values in grouped.items() if values]
     if len(groups) < 2:
         raise ValueError("Boxplot requires at least two non-empty groups.")
+    if chart_type in {"mean_ci", "group_mean_ci_plot"}:
+        stats_by_label = {
+            str(item.get("label", item.get("group"))): item
+            for item in result.get("groups") or []
+        }
+        labels = [label for label, _ in groups]
+        means = [sum(values) / len(values) for _, values in groups]
+        intervals = [stats_by_label.get(str(label), {}).get("confidence_interval_95") for label in labels]
+        lower_errors = [mean - interval["low"] if interval else 0 for mean, interval in zip(means, intervals)]
+        upper_errors = [interval["high"] - mean if interval else 0 for mean, interval in zip(means, intervals)]
+        fig, ax = plt.subplots(figsize=(max(7, len(groups) * 1.1), 5))
+        ax.bar(range(len(labels)), means, color="#1f77b4", alpha=0.8)
+        if any(intervals):
+            ax.errorbar(range(len(labels)), means, yerr=[lower_errors, upper_errors], fmt="none", ecolor="#222", capsize=4)
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels([_truncate(label, 18) for label in labels], rotation=25, ha="right")
+        ax.set_title("Средние значения по группам")
+        ax.set_ylabel(_truncate(value_variable.label))
+        ax.grid(axis="y", alpha=0.25)
+        return figure_to_png(fig)
+    if chart_type in {"violin", "group_violin_plot"}:
+        fig, ax = plt.subplots(figsize=(max(7, len(groups) * 1.1), 5))
+        ax.violinplot([values for _, values in groups], showmedians=True)
+        ax.set_xticks(range(1, len(groups) + 1))
+        ax.set_xticklabels([_truncate(label, 18) for label, _ in groups], rotation=25, ha="right")
+        ax.set_title("Распределения показателя по группам")
+        ax.set_ylabel(_truncate(value_variable.label))
+        ax.grid(axis="y", alpha=0.25)
+        return figure_to_png(fig)
+    if chart_type in {"post_hoc", "post_hoc_table"}:
+        raise ValueError("Таблица post-hoc сравнений доступна в JSON-результате отчета; отдельный PNG-график для нее не требуется.")
     fig, ax = plt.subplots(figsize=(max(7, len(groups) * 1.1), 5))
     ax.boxplot([values for _, values in groups], labels=[_truncate(label, 18) for label, _ in groups], patch_artist=True)
     ax.set_title("Group comparison boxplot")
@@ -424,6 +455,19 @@ def build_crosstab_chart(report, config, result, chart_type):
         raise ValueError("Crosstab rows are empty.")
     x_labels = [str(column.get("value")) for column in rows[0].get("columns", [])]
     y_labels = [str(row.get("label") or row.get("value")) for row in rows]
+    chi_square = result.get("chi_square") or {}
+    if chart_type in {"standardized_residual_heatmap", "residual_heatmap"}:
+        matrix = chi_square.get("standardized_residuals")
+        if not matrix:
+            raise ValueError("Стандартизированные остатки недоступны для этого отчета.")
+        return _matrix_heatmap(matrix, x_labels, y_labels, "Стандартизированные остатки χ²", vmin=-3, vmax=3, cmap="coolwarm")
+    if chart_type == "chi_square_contribution_heatmap":
+        matrix = chi_square.get("cell_contributions")
+        if not matrix:
+            raise ValueError("Вклады ячеек в χ² недоступны для этого отчета.")
+        return _matrix_heatmap(matrix, x_labels, y_labels, "Вклад ячеек в χ²", cmap="YlOrRd")
+    if chart_type == "mosaic_plot":
+        raise ValueError("Mosaic plot пока недоступен для серверного построения.")
     matrix = [[column.get("count", 0) for column in row.get("columns", [])] for row in rows]
     return _matrix_heatmap(matrix, x_labels, y_labels, "Crosstab heatmap", cmap="YlGnBu")
 

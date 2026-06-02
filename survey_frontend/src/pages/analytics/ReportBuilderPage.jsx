@@ -476,53 +476,6 @@ function SectionFields({ section, questions, updateSection }) {
           />
         </Stack>
 
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={section.post_hoc}
-              onChange={(event) => updateSection(section.id, { post_hoc: event.target.checked })}
-            />
-          }
-          label="Выполнить пост-хок сравнения"
-        />
-
-        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-          <FormControl fullWidth disabled={!section.post_hoc}>
-            <InputLabel>Пост-хок метод</InputLabel>
-            <Select
-              label="Пост-хок метод"
-              value={section.post_hoc_method}
-              onChange={(event) => updateSection(section.id, { post_hoc_method: event.target.value })}
-            >
-              <MenuItem value="auto">Автоматически</MenuItem>
-              <MenuItem value="pairwise_t_test">Парный t-критерий</MenuItem>
-              <MenuItem value="pairwise_mann_whitney">U-критерий Манна-Уитни</MenuItem>
-              <MenuItem value="tukey_hsd">Тьюки HSD</MenuItem>
-            </Select>
-          </FormControl>
-
-          <FormControl fullWidth disabled={!section.post_hoc || section.post_hoc_method === "tukey_hsd"}>
-            <InputLabel>Поправка p-value</InputLabel>
-            <Select
-              label="Поправка p-value"
-              value={section.p_adjust}
-              onChange={(event) => updateSection(section.id, { p_adjust: event.target.value })}
-            >
-              <MenuItem value="bonferroni">Бонферрони</MenuItem>
-              <MenuItem value="holm">Холма</MenuItem>
-            </Select>
-          </FormControl>
-        </Stack>
-
-        {section.post_hoc && (
-          <Alert severity="info">
-            {section.method === "anova"
-              ? "Пост=хок сравнения помогут определить, между какими группами есть различия."
-              : section.method === "kruskal_wallis"
-                ? "Для Крускала-Уоллиса будут использованы U-критерий Манна-Уитни с поправкой p-value."
-                : "Пост-хок обычно не требуется для двухгрупповых тестов."}
-          </Alert>
-        )}
       </Stack>
     );
   }
@@ -835,6 +788,7 @@ function SectionFields({ section, questions, updateSection }) {
       isQuestionSupportedForAnalysis(question, "group_comparison", "value")
       && Number(question.id) !== Number(section.groupQuestionId)
     ));
+    const twoGroupMethod = section.method === "t_test" || section.method === "mann_whitney";
 
     return (
       <Stack spacing={2}>
@@ -883,7 +837,13 @@ function SectionFields({ section, questions, updateSection }) {
             <Select
               label="Метод"
               value={section.method}
-              onChange={(event) => updateSection(section.id, { method: event.target.value })}
+              onChange={(event) => {
+                const method = event.target.value;
+                updateSection(section.id, {
+                  method,
+                  post_hoc: method === "t_test" || method === "mann_whitney" ? false : section.post_hoc,
+                });
+              }}
             >
               <MenuItem value="t_test">t-критей Уэлча</MenuItem>
               <MenuItem value="anova">ANOVA</MenuItem>
@@ -901,6 +861,51 @@ function SectionFields({ section, questions, updateSection }) {
             onChange={(event) => updateSection(section.id, { alpha: Number(event.target.value) })}
           />
         </Stack>
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={section.post_hoc && !twoGroupMethod}
+              disabled={twoGroupMethod}
+              onChange={(event) => updateSection(section.id, { post_hoc: event.target.checked })}
+            />
+          }
+          label="Выполнить post-hoc сравнения"
+        />
+
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <FormControl fullWidth disabled={!section.post_hoc || twoGroupMethod}>
+            <InputLabel>Post-hoc метод</InputLabel>
+            <Select
+              label="Post-hoc метод"
+              value={section.post_hoc_method}
+              onChange={(event) => updateSection(section.id, { post_hoc_method: event.target.value })}
+            >
+              <MenuItem value="auto">Автоматически</MenuItem>
+              <MenuItem value="pairwise_t_test">Парный t-критерий</MenuItem>
+              <MenuItem value="pairwise_mann_whitney">U-критерий Манна-Уитни</MenuItem>
+              <MenuItem value="tukey_hsd">Тьюки HSD</MenuItem>
+            </Select>
+          </FormControl>
+
+          <FormControl fullWidth disabled={!section.post_hoc || twoGroupMethod || section.post_hoc_method === "tukey_hsd"}>
+            <InputLabel>Поправка p-value</InputLabel>
+            <Select
+              label="Поправка p-value"
+              value={section.p_adjust}
+              onChange={(event) => updateSection(section.id, { p_adjust: event.target.value })}
+            >
+              <MenuItem value="bonferroni">Бонферрони</MenuItem>
+              <MenuItem value="holm">Холма</MenuItem>
+            </Select>
+          </FormControl>
+        </Stack>
+
+        <Alert severity="info">
+          {twoGroupMethod
+            ? "Post-hoc сравнения обычно не требуются для двух групп."
+            : "Post-hoc сравнения помогают определить, между какими группами есть различия после общего теста."}
+        </Alert>
       </Stack>
     );
   }

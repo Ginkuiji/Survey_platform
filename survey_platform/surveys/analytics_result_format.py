@@ -46,6 +46,11 @@ ANALYSIS_PURPOSES = {
 RECOMMENDATIONS = {
     "correlation": ["Для значимых связей рекомендуется построить диаграмму рассеяния и проверить наличие выбросов."],
     "chi_square": ["Для интерпретации связи учитывайте не только p-value, но и V Крамера, а также распределение по ячейкам таблицы."],
+    "crosstab": [
+        "Для проверки статистической значимости связи можно дополнительно использовать χ²-критерий и Cramér’s V.",
+        "Для интерпретации таблицы важно смотреть не только абсолютные частоты, но и проценты по строкам и по всей выборке.",
+    ],
+    "group_comparison": ["Сопоставляйте p-value с размером эффекта, распределениями внутри групп и результатами post-hoc сравнений."],
     "factor_analysis": ["Для выбора числа факторов учитывайте scree plot, объясненную дисперсию и содержательную интерпретацию факторов."],
     "missing_analysis": ["Для вопросов с высокой долей пропусков проверьте формулировку, обязательность заполнения и условия ветвления."],
 }
@@ -57,14 +62,28 @@ VISUALIZATIONS = {
         ("ranked_scatterplot", "Ранговая диаграмма рассеяния"),
         ("correlation_network", "Сеть сильных корреляций"),
     ],
-    "crosstab": [("stacked_bar", "Составная столбчатая диаграмма")],
-    "chi_square": [("stacked_bar", "Составная столбчатая диаграмма"), ("residual_heatmap", "Тепловая карта стандартизированных остатков")],
+    "crosstab": [
+        {"type": "stacked_bar", "title": "Составная столбчатая диаграмма", "recommended": True, "description": "Показывает распределение категорий столбцовой переменной внутри категорий строковой переменной."},
+        {"type": "crosstab_table", "title": "Таблица сопряженности", "recommended": True},
+        {"type": "mosaic_plot", "title": "Mosaic plot", "recommended": False, "description": "Показывает структуру совместного распределения категорий."},
+    ],
+    "chi_square": [
+        {"type": "stacked_bar", "title": "Составная столбчатая диаграмма", "recommended": True},
+        {"type": "standardized_residual_heatmap", "title": "Тепловая карта стандартизированных остатков", "recommended": True, "description": "Показывает ячейки, которые сильнее всего отличаются от ожидаемых частот."},
+        {"type": "chi_square_contribution_heatmap", "title": "Тепловая карта вкладов в χ²", "recommended": True, "description": "Показывает, какие ячейки дают наибольший вклад в значение χ²."},
+        {"type": "mosaic_plot", "title": "Mosaic plot", "recommended": False},
+    ],
     "correspondence_analysis": [("correspondence_map", "Карта соответствий"), ("inertia_chart", "Объясненная инерция")],
     "regression": [("coefficient_chart", "Коэффициенты регрессии")],
     "logistic_regression": [("odds_ratio_chart", "Отношения шансов"), ("probability_histogram", "Распределение прогнозных вероятностей")],
     "factor_analysis": [("scree_plot", "Каменистая осыпь"), ("loadings_heatmap", "Тепловая карта факторных нагрузок")],
     "cluster_analysis": [("cluster_sizes", "Размеры кластеров"), ("cluster_profiles", "Профили кластеров")],
-    "group_comparison": [("group_means", "Сравнение групп")],
+    "group_comparison": [
+        {"type": "group_boxplot", "title": "Boxplot по группам", "recommended": True, "description": "Показывает медиану, квартильный размах и выбросы в каждой группе."},
+        {"type": "group_mean_ci_plot", "title": "Средние значения с доверительными интервалами", "recommended": True, "description": "Показывает различия средних значений между группами."},
+        {"type": "group_violin_plot", "title": "Violin plot", "recommended": False, "description": "Показывает форму распределения внутри групп."},
+        {"type": "post_hoc_table", "title": "Таблица post-hoc сравнений", "recommended": True},
+    ],
     "time_analysis": [("time_distribution", "Распределение времени прохождения")],
     "reliability_analysis": [("item_statistics", "Статистики пунктов шкалы")],
     "scale_index": [("score_distribution", "Распределение индекса шкалы")],
@@ -245,8 +264,17 @@ def build_main_results(analysis_type, result):
         }
     if analysis_type == "chi_square":
         chi_square = result.get("chi_square") or {}
+        cramers_v = result.get("cramers_v") or {}
+        diagnostics = chi_square.get("expected_diagnostics") or {}
         p_value = chi_square.get("p_value")
-        return {**{key: chi_square.get(key) for key in ("chi2", "p_value", "dof")}, "significant": p_value is not None and p_value < 0.05}
+        return {
+            **{key: chi_square.get(key) for key in ("chi2", "p_value", "dof")},
+            "significant": p_value is not None and p_value < 0.05,
+            "n": cramers_v.get("n"),
+            "table_size": f"{cramers_v.get('rows')}×{cramers_v.get('columns')}" if cramers_v.get("rows") is not None and cramers_v.get("columns") is not None else None,
+            "expected_below_5_rate": diagnostics.get("below_5_rate"),
+            "top_contributing_cells": chi_square.get("top_contributing_cells") or [],
+        }
     if analysis_type == "regression":
         return {key: result.get(key) for key in ("r2", "adjusted_r2", "n", "coefficients")}
     if analysis_type == "logistic_regression":
@@ -256,7 +284,21 @@ def build_main_results(analysis_type, result):
     if analysis_type == "cluster_analysis":
         return {"n_clusters": result.get("n_clusters"), "cluster_sizes": result.get("clusters", []), "silhouette_score": result.get("silhouette_score")}
     if analysis_type == "group_comparison":
-        return {"method": result.get("method"), "n": result.get("n"), "test": result.get("test")}
+        groups = result.get("groups") or []
+        highest = max(groups, key=lambda item: item.get("mean", float("-inf")), default=None)
+        lowest = min(groups, key=lambda item: item.get("mean", float("inf")), default=None)
+        test = result.get("test") or {}
+        comparisons = (result.get("post_hoc") or {}).get("comparisons") or []
+        return {
+            "method": result.get("method"),
+            "n": result.get("n"),
+            "groups_count": result.get("groups_count", result.get("n_groups")),
+            "p_value": test.get("p_value"),
+            "significant": test.get("significant"),
+            "highest_group": {"label": highest.get("label"), "mean": highest.get("mean"), "median": highest.get("median")} if highest else None,
+            "lowest_group": {"label": lowest.get("label"), "mean": lowest.get("mean"), "median": lowest.get("median")} if lowest else None,
+            "significant_post_hoc_pairs_count": sum(bool(item.get("significant")) for item in comparisons),
+        }
     if analysis_type == "missing_analysis":
         return result.get("detailed_missing_analysis") or result.get("summary") or {}
     if analysis_type in ("time_analysis", "scale_index"):
@@ -266,7 +308,20 @@ def build_main_results(analysis_type, result):
     if analysis_type == "correspondence_analysis":
         return {key: result.get(key) for key in ("n", "n_dimensions", "total_inertia")}
     if analysis_type == "crosstab":
-        return {"total": (result.get("crosstab") or {}).get("total")}
+        crosstab = result.get("crosstab") or {}
+        rows = crosstab.get("rows") or []
+        cells = [
+            {"row_label": row.get("value"), "column_label": column.get("value"), **column}
+            for row in rows
+            for column in row.get("columns") or []
+        ]
+        return {
+            "n": crosstab.get("total"),
+            "rows_count": len(rows),
+            "columns_count": len(rows[0].get("columns") or []) if rows else 0,
+            "table_size": f"{len(rows)}×{len(rows[0].get('columns') or []) if rows else 0}",
+            "largest_cell": max(cells, key=lambda item: item.get("count", 0), default=None),
+        }
     return {}
 
 
@@ -279,7 +334,7 @@ def build_effect_size_summary(analysis_type, result):
     if analysis_type == "chi_square":
         value = (result.get("cramers_v") or {}).get("cramers_v")
         if value is not None:
-            return {"name": "V Крамера", "value": value, "interpretation": interpret_cramers_v(value)}
+            return {"name": "Cramér’s V", "value": value, "interpretation": interpret_cramers_v(value), "description": "Показывает силу связи между категориальными переменными."}
     if analysis_type == "regression" and result.get("r2") is not None:
         return {"name": "R²", "value": result["r2"], "interpretation": interpret_r2(result["r2"])}
     if analysis_type == "logistic_regression":
@@ -315,10 +370,60 @@ def _build_base_interpretation(analysis_type, result, effect_size):
         return {"summary": summary, "details": [], "limitations": ["Корреляция не доказывает причинно-следственную связь."]}
     if analysis_type == "chi_square":
         main = build_main_results(analysis_type, result)
-        summary = "Обнаружена статистически значимая связь." if main["significant"] else "Статистически значимая связь не обнаружена."
+        summary = (
+            "Между выбранными категориальными переменными обнаружена статистически значимая связь."
+            if main["significant"]
+            else "Статистически значимая связь между выбранными категориальными переменными не выявлена. Следует учитывать размер выборки и распределение частот по ячейкам."
+        )
         if effect_size.get("interpretation"):
-            summary += f" Сила связи: {effect_size['interpretation']}."
-        return {"summary": summary, "details": [], "limitations": ["Статистическая значимость не означает причинно-следственную зависимость."]}
+            summary += f" Сила связи по Cramér’s V: {effect_size['interpretation']}."
+        if ((result.get("chi_square") or {}).get("expected_diagnostics") or {}).get("assumption_warning"):
+            summary += " Часть ожидаемых частот мала, поэтому результат χ²-критерия следует интерпретировать осторожно."
+        return {
+            "summary": summary,
+            "details": [
+                "χ²-критерий проверяет, отличается ли наблюдаемое распределение от ожидаемого при отсутствии связи между переменными.",
+                "Cramér’s V показывает силу связи между категориальными переменными.",
+                "Стандартизированные остатки помогают понять, какие ячейки таблицы сильнее всего отличаются от ожидаемых значений.",
+            ],
+            "limitations": [
+                "Статистическая связь не доказывает причинно-следственную зависимость.",
+                "При малых ожидаемых частотах χ²-критерий может быть ненадёжен.",
+            ],
+        }
+    if analysis_type == "crosstab":
+        return {
+            "summary": "Таблица сопряженности показывает совместное распределение двух категориальных переменных. Она позволяет увидеть, какие сочетания категорий встречаются чаще или реже.",
+            "details": ["Для содержательной интерпретации сопоставляйте абсолютные частоты и проценты по строкам."],
+            "limitations": ["Сама таблица сопряженности не подтверждает статистическую значимость наблюдаемой ассоциации."],
+        }
+    if analysis_type == "group_comparison":
+        main = build_main_results(analysis_type, result)
+        highest = main.get("highest_group") or {}
+        lowest = main.get("lowest_group") or {}
+        if main.get("significant"):
+            if (main.get("groups_count") or 0) == 2:
+                summary = f"Между двумя группами обнаружены статистически значимые различия. Среднее значение выше в группе «{highest.get('label')}», ниже в группе «{lowest.get('label')}»."
+            else:
+                summary = f"Обнаружены статистически значимые различия между группами. Наибольшее среднее значение наблюдается в группе «{highest.get('label')}», наименьшее — в группе «{lowest.get('label')}»."
+        else:
+            summary = "Статистически значимые различия между группами не выявлены. Следует учитывать размер выборки, разброс внутри групп и размер эффекта."
+        if effect_size.get("interpretation"):
+            summary += f" Размер эффекта: {effect_size['interpretation']}."
+        return {
+            "summary": summary,
+            "details": [
+                "t-test и Mann–Whitney применяются для сравнения двух групп.",
+                "ANOVA и Kruskal–Wallis применяются для сравнения трех и более групп.",
+                "Размер эффекта показывает, насколько выражены различия между группами.",
+                "Post-hoc сравнения помогают определить, между какими именно группами есть различия.",
+            ],
+            "limitations": [
+                "Статистическая значимость не показывает величину различий; для этого используется размер эффекта.",
+                "При малых или сильно несбалансированных группах результаты следует интерпретировать осторожно.",
+                "Post-hoc сравнения увеличивают риск ложноположительных результатов, поэтому требуется поправка p-value.",
+            ],
+        }
     if analysis_type == "regression" and effect_size:
         return {"summary": f"R² модели составляет {effect_size['value']:.3f}: {effect_size['interpretation']}.", "details": [], "limitations": ["Результат зависит от состава предикторов и качества исходных данных."]}
     return {
@@ -548,9 +653,21 @@ def build_common_recommendations(analysis_type, interpretation, warnings):
 def collect_warnings(result):
     warnings = list(result.get("warnings") or [])
     chi_square = result.get("chi_square") or {}
+    warnings.extend(chi_square.get("warnings") or [])
     if "p_value" in chi_square and chi_square.get("p_value") is None:
         warnings.append("Для данного метода не удалось рассчитать p-value.")
     return warnings
+
+
+def build_visualization_specs(analysis_type):
+    specs = []
+    for index, item in enumerate(VISUALIZATIONS.get(analysis_type, [])):
+        if isinstance(item, dict):
+            specs.append({**item, "recommended": item.get("recommended", index == 0)})
+        else:
+            chart_type, title = item
+            specs.append({"type": chart_type, "title": title, "recommended": index == 0})
+    return specs
 
 
 def standardize_analysis_result(analysis_type, result, payload=None, dataset=None):
@@ -582,10 +699,7 @@ def standardize_analysis_result(analysis_type, result, payload=None, dataset=Non
         "main_results": build_main_results(analysis_type, raw_result),
         "effect_size": effect_size,
         "interpretation": interpretation,
-        "visualizations": [
-            {"type": chart_type, "title": title, "recommended": index == 0}
-            for index, (chart_type, title) in enumerate(VISUALIZATIONS.get(analysis_type, []))
-        ],
+        "visualizations": build_visualization_specs(analysis_type),
         "warnings": warnings,
         "recommendations": deduplicate_warnings(recommendations),
         "raw_result": raw_result,

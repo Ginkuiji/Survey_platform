@@ -173,6 +173,80 @@ export function CorrelationScatterPlot({ result }) {
   );
 }
 
+function chiHeatColor(value, mode = "residual") {
+  const numericValue = Number(value);
+  if (Number.isNaN(numericValue)) return "transparent";
+  if (mode === "contribution") return `rgba(242, 153, 74, ${Math.min(0.12 + numericValue * 0.12, 0.72)})`;
+  const intensity = Math.min(Math.abs(numericValue) / 3, 1);
+  return numericValue >= 0
+    ? `rgba(39, 174, 96, ${0.08 + intensity * 0.55})`
+    : `rgba(235, 87, 87, ${0.08 + intensity * 0.55})`;
+}
+
+function ChiSquareHeatmap({ result, matrix, title, mode, helperText }) {
+  const rows = result?.crosstab?.rows || [];
+  const expected = result?.chi_square?.expected || [];
+  if (!rows.length || !matrix?.length) return null;
+
+  return (
+    <Box sx={{ width: "100%", overflowX: "auto" }}>
+      <Typography variant="subtitle1" sx={{ mb: 1 }}>{title}</Typography>
+      {helperText && <Typography color="text.secondary" variant="body2" sx={{ mb: 1 }}>{helperText}</Typography>}
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Категория</TableCell>
+            {(rows[0]?.columns || []).map((column) => <TableCell key={column.value} align="center">{column.value}</TableCell>)}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((row, rowIndex) => (
+            <TableRow key={row.value}>
+              <TableCell>{row.value}</TableCell>
+              {(row.columns || []).map((column, columnIndex) => {
+                const value = matrix[rowIndex]?.[columnIndex];
+                const important = mode === "residual" && Math.abs(Number(value)) >= 2;
+                return (
+                  <TableCell key={column.value} align="center" sx={{ backgroundColor: chiHeatColor(value, mode), fontWeight: important ? 700 : 400 }}>
+                    <Typography>{formatNumber(value)}</Typography>
+                    <Typography color="text.secondary" variant="caption">
+                      наблюд.: {formatNumber(column.count)}; ожид.: {formatNumber(expected[rowIndex]?.[columnIndex])}
+                    </Typography>
+                  </TableCell>
+                );
+              })}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Box>
+  );
+}
+
+export function ChiSquareResidualHeatmap({ result }) {
+  return (
+    <ChiSquareHeatmap
+      result={result}
+      matrix={result?.chi_square?.standardized_residuals}
+      title="Тепловая карта стандартизированных остатков"
+      mode="residual"
+      helperText="Ячейки с |остатком| ≥ 2 выделены сильнее: они заметно отличаются от ожидаемых частот."
+    />
+  );
+}
+
+export function ChiSquareContributionHeatmap({ result }) {
+  return (
+    <ChiSquareHeatmap
+      result={result}
+      matrix={result?.chi_square?.cell_contributions}
+      title="Тепловая карта вкладов в χ²"
+      mode="contribution"
+      helperText="Чем больше значение, тем сильнее ячейка влияет на итоговое значение χ²."
+    />
+  );
+}
+
 export function CrosstabStackedBar({ crosstab }) {
   const rows = crosstab?.rows || [];
   if (!rows.length) return chartEmpty();
@@ -449,6 +523,83 @@ export function GroupComparisonMeanChart({ result }) {
         </BarChart>
       </ResponsiveContainer>
     </ChartBox>
+  );
+}
+
+export function GroupMeanCiChart({ result }) {
+  const groups = result?.groups || [];
+  const hasIntervals = groups.some((group) => group.confidence_interval_95);
+  return (
+    <Stack spacing={1}>
+      <Typography variant="subtitle1">Средние значения по группам</Typography>
+      <GroupComparisonMeanChart result={result} />
+      <Typography color="text.secondary" variant="body2">
+        {hasIntervals
+          ? "Доверительные интервалы доступны в таблице групп."
+          : "Доверительные интервалы недоступны для этого результата."}
+      </Typography>
+      {hasIntervals && (
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Группа</TableCell>
+              <TableCell align="right">Среднее</TableCell>
+              <TableCell align="right">Нижняя граница 95% CI</TableCell>
+              <TableCell align="right">Верхняя граница 95% CI</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {groups.map((group) => (
+              <TableRow key={`mean-ci-${String(group.group ?? group.group_value)}`}>
+                <TableCell>{group.label || group.group_label || group.group}</TableCell>
+                <TableCell align="right">{formatNumber(group.mean)}</TableCell>
+                <TableCell align="right">{formatNumber(group.confidence_interval_95?.low)}</TableCell>
+                <TableCell align="right">{formatNumber(group.confidence_interval_95?.high)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </Stack>
+  );
+}
+
+export function GroupBoxplotApproxChart({ result }) {
+  const groups = result?.groups || [];
+  if (!groups.length) return null;
+  return (
+    <Box sx={{ width: "100%", overflowX: "auto" }}>
+      <Typography variant="subtitle1" sx={{ mb: 1 }}>Boxplot по группам</Typography>
+      <Typography color="text.secondary" variant="body2" sx={{ mb: 1 }}>
+        Boxplot показывает медиану, квартильный размах и возможные выбросы. В интерфейсе отображается табличное представление boxplot-показателей.
+      </Typography>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Группа</TableCell>
+            <TableCell align="right">Мин</TableCell>
+            <TableCell align="right">Q1</TableCell>
+            <TableCell align="right">Медиана</TableCell>
+            <TableCell align="right">Q3</TableCell>
+            <TableCell align="right">Макс</TableCell>
+            <TableCell align="right">Выбросы</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {groups.map((group) => (
+            <TableRow key={String(group.group ?? group.group_value)}>
+              <TableCell>{group.label || group.group_label || group.group}</TableCell>
+              <TableCell align="right">{formatNumber(group.min)}</TableCell>
+              <TableCell align="right">{formatNumber(group.q1)}</TableCell>
+              <TableCell align="right">{formatNumber(group.median)}</TableCell>
+              <TableCell align="right">{formatNumber(group.q3)}</TableCell>
+              <TableCell align="right">{formatNumber(group.max)}</TableCell>
+              <TableCell align="right">{formatNumber(group.outliers_count)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Box>
   );
 }
 

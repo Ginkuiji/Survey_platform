@@ -5,6 +5,7 @@ from unittest.mock import patch
 from .analytics import classify_question_response_state
 from .analytics_result_format import standardize_analysis_result
 from .analytics_descriptive_profile import describe_numeric_values
+from .advanced_analytics_methods import compute_chi_square, compute_cramers_v, compute_group_comparison
 
 
 class StandardizedAnalysisResultTests(SimpleTestCase):
@@ -238,3 +239,50 @@ class StandardizedAnalysisResultTests(SimpleTestCase):
             ),
             "skipped_after_shown",
         )
+
+    def test_chi_square_contains_residuals_contributions_and_diagnostics(self):
+        crosstab = {
+            "rows": [
+                {"raw_value": "A", "value": "A", "columns": [{"raw_value": "X", "value": "X", "count": 9}, {"raw_value": "Y", "value": "Y", "count": 1}]},
+                {"raw_value": "B", "value": "B", "columns": [{"raw_value": "X", "value": "X", "count": 1}, {"raw_value": "Y", "value": "Y", "count": 9}]},
+            ],
+        }
+
+        chi_square = compute_chi_square(crosstab)
+        cramers_v = compute_cramers_v(crosstab, chi_square)
+
+        self.assertEqual(chi_square["observed"], [[9, 1], [1, 9]])
+        self.assertEqual(len(chi_square["standardized_residuals"]), 2)
+        self.assertEqual(len(chi_square["cell_contributions"]), 2)
+        self.assertEqual(chi_square["expected_diagnostics"]["cells_count"], 4)
+        self.assertTrue(chi_square["top_contributing_cells"])
+        self.assertIn("effect_size_description", cramers_v)
+
+    def test_group_comparison_t_test_contains_profiles_differences_and_effect(self):
+        group_var = SimpleNamespace(code="group", label="Группа", value_labels={1: "A", 2: "B"})
+        value_var = SimpleNamespace(code="value", label="Оценка")
+        rows = [
+            *[{"group": 1, "value": value} for value in (4, 5, 5, 6, 7)],
+            *[{"group": 2, "value": value} for value in (1, 2, 2, 3, 4)],
+        ]
+
+        result = compute_group_comparison(rows, group_var, value_var, method="t_test")
+
+        self.assertEqual(result["groups_count"], 2)
+        self.assertEqual(result["effect_size"]["name"], "Cohen’s d")
+        self.assertIsNotNone(result["differences"]["confidence_interval_95"])
+        self.assertIn("q1", result["groups"][0])
+        self.assertIn("variance_diagnostics", result)
+
+    def test_group_comparison_mann_whitney_contains_rank_biserial_effect(self):
+        group_var = SimpleNamespace(code="group", label="Группа", value_labels={})
+        value_var = SimpleNamespace(code="value", label="Оценка")
+        rows = [
+            *[{"group": 1, "value": value} for value in (1, 2, 2, 3)],
+            *[{"group": 2, "value": value} for value in (4, 5, 5, 6)],
+        ]
+
+        result = compute_group_comparison(rows, group_var, value_var, method="mann_whitney")
+
+        self.assertEqual(result["effect_size"]["name"], "Rank-biserial correlation")
+        self.assertIn("median_difference", result["differences"])

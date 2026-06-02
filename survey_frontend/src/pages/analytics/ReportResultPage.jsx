@@ -26,13 +26,16 @@ import {
 import {
   ClusterSizeChart,
   ClusterTopFeaturesChart,
+  ChiSquareContributionHeatmap,
+  ChiSquareResidualHeatmap,
   CorrespondenceInertiaChart,
   CorrelationHeatmap,
   CorrelationScatterPlot,
   CrosstabStackedBar,
   FactorLoadingsHeatmap,
   FactorScreeChart,
-  GroupComparisonMeanChart,
+  GroupBoxplotApproxChart,
+  GroupMeanCiChart,
   LogisticOddsRatioChart,
   LogisticProbabilityHistogram,
   MissingAnalysisChart,
@@ -413,6 +416,8 @@ function renderExpectedTable(expected) {
 function renderChiSquareSection(section) {
   const chiSquare = section.result?.chi_square;
   const cramersV = section.result?.cramers_v;
+  const diagnostics = chiSquare?.expected_diagnostics;
+  const topCells = chiSquare?.top_contributing_cells || [];
 
   return (
     <Stack spacing={3}>
@@ -433,6 +438,57 @@ function renderChiSquareSection(section) {
       <Typography color="text.secondary" variant="body2">
         V Крамера показывает силу связи между категориальными переменными от 0 до 1.
       </Typography>
+
+      {diagnostics && (
+        <Box>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>Проверка ожидаемых частот</Typography>
+          {diagnostics.assumption_warning && (
+            <Alert severity="warning" sx={{ mb: 1 }}>
+              Часть ожидаемых частот мала, поэтому результат χ²-критерия следует интерпретировать осторожно.
+            </Alert>
+          )}
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <Chip label={`Всего ячеек: ${formatNumber(diagnostics.cells_count)}`} />
+            <Chip label={`Expected < 5: ${formatNumber(diagnostics.below_5_count)}`} />
+            <Chip label={`Доля expected < 5: ${formatNumber(diagnostics.below_5_rate)}%`} />
+            <Chip label={`Expected < 1: ${formatNumber(diagnostics.below_1_count)}`} />
+            <Chip label={`Минимальная expected: ${formatNumber(diagnostics.min_expected)}`} />
+          </Stack>
+        </Box>
+      )}
+
+      <ChiSquareResidualHeatmap result={section.result} />
+      <ChiSquareContributionHeatmap result={section.result} />
+
+      {!!topCells.length && (
+        <Box sx={{ width: "100%", overflowX: "auto" }}>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>Ячейки с наибольшим вкладом в χ²</Typography>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Ячейка</TableCell>
+                <TableCell align="right">Наблюдаемая</TableCell>
+                <TableCell align="right">Ожидаемая</TableCell>
+                <TableCell align="right">Остаток</TableCell>
+                <TableCell align="right">Вклад в χ²</TableCell>
+                <TableCell>Интерпретация</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {topCells.map((cell) => (
+                <TableRow key={`${cell.row_index}-${cell.column_index}`}>
+                  <TableCell>{cell.row_label} × {cell.column_label}</TableCell>
+                  <TableCell align="right">{formatNumber(cell.observed)}</TableCell>
+                  <TableCell align="right">{formatNumber(cell.expected)}</TableCell>
+                  <TableCell align="right">{formatNumber(cell.standardized_residual)}</TableCell>
+                  <TableCell align="right">{formatNumber(cell.contribution)}</TableCell>
+                  <TableCell>{cell.interpretation}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
 
       <Box>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
@@ -1114,6 +1170,8 @@ function renderPostHocComparisons(postHoc) {
               <TableCell align="right">Скорректированное p</TableCell>
               <TableCell>Статистически значимо</TableCell>
               <TableCell align="right">Разность</TableCell>
+              <TableCell align="right">Разность средних</TableCell>
+              <TableCell align="right">Разность медиан</TableCell>
               <TableCell align="right">Размер эффекта</TableCell>
               <TableCell>Интерпретация</TableCell>
             </TableRow>
@@ -1131,6 +1189,8 @@ function renderPostHocComparisons(postHoc) {
                   <TableCell align="right">{formatNumber(comparison.p_adjusted)}</TableCell>
                   <TableCell>{comparison.significant ? "да" : "нет"}</TableCell>
                   <TableCell align="right">{formatNumber(comparison.difference)}</TableCell>
+                  <TableCell align="right">{formatNumber(comparison.mean_difference)}</TableCell>
+                  <TableCell align="right">{formatNumber(comparison.median_difference)}</TableCell>
                   <TableCell align="right">{formatNumber(effectSize.value)}</TableCell>
                   <TableCell>{effectSize.interpretation || "—"}</TableCell>
                 </TableRow>
@@ -1138,6 +1198,9 @@ function renderPostHocComparisons(postHoc) {
             })}
           </TableBody>
         </Table>
+      )}
+      {!comparisons.length && (
+        <Alert severity="info">Post-hoc сравнения не выявили доступных парных различий.</Alert>
       )}
     </Box>
   );
@@ -1147,6 +1210,8 @@ function renderGroupComparisonSection(section) {
   const result = section.result || {};
   const test = result.test || {};
   const effectSize = result.effect_size;
+  const differences = result.differences || {};
+  const varianceDiagnostics = result.variance_diagnostics || {};
 
   return (
     <Stack spacing={3}>
@@ -1172,11 +1237,31 @@ function renderGroupComparisonSection(section) {
         </Stack>
       )}
 
+      {!!Object.keys(differences).length && (
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Chip label={`Разность средних: ${formatNumber(differences.mean_difference)}`} />
+          <Chip label={`Разность медиан: ${formatNumber(differences.median_difference)}`} />
+          <Chip label={`Среднее выше: ${differences.higher_mean_group || "—"}`} />
+          <Chip label={`Среднее ниже: ${differences.lower_mean_group || "—"}`} />
+          {differences.confidence_interval_95 && (
+            <Chip label={`95% CI разности: ${formatNumber(differences.confidence_interval_95.low)} … ${formatNumber(differences.confidence_interval_95.high)}`} />
+          )}
+        </Stack>
+      )}
+
+      {varianceDiagnostics.variance_ratio !== null && varianceDiagnostics.variance_ratio !== undefined && (
+        <Alert severity={varianceDiagnostics.variances_comparable ? "info" : "warning"}>
+          Отношение максимальной дисперсии группы к минимальной: {formatNumber(varianceDiagnostics.variance_ratio)}.
+          {!varianceDiagnostics.variances_comparable && " Дисперсии заметно различаются; параметрический тест следует интерпретировать осторожно."}
+        </Alert>
+      )}
+
       {(result.warnings || []).map((warning) => (
         <Alert key={warning} severity="warning">{warning}</Alert>
       ))}
 
-      <GroupComparisonMeanChart result={result} />
+      <GroupMeanCiChart result={result} />
+      <GroupBoxplotApproxChart result={result} />
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
@@ -1192,6 +1277,12 @@ function renderGroupComparisonSection(section) {
               <TableCell align="right">Стандартное отклонение</TableCell>
               <TableCell align="right">Мин</TableCell>
               <TableCell align="right">Макс</TableCell>
+              <TableCell align="right">Q1</TableCell>
+              <TableCell align="right">Q3</TableCell>
+              <TableCell align="right">IQR</TableCell>
+              <TableCell align="right">Пропуски</TableCell>
+              <TableCell align="right">Выбросы</TableCell>
+              <TableCell align="right">95% CI среднего</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -1204,6 +1295,12 @@ function renderGroupComparisonSection(section) {
                 <TableCell align="right">{formatNumber(group.std)}</TableCell>
                 <TableCell align="right">{formatNumber(group.min)}</TableCell>
                 <TableCell align="right">{formatNumber(group.max)}</TableCell>
+                <TableCell align="right">{formatNumber(group.q1)}</TableCell>
+                <TableCell align="right">{formatNumber(group.q3)}</TableCell>
+                <TableCell align="right">{formatNumber(group.iqr)}</TableCell>
+                <TableCell align="right">{formatNumber(group.missing_count)}</TableCell>
+                <TableCell align="right">{formatNumber(group.outliers_count)}</TableCell>
+                <TableCell align="right">{formatNumber(group.confidence_interval_95?.low)} … {formatNumber(group.confidence_interval_95?.high)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
