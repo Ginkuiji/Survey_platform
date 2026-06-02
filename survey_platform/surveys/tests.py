@@ -5,7 +5,7 @@ from unittest.mock import patch
 from .analytics import classify_question_response_state
 from .analytics_result_format import standardize_analysis_result
 from .analytics_descriptive_profile import describe_numeric_values
-from .advanced_analytics_methods import compute_chi_square, compute_cramers_v, compute_group_comparison
+from .advanced_analytics_methods import compute_chi_square, compute_cramers_v, compute_group_comparison, compute_linear_regression, compute_logistic_regression
 
 
 class StandardizedAnalysisResultTests(SimpleTestCase):
@@ -286,3 +286,31 @@ class StandardizedAnalysisResultTests(SimpleTestCase):
 
         self.assertEqual(result["effect_size"]["name"], "Rank-biserial correlation")
         self.assertIn("median_difference", result["differences"])
+
+    def test_linear_regression_contains_coefficients_and_residual_diagnostics(self):
+        rows = [{"response_id": index, "target": 2 * index + 1, "x": index} for index in range(1, 21)]
+
+        result = compute_linear_regression(rows, "target", ["x"])
+
+        self.assertIn("rmse", result)
+        self.assertIn("mae", result)
+        self.assertIn("standard_error", result["coefficients"][1])
+        self.assertIn("confidence_interval_95", result["coefficients"][1])
+        self.assertIn("observed_vs_predicted", result["diagnostics"])
+        self.assertIn("multicollinearity", result["diagnostics"])
+
+    def test_logistic_regression_contains_roc_calibration_and_coefficient_statistics(self):
+        rows = [
+            {"response_id": index, "target": 1 if index >= 10 else 0, "x": index}
+            for index in range(20)
+        ]
+
+        result = compute_logistic_regression(rows, "target", ["x"], regularization="none")
+
+        self.assertIn("roc_auc", result["metrics"])
+        self.assertIn("specificity", result["metrics"])
+        self.assertIn("balanced_accuracy", result["metrics"])
+        self.assertTrue(result["roc_curve"])
+        self.assertTrue(result["threshold_analysis"])
+        self.assertTrue(result["diagnostics"]["calibration"]["bins"])
+        self.assertIn("odds_ratio_confidence_interval_95", result["coefficients"][1])

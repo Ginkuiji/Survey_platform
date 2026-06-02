@@ -292,6 +292,51 @@ def build_regression_chart(report, config, result, chart_type):
     dataset = build_analysis_dataset(report.survey_id, [target_spec, *feature_specs])
     target_variable = _find_variable_by_question(dataset, target_spec["question_id"])
     feature_variables = [variable for variable in dataset.variables if variable.code != target_variable.code]
+    diagnostics = result.get("diagnostics") or {}
+    points = diagnostics.get("observed_vs_predicted") or []
+    if chart_type in {"observed_vs_predicted", "residual_plot"}:
+        if not points:
+            raise ValueError("Для построения графика недостаточно данных в сохраненном результате.")
+        fig, ax = plt.subplots(figsize=(7, 5))
+        if chart_type == "residual_plot":
+            ax.scatter([item.get("predicted") for item in points], [item.get("residual") for item in points], alpha=0.72)
+            ax.axhline(0, color="#666", linestyle="--")
+            ax.set_xlabel("Предсказанное значение")
+            ax.set_ylabel("Остаток")
+            ax.set_title("График остатков")
+        else:
+            ax.scatter([item.get("observed") for item in points], [item.get("predicted") for item in points], alpha=0.72)
+            ax.set_xlabel("Наблюдаемое значение")
+            ax.set_ylabel("Предсказанное значение")
+            ax.set_title("Наблюдаемые и предсказанные значения")
+        ax.grid(alpha=0.25)
+        return figure_to_png(fig)
+    if chart_type == "residual_histogram":
+        residuals = diagnostics.get("residuals") or []
+        if not residuals:
+            raise ValueError("Для построения графика недостаточно данных в сохраненном результате.")
+        fig, ax = plt.subplots(figsize=(7, 5))
+        ax.hist(residuals, bins=12, color="#1f77b4", edgecolor="white")
+        ax.set_title("Распределение остатков")
+        return figure_to_png(fig)
+    if chart_type in {"coefficients", "regression_coefficients", "coefficient_ci", "coefficient_confidence_intervals"}:
+        coefficients = [item for item in result.get("coefficients", []) if item.get("name") != "intercept"]
+        if not coefficients:
+            raise ValueError("Для построения графика недостаточно данных в сохраненном результате.")
+        labels = [_truncate(result.get("variables_by_code", {}).get(item.get("name"), {}).get("label") or item.get("name")) for item in coefficients]
+        values = [_numeric(item.get("value")) or 0 for item in coefficients]
+        if chart_type in {"coefficient_ci", "coefficient_confidence_intervals"}:
+            if any(not item.get("confidence_interval_95") for item in coefficients):
+                raise ValueError("Для построения графика недостаточно данных в сохраненном результате.")
+            errors = [[value - item["confidence_interval_95"]["low"] for value, item in zip(values, coefficients)], [item["confidence_interval_95"]["high"] - value for value, item in zip(values, coefficients)]]
+            fig, ax = plt.subplots(figsize=(max(7, len(labels) * 0.7), 5))
+            ax.bar(range(len(values)), values, color="#1f77b4")
+            ax.errorbar(range(len(values)), values, yerr=errors, fmt="none", ecolor="#222", capsize=4)
+            ax.set_xticks(range(len(labels)))
+            ax.set_xticklabels(labels, rotation=30, ha="right")
+            ax.set_title("Доверительные интервалы коэффициентов")
+            return figure_to_png(fig)
+        return _bar_chart(labels, values, "Коэффициенты регрессии", "Коэффициент")
 
     if len(feature_variables) == 1:
         feature = feature_variables[0]
@@ -426,7 +471,7 @@ def build_cluster_analysis_chart(report, config, result, chart_type):
 
 
 def build_logistic_regression_chart(report, config, result, chart_type):
-    if chart_type == "probabilities":
+    if chart_type in {"probabilities", "probability_histogram"}:
         probabilities = [_numeric(item.get("probability")) for item in result.get("predictions", [])]
         probabilities = [value for value in probabilities if value is not None]
         if not probabilities:
@@ -436,6 +481,30 @@ def build_logistic_regression_chart(report, config, result, chart_type):
         ax.set_title("Predicted probability distribution")
         ax.set_xlabel("Probability")
         ax.set_ylabel("Count")
+        return figure_to_png(fig)
+    if chart_type in {"odds_ratio", "odds_ratio_forest", "odds_ratio_forest_plot"}:
+        coefficients = [item for item in result.get("coefficients", []) if item.get("name") != "intercept" and _numeric(item.get("odds_ratio")) is not None]
+        if not coefficients:
+            raise ValueError("Для построения графика недостаточно данных в сохраненном результате.")
+        labels = [_truncate(result.get("variables_by_code", {}).get(item.get("name"), {}).get("label") or item.get("name")) for item in coefficients]
+        values = [_numeric(item.get("odds_ratio")) for item in coefficients]
+        fig, ax = plt.subplots(figsize=(max(7, len(labels) * 0.7), 5))
+        ax.bar(range(len(values)), values, color="#1f77b4")
+        ax.axhline(1, color="#666", linestyle="--")
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels, rotation=30, ha="right")
+        ax.set_title("Odds ratio по факторам")
+        return figure_to_png(fig)
+    if chart_type == "roc_curve":
+        points = result.get("roc_curve") or []
+        if not points:
+            raise ValueError("Для построения графика недостаточно данных в сохраненном результате.")
+        fig, ax = plt.subplots(figsize=(7, 5))
+        ax.plot([item.get("fpr") for item in points], [item.get("tpr") for item in points])
+        ax.plot([0, 1], [0, 1], linestyle="--", color="#666")
+        ax.set_title("ROC-кривая")
+        ax.set_xlabel("False positive rate")
+        ax.set_ylabel("True positive rate")
         return figure_to_png(fig)
 
     matrix = result.get("confusion_matrix") or {}

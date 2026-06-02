@@ -303,6 +303,41 @@ export function RegressionCoefficientChart({ result }) {
   );
 }
 
+export function CoefficientConfidenceIntervalChart({ result }) {
+  const coefficients = (result?.coefficients || []).filter((item) => item.name !== "intercept" && item.confidence_interval_95);
+  if (!coefficients.length) return chartEmpty("Доверительные интервалы коэффициентов недоступны.");
+  return (
+    <Box sx={{ overflowX: "auto" }}>
+      <Typography variant="subtitle1" sx={{ mb: 1 }}>Доверительные интервалы коэффициентов</Typography>
+      <Table size="small">
+        <TableHead><TableRow><TableCell>Переменная</TableCell><TableCell align="right">Коэффициент</TableCell><TableCell align="right">Нижняя граница</TableCell><TableCell align="right">Верхняя граница</TableCell></TableRow></TableHead>
+        <TableBody>{coefficients.map((item) => <TableRow key={item.name}><TableCell>{getVariableLabel(result, item.name)}</TableCell><TableCell align="right">{formatNumber(item.value)}</TableCell><TableCell align="right">{formatNumber(item.confidence_interval_95.low)}</TableCell><TableCell align="right">{formatNumber(item.confidence_interval_95.high)}</TableCell></TableRow>)}</TableBody>
+      </Table>
+    </Box>
+  );
+}
+
+export function ObservedVsPredictedChart({ result }) {
+  const data = result?.diagnostics?.observed_vs_predicted || [];
+  if (!data.length) return chartEmpty("Диагностические точки наблюдаемых и предсказанных значений недоступны.");
+  return <ChartBox><ResponsiveContainer><ScatterChart><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" dataKey="observed" name="Наблюдаемое" /><YAxis type="number" dataKey="predicted" name="Предсказанное" /><Tooltip /><Scatter data={data} fill="#2f80ed" /></ScatterChart></ResponsiveContainer></ChartBox>;
+}
+
+export function ResidualPlot({ result }) {
+  const data = result?.diagnostics?.observed_vs_predicted || [];
+  if (!data.length) return chartEmpty("Данные остатков недоступны.");
+  return <ChartBox><ResponsiveContainer><ScatterChart><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" dataKey="predicted" name="Предсказанное" /><YAxis type="number" dataKey="residual" name="Остаток" /><Tooltip /><ReferenceLine y={0} stroke="#666" /><Scatter data={data} fill="#eb5757" /></ScatterChart></ResponsiveContainer></ChartBox>;
+}
+
+export function ResidualHistogram({ result }) {
+  const values = (result?.diagnostics?.residuals || []).map(Number).filter((value) => !Number.isNaN(value));
+  if (!values.length) return chartEmpty("Остатки недоступны для гистограммы.");
+  const min = Math.min(...values); const max = Math.max(...values); const width = (max - min) / 10 || 1;
+  const data = Array.from({ length: 10 }, (_, index) => ({ interval: `${(min + index * width).toFixed(2)}…${(min + (index + 1) * width).toFixed(2)}`, count: 0 }));
+  values.forEach((value) => { data[Math.min(9, Math.floor((value - min) / width))].count += 1; });
+  return <ChartBox><ResponsiveContainer><BarChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="interval" /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="count" name="Количество" fill="#56ccf2" /></BarChart></ResponsiveContainer></ChartBox>;
+}
+
 export function LogisticOddsRatioChart({ result }) {
   const coefficients = (result?.coefficients || [])
     .filter((coefficient) => coefficient.name !== "intercept")
@@ -334,6 +369,42 @@ export function LogisticOddsRatioChart({ result }) {
       </Typography>
     </Stack>
   );
+}
+
+export function OddsRatioForestPlot({ result }) {
+  const coefficients = (result?.coefficients || []).filter((item) => item.name !== "intercept");
+  if (!coefficients.length) return chartEmpty("Odds ratio недоступны.");
+  return (
+    <Box sx={{ overflowX: "auto" }}>
+      <Typography variant="subtitle1" sx={{ mb: 1 }}>Odds ratio по факторам</Typography>
+      <LogisticOddsRatioChart result={result} />
+      <Table size="small"><TableHead><TableRow><TableCell>Фактор</TableCell><TableCell align="right">Odds ratio</TableCell><TableCell align="right">Нижняя граница 95% CI</TableCell><TableCell align="right">Верхняя граница 95% CI</TableCell></TableRow></TableHead><TableBody>{coefficients.map((item) => <TableRow key={item.name}><TableCell>{getVariableLabel(result, item.name)}</TableCell><TableCell align="right">{formatNumber(item.odds_ratio)}</TableCell><TableCell align="right">{formatNumber(item.odds_ratio_confidence_interval_95?.low)}</TableCell><TableCell align="right">{formatNumber(item.odds_ratio_confidence_interval_95?.high)}</TableCell></TableRow>)}</TableBody></Table>
+    </Box>
+  );
+}
+
+export function ConfusionMatrixHeatmap({ result }) {
+  const matrix = result?.confusion_matrix;
+  if (!matrix) return chartEmpty("Матрица ошибок недоступна.");
+  return <Table size="small"><TableHead><TableRow><TableCell /><TableCell align="right">Прогноз: 0</TableCell><TableCell align="right">Прогноз: 1</TableCell></TableRow></TableHead><TableBody><TableRow><TableCell>Факт: 0</TableCell><TableCell align="right" sx={{ backgroundColor: heatColor(matrix.tn, "absolute") }}>{formatNumber(matrix.tn)}</TableCell><TableCell align="right">{formatNumber(matrix.fp)}</TableCell></TableRow><TableRow><TableCell>Факт: 1</TableCell><TableCell align="right">{formatNumber(matrix.fn)}</TableCell><TableCell align="right" sx={{ backgroundColor: heatColor(matrix.tp, "absolute") }}>{formatNumber(matrix.tp)}</TableCell></TableRow></TableBody></Table>;
+}
+
+export function RocCurveChart({ result }) {
+  const data = result?.roc_curve || [];
+  if (!data.length) return chartEmpty("ROC-кривая недоступна.");
+  return <ChartBox><ResponsiveContainer><LineChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="fpr" type="number" domain={[0, 1]} /><YAxis dataKey="tpr" type="number" domain={[0, 1]} /><Tooltip /><Line dataKey="tpr" name="ROC" stroke="#2f80ed" dot={false} /><ReferenceLine segment={[{ x: 0, y: 0 }, { x: 1, y: 1 }]} stroke="#666" strokeDasharray="4 4" /></LineChart></ResponsiveContainer></ChartBox>;
+}
+
+export function CalibrationPlot({ result }) {
+  const data = result?.diagnostics?.calibration?.bins || [];
+  if (!data.length) return chartEmpty("Данные калибровки недоступны.");
+  return <ChartBox><ResponsiveContainer><LineChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="mean_predicted_probability" type="number" domain={[0, 1]} /><YAxis dataKey="observed_event_rate" type="number" domain={[0, 1]} /><Tooltip /><Line dataKey="observed_event_rate" name="Наблюдаемая частота" stroke="#27ae60" /><ReferenceLine segment={[{ x: 0, y: 0 }, { x: 1, y: 1 }]} stroke="#666" strokeDasharray="4 4" /></LineChart></ResponsiveContainer></ChartBox>;
+}
+
+export function ThresholdMetricsChart({ result }) {
+  const data = result?.threshold_analysis || [];
+  if (!data.length) return chartEmpty("Анализ порогов недоступен.");
+  return <ChartBox><ResponsiveContainer><LineChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="threshold" /><YAxis domain={[0, 1]} /><Tooltip /><Legend /><Line dataKey="accuracy" stroke="#2f80ed" /><Line dataKey="precision" stroke="#27ae60" /><Line dataKey="recall" stroke="#eb5757" /><Line dataKey="f1" stroke="#9b51e0" /></LineChart></ResponsiveContainer></ChartBox>;
 }
 
 export function LogisticProbabilityHistogram({ result }) {

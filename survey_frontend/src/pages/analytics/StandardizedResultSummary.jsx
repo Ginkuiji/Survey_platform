@@ -218,6 +218,8 @@ export default function StandardizedResultSummary({ result }) {
       <Box>
         <Typography variant="h6">{result.title}</Typography>
         {result.purpose && <Alert severity="info" sx={{ mt: 1 }}>{result.purpose}</Alert>}
+        {result.analysis_type === "regression" && <Alert severity="info" sx={{ mt: 1 }}>Для регрессии важно учитывать качество модели, мультиколлинеарность и диагностику остатков, а не только значимость коэффициентов.</Alert>}
+        {result.analysis_type === "logistic_regression" && <Alert severity="info" sx={{ mt: 1 }}>Odds ratio показывает изменение шансов события, а ROC-AUC и матрица ошибок помогают оценить качество классификации.</Alert>}
       </Box>
 
       {result.interpretation?.summary && (

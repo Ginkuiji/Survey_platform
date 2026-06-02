@@ -28,6 +28,8 @@ import {
   ClusterTopFeaturesChart,
   ChiSquareContributionHeatmap,
   ChiSquareResidualHeatmap,
+  CoefficientConfidenceIntervalChart,
+  ConfusionMatrixHeatmap,
   CorrespondenceInertiaChart,
   CorrelationHeatmap,
   CorrelationScatterPlot,
@@ -36,8 +38,14 @@ import {
   FactorScreeChart,
   GroupBoxplotApproxChart,
   GroupMeanCiChart,
-  LogisticOddsRatioChart,
   LogisticProbabilityHistogram,
+  ObservedVsPredictedChart,
+  OddsRatioForestPlot,
+  CalibrationPlot,
+  ResidualHistogram,
+  ResidualPlot,
+  RocCurveChart,
+  ThresholdMetricsChart,
   MissingAnalysisChart,
   MissingStackedStatusChart,
   RegressionCoefficientChart,
@@ -614,6 +622,9 @@ function renderCorrespondenceAnalysisSection(section) {
 function renderRegressionSection(section) {
   const result = section.result;
   const featureLabels = (result?.features || []).map(code => getVariableLabel(result, code));
+  const diagnostics = result?.diagnostics || {};
+  const residualSummary = diagnostics.residual_summary || {};
+  const vif = diagnostics.multicollinearity?.vif || [];
 
   return (
     <Stack spacing={2}>
@@ -623,6 +634,8 @@ function renderRegressionSection(section) {
         <Chip label={`Предикторов: ${featureLabels.length}`} />
         <Chip label={`R²: ${formatNumber(result?.r2)}`} />
         <Chip label={`Скорректированный R²: ${formatNumber(result?.adjusted_r2)}`} />
+        <Chip label={`RMSE: ${formatNumber(result?.rmse)}`} />
+        <Chip label={`MAE: ${formatNumber(result?.mae)}`} />
       </Stack>
 
       <Typography color="text.secondary" variant="body2">
@@ -630,6 +643,13 @@ function renderRegressionSection(section) {
       </Typography>
 
       <RegressionCoefficientChart result={result} />
+      <CoefficientConfidenceIntervalChart result={result} />
+      <Typography variant="subtitle1">Наблюдаемые и предсказанные значения</Typography>
+      <ObservedVsPredictedChart result={result} />
+      <Typography variant="subtitle1">График остатков</Typography>
+      <ResidualPlot result={result} />
+      <Typography variant="subtitle1">Распределение остатков</Typography>
+      <ResidualHistogram result={result} />
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Table size="small">
@@ -637,6 +657,12 @@ function renderRegressionSection(section) {
             <TableRow>
               <TableCell>Коэффициент</TableCell>
               <TableCell align="right">Значение</TableCell>
+              <TableCell align="right">Std. error</TableCell>
+              <TableCell align="right">t</TableCell>
+              <TableCell align="right">p-value</TableCell>
+              <TableCell align="right">95% CI</TableCell>
+              <TableCell align="right">Стандартизированный коэффициент</TableCell>
+              <TableCell>Интерпретация</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -644,11 +670,21 @@ function renderRegressionSection(section) {
               <TableRow key={coefficient.name}>
                 <TableCell>{getVariableLabel(result, coefficient.name)}</TableCell>
                 <TableCell align="right">{formatNumber(coefficient.value)}</TableCell>
+                <TableCell align="right">{formatNumber(coefficient.standard_error)}</TableCell>
+                <TableCell align="right">{formatNumber(coefficient.t_statistic)}</TableCell>
+                <TableCell align="right">{formatNumber(coefficient.p_value)}</TableCell>
+                <TableCell align="right">{formatNumber(coefficient.confidence_interval_95?.low)} … {formatNumber(coefficient.confidence_interval_95?.high)}</TableCell>
+                <TableCell align="right">{formatNumber(coefficient.standardized_coefficient)}</TableCell>
+                <TableCell>{coefficient.interpretation || "—"}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </Box>
+
+      {!!vif.length && <Box sx={{ overflowX: "auto" }}><Typography variant="subtitle1">VIF</Typography><Table size="small"><TableHead><TableRow><TableCell>Переменная</TableCell><TableCell align="right">VIF</TableCell><TableCell>Интерпретация</TableCell></TableRow></TableHead><TableBody>{vif.map((item) => <TableRow key={item.name}><TableCell>{getVariableLabel(result, item.name)}</TableCell><TableCell align="right">{formatNumber(item.vif)}</TableCell><TableCell>{item.interpretation}</TableCell></TableRow>)}</TableBody></Table></Box>}
+
+      {!!Object.keys(residualSummary).length && <Box><Typography variant="subtitle1">Диагностика остатков</Typography><Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap><Chip label={`Среднее: ${formatNumber(residualSummary.mean)}`} /><Chip label={`Std: ${formatNumber(residualSummary.std)}`} /><Chip label={`Мин: ${formatNumber(residualSummary.min)}`} /><Chip label={`Медиана: ${formatNumber(residualSummary.median)}`} /><Chip label={`Макс: ${formatNumber(residualSummary.max)}`} /><Chip label={`Выбросы: ${formatNumber(residualSummary.outliers_count)}`} /><Chip label={`Normality p-value: ${formatNumber(diagnostics.normality?.p_value)}`} /><Chip label={`Гетероскедастичность: ${formatNumber(diagnostics.heteroscedasticity?.correlation)}`} /></Stack></Box>}
     </Stack>
   );
 }
@@ -658,6 +694,8 @@ function renderLogisticRegressionSection(section) {
   const metrics = result.metrics || {};
   const confusionMatrix = result.confusion_matrix || {};
   const featureLabels = (result.features || []).map(code => getVariableLabel(result, code));
+  const classBalance = result.class_balance || {};
+  const calibrationBins = result.diagnostics?.calibration?.bins || [];
 
   return (
     <Stack spacing={3}>
@@ -671,7 +709,10 @@ function renderLogisticRegressionSection(section) {
         <Chip label={`Доля верных классификаций: ${formatNumber(metrics.accuracy)}`} />
         <Chip label={`Точность: ${formatNumber(metrics.precision)}`} />
         <Chip label={`Полнота: ${formatNumber(metrics.recall)}`} />
+        <Chip label={`Специфичность: ${formatNumber(metrics.specificity)}`} />
         <Chip label={`F1: ${formatNumber(metrics.f1)}`} />
+        <Chip label={`ROC-AUC: ${formatNumber(metrics.roc_auc)}`} />
+        <Chip label={`Balanced accuracy: ${formatNumber(metrics.balanced_accuracy)}`} />
         <Chip label={`McFadden R²: ${formatNumber(metrics.mcfadden_r2)}`} />
       </Stack>
 
@@ -683,14 +724,21 @@ function renderLogisticRegressionSection(section) {
         <Alert key={warning} severity="warning">{warning}</Alert>
       ))}
 
-      <LogisticOddsRatioChart result={result} />
+      <OddsRatioForestPlot result={result} />
       <LogisticProbabilityHistogram result={result} />
+      <Typography variant="subtitle1">ROC-кривая</Typography>
+      <RocCurveChart result={result} />
+      <Typography variant="subtitle1">Калибровка вероятностей</Typography>
+      <CalibrationPlot result={result} />
+      <Typography variant="subtitle1">Метрики при разных порогах</Typography>
+      <ThresholdMetricsChart result={result} />
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
           Матрица ошибок
         </Typography>
-        <Table size="small">
+        <ConfusionMatrixHeatmap result={result} />
+        <Table size="small" sx={{ display: "none" }}>
           <TableHead>
             <TableRow>
               <TableCell />
@@ -723,6 +771,10 @@ function renderLogisticRegressionSection(section) {
               <TableCell>Переменная</TableCell>
               <TableCell align="right">Коэффициент</TableCell>
               <TableCell align="right">Отношение шансов</TableCell>
+              <TableCell align="right">Std. error</TableCell>
+              <TableCell align="right">z</TableCell>
+              <TableCell align="right">p-value</TableCell>
+              <TableCell align="right">95% CI OR</TableCell>
               <TableCell>Интерпретация</TableCell>
             </TableRow>
           </TableHead>
@@ -732,12 +784,22 @@ function renderLogisticRegressionSection(section) {
                 <TableCell>{getVariableLabel(result, coefficient.name)}</TableCell>
                 <TableCell align="right">{formatNumber(coefficient.coefficient)}</TableCell>
                 <TableCell align="right">{formatNumber(coefficient.odds_ratio)}</TableCell>
+                <TableCell align="right">{formatNumber(coefficient.standard_error)}</TableCell>
+                <TableCell align="right">{formatNumber(coefficient.z_statistic)}</TableCell>
+                <TableCell align="right">{formatNumber(coefficient.p_value)}</TableCell>
+                <TableCell align="right">{formatNumber(coefficient.odds_ratio_confidence_interval_95?.low)} … {formatNumber(coefficient.odds_ratio_confidence_interval_95?.high)}</TableCell>
                 <TableCell>{coefficient.interpretation || "—"}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </Box>
+
+      <Box><Typography variant="subtitle1">Баланс классов</Typography><Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap><Chip label={`Положительный класс: ${formatNumber(classBalance.positive_rate)}%`} /><Chip label={`Отрицательный класс: ${formatNumber(classBalance.negative_rate)}%`} /><Chip label={`Миноритарный класс: ${formatNumber(classBalance.minority_class_rate)}%`} /><Chip label={`Дисбаланс: ${classBalance.is_imbalanced ? "да" : "нет"}`} /></Stack></Box>
+
+      {!!calibrationBins.length && <Box sx={{ overflowX: "auto" }}><Typography variant="subtitle1">Калибровка по интервалам</Typography><Table size="small"><TableHead><TableRow><TableCell>Интервал</TableCell><TableCell align="right">n</TableCell><TableCell align="right">Средняя вероятность</TableCell><TableCell align="right">Частота события</TableCell></TableRow></TableHead><TableBody>{calibrationBins.map((item) => <TableRow key={`${item.low}-${item.high}`}><TableCell>{formatNumber(item.low)} … {formatNumber(item.high)}</TableCell><TableCell align="right">{formatNumber(item.n)}</TableCell><TableCell align="right">{formatNumber(item.mean_predicted_probability)}</TableCell><TableCell align="right">{formatNumber(item.observed_event_rate)}</TableCell></TableRow>)}</TableBody></Table></Box>}
+
+      {!!(result.threshold_analysis || []).length && <Box sx={{ overflowX: "auto" }}><Typography variant="subtitle1">Анализ порогов</Typography><Table size="small"><TableHead><TableRow><TableCell align="right">Порог</TableCell><TableCell align="right">Accuracy</TableCell><TableCell align="right">Precision</TableCell><TableCell align="right">Recall</TableCell><TableCell align="right">F1</TableCell></TableRow></TableHead><TableBody>{result.threshold_analysis.map((item) => <TableRow key={item.threshold}><TableCell align="right">{formatNumber(item.threshold)}</TableCell><TableCell align="right">{formatNumber(item.accuracy)}</TableCell><TableCell align="right">{formatNumber(item.precision)}</TableCell><TableCell align="right">{formatNumber(item.recall)}</TableCell><TableCell align="right">{formatNumber(item.f1)}</TableCell></TableRow>)}</TableBody></Table></Box>}
 
       <Typography color="text.secondary" variant="body2">
         Прогнозы сохранены в результате API; в этом представлении показана только сводка модели.

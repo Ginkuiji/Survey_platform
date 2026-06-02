@@ -51,6 +51,18 @@ RECOMMENDATIONS = {
         "Для интерпретации таблицы важно смотреть не только абсолютные частоты, но и проценты по строкам и по всей выборке.",
     ],
     "group_comparison": ["Сопоставляйте p-value с размером эффекта, распределениями внутри групп и результатами post-hoc сравнений."],
+    "regression": [
+        "Сравнивайте R² и adjusted R², особенно если в модели несколько предикторов.",
+        "Проверяйте VIF: высокая мультиколлинеарность делает коэффициенты нестабильными.",
+        "Используйте график остатков для проверки применимости линейной модели.",
+        "Не интерпретируйте регрессионные коэффициенты как причинное влияние без соответствующего дизайна исследования.",
+    ],
+    "logistic_regression": [
+        "Интерпретируйте коэффициенты логистической регрессии через odds ratio.",
+        "При дисбалансе классов accuracy следует оценивать вместе с precision, recall, F1 и balanced accuracy.",
+        "ROC-AUC помогает оценить способность модели различать классы независимо от одного выбранного порога.",
+        "Проверьте events per variable: при малом числе событий коэффициенты могут быть нестабильными.",
+    ],
     "factor_analysis": ["Для выбора числа факторов учитывайте scree plot, объясненную дисперсию и содержательную интерпретацию факторов."],
     "missing_analysis": ["Для вопросов с высокой долей пропусков проверьте формулировку, обязательность заполнения и условия ветвления."],
 }
@@ -74,8 +86,22 @@ VISUALIZATIONS = {
         {"type": "mosaic_plot", "title": "Mosaic plot", "recommended": False},
     ],
     "correspondence_analysis": [("correspondence_map", "Карта соответствий"), ("inertia_chart", "Объясненная инерция")],
-    "regression": [("coefficient_chart", "Коэффициенты регрессии")],
-    "logistic_regression": [("odds_ratio_chart", "Отношения шансов"), ("probability_histogram", "Распределение прогнозных вероятностей")],
+    "regression": [
+        {"type": "regression_coefficients", "title": "Коэффициенты регрессии", "recommended": True, "description": "Показывает направление и величину связи предикторов с целевой переменной."},
+        {"type": "coefficient_confidence_intervals", "title": "Доверительные интервалы коэффициентов", "recommended": True, "description": "Показывает неопределенность оценки коэффициентов."},
+        {"type": "observed_vs_predicted", "title": "Наблюдаемые и предсказанные значения", "recommended": True, "description": "Показывает, насколько хорошо модель воспроизводит фактические значения."},
+        {"type": "residual_plot", "title": "График остатков", "recommended": True, "description": "Помогает оценить нелинейность, выбросы и неоднородность дисперсии."},
+        {"type": "residual_histogram", "title": "Распределение остатков", "recommended": False},
+        {"type": "partial_effect", "title": "Частичный эффект фактора", "recommended": False},
+    ],
+    "logistic_regression": [
+        {"type": "odds_ratio_forest_plot", "title": "Odds ratio по факторам", "recommended": True},
+        {"type": "confusion_matrix_heatmap", "title": "Матрица ошибок", "recommended": True},
+        {"type": "roc_curve", "title": "ROC-кривая", "recommended": True},
+        {"type": "probability_histogram", "title": "Распределение предсказанных вероятностей", "recommended": True},
+        {"type": "calibration_plot", "title": "Калибровка вероятностей", "recommended": False},
+        {"type": "threshold_metrics", "title": "Метрики при разных порогах", "recommended": False},
+    ],
     "factor_analysis": [("scree_plot", "Каменистая осыпь"), ("loadings_heatmap", "Тепловая карта факторных нагрузок")],
     "cluster_analysis": [("cluster_sizes", "Размеры кластеров"), ("cluster_profiles", "Профили кластеров")],
     "group_comparison": [
@@ -276,9 +302,24 @@ def build_main_results(analysis_type, result):
             "top_contributing_cells": chi_square.get("top_contributing_cells") or [],
         }
     if analysis_type == "regression":
-        return {key: result.get(key) for key in ("r2", "adjusted_r2", "n", "coefficients")}
+        coefficients = result.get("coefficients") or []
+        return {
+            **{key: result.get(key) for key in ("model", "target", "n", "r2", "adjusted_r2", "rmse", "mae")},
+            "features_count": result.get("feature_count", len(result.get("features") or [])),
+            "significant_coefficients_count": sum(item.get("name") != "intercept" and item.get("p_value") is not None and item["p_value"] < 0.05 for item in coefficients),
+            "top_coefficients": sorted([item for item in coefficients if item.get("name") != "intercept"], key=lambda item: abs(item.get("standardized_coefficient") or item.get("value") or 0), reverse=True)[:5],
+        }
     if analysis_type == "logistic_regression":
-        return {"n": result.get("n"), "metrics": result.get("metrics"), "top_coefficients": result.get("coefficients", [])[:5]}
+        metrics = result.get("metrics") or {}
+        return {
+            "model": result.get("model"),
+            "target": result.get("target"),
+            "n": result.get("n"),
+            "features_count": result.get("feature_count", len(result.get("features") or [])),
+            "base_rate": result.get("base_rate"),
+            **{key: metrics.get(key) for key in ("accuracy", "precision", "recall", "specificity", "f1", "balanced_accuracy", "roc_auc", "mcfadden_r2")},
+            "top_coefficients": result.get("coefficients", [])[:5],
+        }
     if analysis_type == "factor_analysis":
         return {key: result.get(key) for key in ("n", "n_factors", "cumulative_explained_variance")}
     if analysis_type == "cluster_analysis":
@@ -336,9 +377,13 @@ def build_effect_size_summary(analysis_type, result):
         if value is not None:
             return {"name": "Cramér’s V", "value": value, "interpretation": interpret_cramers_v(value), "description": "Показывает силу связи между категориальными переменными."}
     if analysis_type == "regression" and result.get("r2") is not None:
-        return {"name": "R²", "value": result["r2"], "interpretation": interpret_r2(result["r2"])}
+        return {"name": "R²", "value": result["r2"], "interpretation": interpret_r2(result["r2"]), "description": "Показывает долю вариации целевой переменной, объясняемую моделью."}
     if analysis_type == "logistic_regression":
-        return {"name": "Отношения шансов", "values": result.get("coefficients", [])}
+        value = (result.get("metrics") or {}).get("roc_auc")
+        if value is not None:
+            interpretation = "низкое качество различения классов" if value < 0.7 else "приемлемое качество различения классов" if value < 0.8 else "хорошее качество различения классов"
+            return {"name": "ROC-AUC", "value": value, "interpretation": interpretation, "description": "Показывает способность модели различать классы независимо от одного выбранного порога."}
+        return {"name": "Odds ratio", "values": result.get("coefficients", [])}
     if analysis_type == "group_comparison":
         return result.get("effect_size") or {}
     if analysis_type == "cluster_analysis" and result.get("silhouette_score") is not None:
@@ -425,7 +470,17 @@ def _build_base_interpretation(analysis_type, result, effect_size):
             ],
         }
     if analysis_type == "regression" and effect_size:
-        return {"summary": f"R² модели составляет {effect_size['value']:.3f}: {effect_size['interpretation']}.", "details": [], "limitations": ["Результат зависит от состава предикторов и качества исходных данных."]}
+        return {
+            "summary": f"Модель объясняет {effect_size['value'] * 100:.2f}% вариации целевой переменной. Коэффициенты показывают среднее изменение целевой переменной при изменении предиктора на одну единицу при прочих равных условиях. Регрессионная модель показывает статистическую связь, но сама по себе не доказывает причинное влияние.",
+            "details": ["R² показывает долю вариации целевой переменной, объясняемую моделью.", "Adjusted R² учитывает количество предикторов.", "Стандартизированные коэффициенты помогают сравнивать относительную силу предикторов.", "VIF используется для проверки мультиколлинеарности.", "Диагностика остатков помогает оценить применимость линейной модели."],
+            "limitations": ["Линейная регрессия предполагает приблизительно линейную связь.", "Регрессионная модель не доказывает причинно-следственную зависимость.", "При мультиколлинеарности коэффициенты могут быть нестабильными.", "При неоднородности дисперсии остатков стандартные ошибки и p-value могут быть ненадежными."],
+        }
+    if analysis_type == "logistic_regression":
+        return {
+            "summary": "Логистическая регрессия оценивает связь факторов с вероятностью наступления бинарного события. Odds ratio больше 1 соответствует увеличению шансов события, меньше 1 — уменьшению шансов при прочих равных условиях. Модель не доказывает причинно-следственную зависимость.",
+            "details": ["Odds ratio показывает изменение шансов события при увеличении предиктора на одну единицу.", "ROC-AUC оценивает способность модели различать классы.", "Матрица ошибок показывает правильные и ошибочные классификации.", "Калибровка сопоставляет предсказанные вероятности с наблюдаемой частотой события."],
+            "limitations": ["Логистическая регрессия показывает статистическую связь, но не доказывает причинность.", "При дисбалансе классов accuracy может быть завышенной.", "При малом числе событий на предиктор коэффициенты могут быть нестабильными."],
+        }
     return {
         "summary": ANALYSIS_PURPOSES.get(analysis_type, "Результат метода подготовлен для дальнейшей интерпретации."),
         "details": [],

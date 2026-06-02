@@ -444,11 +444,33 @@ def build_applicability_warnings(analysis_type, result, payload=None, dataset=No
             warnings.append("Для регрессии мало наблюдений относительно числа предикторов.")
         if checks.get("high_vif_variables"):
             warnings.append("Обнаружена мультиколлинеарность между предикторами; коэффициенты модели могут быть нестабильными.")
+        diagnostics = result.get("diagnostics") or {}
+        multicollinearity = diagnostics.get("multicollinearity") or {}
+        if multicollinearity.get("high_vif_variables"):
+            warnings.append("Обнаружена возможная мультиколлинеарность между предикторами; коэффициенты модели могут быть нестабильными.")
+        if analysis_type == "regression":
+            residual_summary = diagnostics.get("residual_summary") or {}
+            if (result.get("r2") is not None and result["r2"] < 0.1):
+                warnings.append("R² низкий; модель объясняет небольшую долю вариации целевой переменной.")
+            if (residual_summary.get("outliers_rate") or 0) >= 5:
+                warnings.append("Обнаружены выбросы по остаткам; отдельные наблюдения могут заметно влиять на модель.")
+            if (diagnostics.get("heteroscedasticity") or {}).get("warning"):
+                warnings.append("Обнаружены признаки неоднородности дисперсии остатков; стандартные ошибки и p-value могут быть нестабильными.")
+            if (diagnostics.get("normality") or {}).get("likely_normal") is False:
+                warnings.append("Остатки модели могут отличаться от нормального распределения; p-value коэффициентов следует интерпретировать осторожно.")
+            influential = diagnostics.get("influential_points") or {}
+            if (influential.get("high_leverage_count") or 0) or (influential.get("large_cooks_distance_count") or 0):
+                warnings.append("Обнаружены потенциально влияющие наблюдения; рекомендуется проверить выбросы и качество ответов.")
         if analysis_type == "logistic_regression":
             if checks.get("minority_class_rate") is not None and checks["minority_class_rate"] < 10:
                 warnings.append("Целевая переменная сильно несбалансирована; метрики accuracy могут быть малоинформативны.")
             if checks.get("events_per_variable") is not None and checks["events_per_variable"] < 10:
                 warnings.append("Для логистической регрессии мало событий на один предиктор; коэффициенты могут быть нестабильными.")
+            metrics = result.get("metrics") or {}
+            if metrics.get("roc_auc") is not None and metrics["roc_auc"] < 0.7:
+                warnings.append("ROC-AUC низкий; модель слабо различает классы.")
+            if (metrics.get("precision") is not None and metrics["precision"] < 0.5) or (metrics.get("recall") is not None and metrics["recall"] < 0.5):
+                warnings.append("Precision или recall низкие; модель может плохо находить один из классов.")
     elif analysis_type == "factor_analysis":
         if (checks.get("n_variables") or 0) < 3:
             warnings.append("Для факторного анализа выбрано менее трех переменных.")
