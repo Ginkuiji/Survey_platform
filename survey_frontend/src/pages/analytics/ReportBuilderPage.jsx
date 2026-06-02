@@ -238,6 +238,10 @@ function createSection(type) {
       include_active: false,
       bucket_size_seconds: 60,
       max_buckets: 30,
+      include_quality_flags: true,
+      include_page_dropout: true,
+      include_flow: true,
+      too_fast_threshold_seconds: "",
     };
   }
 
@@ -894,7 +898,6 @@ function SectionFields({ section, questions, updateSection }) {
             onChange={(event) => updateSection(section.id, { alpha: Number(event.target.value) })}
           />
         </Stack>
-
         <FormControlLabel
           control={
             <Checkbox
@@ -995,7 +998,28 @@ function SectionFields({ section, questions, updateSection }) {
             value={section.max_buckets}
             onChange={(event) => updateSection(section.id, { max_buckets: Number(event.target.value) })}
           />
+          <TextField
+            fullWidth
+            type="number"
+            label="Порог быстрого прохождения, сек."
+            helperText="Оставьте пустым для автоматического порога"
+            inputProps={{ min: 5, max: 600 }}
+            value={section.too_fast_threshold_seconds ?? ""}
+            onChange={(event) => updateSection(section.id, { too_fast_threshold_seconds: event.target.value })}
+          />
         </Stack>
+        <FormControlLabel
+          control={<Checkbox checked={section.include_quality_flags ?? true} onChange={(event) => updateSection(section.id, { include_quality_flags: event.target.checked })} />}
+          label="Добавлять флаги качества прохождений"
+        />
+        <FormControlLabel
+          control={<Checkbox checked={section.include_page_dropout ?? true} onChange={(event) => updateSection(section.id, { include_page_dropout: event.target.checked })} />}
+          label="Рассчитывать dropout и retention по страницам"
+        />
+        <FormControlLabel
+          control={<Checkbox checked={section.include_flow ?? true} onChange={(event) => updateSection(section.id, { include_flow: event.target.checked })} />}
+          label="Добавлять агрегированный поток прохождения"
+        />
       </Stack>
     );
   }
@@ -1008,6 +1032,7 @@ function SectionFields({ section, questions, updateSection }) {
         <Alert severity="info">
           Альфа Кронбаха используется для оценки внутренней согласованности набора вопросов, измеряющих одну шкалу. Выберите минимум два вопроса.
         </Alert>
+        <Alert severity="info">Cronbach’s alpha не доказывает одномерность шкалы. Для проверки структуры можно дополнительно использовать факторный анализ.</Alert>
 
         <FormControl fullWidth>
           <InputLabel>Переменные шкалы</InputLabel>
@@ -1050,6 +1075,7 @@ function SectionFields({ section, questions, updateSection }) {
         <Alert severity="info">
           Индекс шкалы объединяет несколько вопросов в один показатель. Обратное кодирование используется для обратных пунктов.
         </Alert>
+        <Alert severity="info">Reverse coding применяется к пунктам с обратной формулировкой. После него большее значение должно соответствовать большему уровню индекса. Нормировка 0–100 упрощает интерпретацию результата.</Alert>
 
         <TextField
           fullWidth

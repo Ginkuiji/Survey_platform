@@ -351,7 +351,8 @@ def run_time_analysis(payload: dict) -> dict:
     responses = Response.objects.filter(
         survey_id=survey_id,
         status="active",
-    ).order_by("id")
+    ).prefetch_related("answers").order_by("id")
+    pages = get_survey_pages(survey_id)
     response_items = [
         {
             "response_id": response.id,
@@ -363,6 +364,7 @@ def run_time_analysis(payload: dict) -> dict:
             "complete_reason": response.complete_reason,
             "is_complete": response.is_complete,
             "status": response.status,
+            "answered_question_ids": [answer.question_id for answer in response.answers.all()],
         }
         for response in responses
     ]
@@ -381,6 +383,14 @@ def run_time_analysis(payload: dict) -> dict:
         group_variable=group_variable,
         bucket_size_seconds=payload.get("bucket_size_seconds", 60),
         max_buckets=payload.get("max_buckets", 30),
+        page_items=[
+            {"page_id": page.get("id"), "page_title": f"Страница {index + 1}", "page_order": index + 1, "question_ids": [question.id for question in page.get("questions") or []]}
+            for index, page in enumerate(pages)
+        ],
+        include_quality_flags=payload.get("include_quality_flags", True),
+        include_page_dropout=payload.get("include_page_dropout", True),
+        include_flow=payload.get("include_flow", True),
+        too_fast_threshold_seconds=payload.get("too_fast_threshold_seconds"),
     )
     full_result = {
         "survey_id": survey_id,

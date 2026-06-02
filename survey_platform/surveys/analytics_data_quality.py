@@ -542,11 +542,16 @@ def build_applicability_warnings(analysis_type, result, payload=None, dataset=No
             warnings.append("Cronbach’s alpha ниже 0.7, внутренняя согласованность шкалы может быть недостаточной.")
         if any((item.get("item_total_correlation") or 0) < 0.3 for item in result.get("item_statistics") or []):
             warnings.append("Некоторые пункты слабо связаны с общей шкалой.")
+        if any(item.get("improves_alpha") for item in result.get("alpha_if_item_deleted") or []):
+            warnings.append("Удаление одного или нескольких пунктов может повысить Cronbach’s alpha; эти пункты стоит проверить содержательно.")
     elif analysis_type == "scale_index":
         if (result.get("n_items") or 0) < 3:
             warnings.append("Индекс шкалы построен по малому числу пунктов; интерпретация может быть ограниченной.")
         if any(item.get("reverse") and (item.get("min_value") is None or item.get("max_value") is None) for item in result.get("items") or []):
             warnings.append("Для обратного кодирования необходимо корректно задать минимальное и максимальное значения шкалы.")
+        reliability = result.get("reliability") or {}
+        if reliability.get("alpha") is not None and reliability["alpha"] < 0.7:
+            warnings.append("Надежность пунктов индекса ограничена; интерпретируйте composite score с осторожностью.")
     elif analysis_type == "missing_analysis":
         if result.get("low_visibility_questions"):
             warnings.append("В опросе используется ветвление, поэтому вопросы, не показанные респонденту, не следует трактовать как обычные пропуски.")

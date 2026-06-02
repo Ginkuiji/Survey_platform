@@ -468,6 +468,10 @@ export function buildSectionPayload(surveyId, section, questionsById) {
       include_active: section.include_active ?? false,
       bucket_size_seconds: section.bucket_size_seconds || 60,
       max_buckets: section.max_buckets || 30,
+      include_quality_flags: section.include_quality_flags ?? true,
+      include_page_dropout: section.include_page_dropout ?? true,
+      include_flow: section.include_flow ?? true,
+      too_fast_threshold_seconds: section.too_fast_threshold_seconds ? Number(section.too_fast_threshold_seconds) : null,
     };
   }
 

@@ -636,12 +636,79 @@ def build_crosstab_chart(report, config, result, chart_type):
 
 
 def build_time_analysis_chart(report, config, result, chart_type):
-    rows = result.get("completion_time_distribution") or []
+    if chart_type in {"flow", "flow_diagram"}:
+        raise ValueError("Flow diagram доступен в интерактивном отчете как агрегированная таблица.")
+    if chart_type in {"funnel", "page_funnel"}:
+        rows = (result.get("page_funnel") or {}).get("steps") or []
+        if not rows:
+            raise ValueError("Воронка прохождения недоступна.")
+        return _bar_chart([item.get("label") for item in rows], [_numeric(item.get("count")) or 0 for item in rows], "Воронка прохождения", "Респонденты")
+    if chart_type == "retention_curve":
+        rows = (result.get("retention_curve") or {}).get("points") or []
+        if not rows:
+            raise ValueError("Retention curve недоступна.")
+        fig, ax = plt.subplots(figsize=(9, 5))
+        ax.plot([item.get("label") for item in rows], [_numeric(item.get("retention_rate")) or 0 for item in rows], marker="o")
+        ax.set_title("Retention curve")
+        ax.set_ylabel("Retention, %")
+        ax.tick_params(axis="x", rotation=30)
+        ax.grid(axis="y", alpha=0.25)
+        return figure_to_png(fig)
+    if chart_type == "dropout_by_page":
+        rows = (result.get("dropout") or {}).get("by_page") or []
+        if not rows:
+            raise ValueError("Dropout по страницам недоступен.")
+        return _bar_chart([item.get("page_title") for item in rows], [_numeric(item.get("dropout_rate")) or 0 for item in rows], "Dropout по страницам", "Dropout, %")
+    if chart_type == "screenout_reasons":
+        rows = (result.get("screenout") or {}).get("reasons") or result.get("screenout_reasons") or []
+        if not rows:
+            raise ValueError("Причины screenout недоступны.")
+        return _bar_chart([item.get("reason") for item in rows], [_numeric(item.get("count")) or 0 for item in rows], "Причины screenout", "Респонденты")
+    if chart_type == "boxplot":
+        summary = result.get("duration_summary") or {}
+        if summary.get("median_seconds") is None:
+            raise ValueError("Boxplot-показатели времени недоступны.")
+        stats = [{
+            "label": "Время прохождения",
+            "med": summary.get("median_seconds"),
+            "q1": summary.get("p25_seconds"),
+            "q3": summary.get("p75_seconds"),
+            "whislo": summary.get("min_seconds"),
+            "whishi": summary.get("max_seconds"),
+            "fliers": [],
+        }]
+        fig, ax = plt.subplots(figsize=(7, 5))
+        ax.bxp(stats, showfliers=False)
+        ax.set_title("Boxplot времени прохождения")
+        ax.set_ylabel("Секунды")
+        ax.grid(axis="y", alpha=0.25)
+        return figure_to_png(fig)
+    if chart_type == "group_boxplot":
+        rows = (result.get("group_comparison") or {}).get("groups") or []
+        if not rows:
+            raise ValueError("Сравнение времени по группам недоступно.")
+        stats = [{
+            "label": item.get("group_label"),
+            "med": item.get("median_seconds"),
+            "q1": item.get("p25_seconds"),
+            "q3": item.get("p75_seconds"),
+            "whislo": item.get("p25_seconds"),
+            "whishi": item.get("p75_seconds"),
+            "fliers": [],
+        } for item in rows if item.get("median_seconds") is not None]
+        if not stats:
+            raise ValueError("Сравнение времени по группам недоступно.")
+        fig, ax = plt.subplots(figsize=(max(7, len(stats) * 1.2), 5))
+        ax.bxp(stats, showfliers=False)
+        ax.set_title("Сравнение времени по группам")
+        ax.set_ylabel("Секунды")
+        ax.tick_params(axis="x", rotation=30)
+        ax.grid(axis="y", alpha=0.25)
+        return figure_to_png(fig)
+    rows = result.get("duration_distribution") or result.get("completion_time_distribution") or []
     if not rows:
-        raise ValueError("Completion time distribution is not available.")
-    labels = [item.get("label") for item in rows]
-    values = [_numeric(item.get("count")) or 0 for item in rows]
-    return _bar_chart(labels, values, "Completion time distribution", "Responses")
+        raise ValueError("Распределение времени прохождения недоступно.")
+    return _bar_chart([item.get("label") for item in rows], [_numeric(item.get("count")) or 0 for item in rows], "Распределение времени прохождения", "Респонденты")
 
 
 def build_missing_analysis_chart(report, config, result, chart_type):
@@ -658,16 +725,54 @@ def build_missing_analysis_chart(report, config, result, chart_type):
 
 
 def build_reliability_chart(report, config, result, chart_type):
+    if chart_type in {"inter_item_correlation_heatmap", "items_correlation_heatmap"}:
+        correlations = result.get("inter_item_correlations") or {}
+        matrix = correlations.get("matrix") or result.get("inter_item_correlation_matrix") or []
+        variables = correlations.get("variables") or result.get("variables") or []
+        if not matrix or not variables:
+            raise ValueError("Для построения графика недостаточно данных в сохраненном результате.")
+        labels = [item.get("label") or item.get("code") for item in variables]
+        return _matrix_heatmap(matrix, labels, labels, "Межпунктовые корреляции", vmin=-1, vmax=1, cmap="coolwarm")
     items = result.get("item_statistics") or []
     if not items:
         raise ValueError("Reliability item statistics are not available.")
     labels = [_truncate(item.get("label") or item.get("code"), 24) for item in items[:20]]
+    if chart_type == "alpha_if_deleted":
+        values = [_numeric(item.get("alpha_if_deleted")) or 0 for item in items[:20]]
+        return _bar_chart(labels, values, "Alpha if item deleted", "Alpha")
     values = [_numeric(item.get("item_total_correlation")) or 0 for item in items[:20]]
     return _bar_chart(labels, values, "Item-total correlation", "Correlation")
 
 
 def build_scale_index_chart(report, config, result, chart_type):
-    rows = result.get("score_distribution") or []
+    if chart_type in {"items_correlation_heatmap", "scale_items_correlation_heatmap"}:
+        return build_reliability_chart(report, config, result.get("reliability") or {}, "inter_item_correlation_heatmap")
+    if chart_type == "boxplot":
+        scores = [_numeric(item.get("normalized_score")) if item.get("normalized_score") is not None else _numeric(item.get("score")) for item in result.get("scores") or []]
+        scores = [value for value in scores if value is not None]
+        if not scores:
+            raise ValueError("Для построения графика недостаточно данных в сохраненном результате.")
+        fig, ax = plt.subplots(figsize=(7, 5))
+        ax.boxplot(scores, patch_artist=True)
+        ax.set_title("Boxplot индекса шкалы")
+        ax.set_ylabel("Значение индекса")
+        ax.grid(axis="y", alpha=0.25)
+        return figure_to_png(fig)
+    if chart_type == "groups":
+        rows = (result.get("groups") or {}).get("items") or []
+        if not rows:
+            raise ValueError("Для построения графика недостаточно данных в сохраненном результате.")
+        return _bar_chart([item.get("label") for item in rows], [_numeric(item.get("count")) or 0 for item in rows], "Группы уровней индекса", "Респонденты")
+    if chart_type == "score_card":
+        summary = result.get("normalized_score_summary") or result.get("score_summary") or {}
+        if summary.get("mean") is None:
+            raise ValueError("Для построения графика недостаточно данных в сохраненном результате.")
+        fig, ax = plt.subplots(figsize=(7, 3))
+        ax.axis("off")
+        ax.text(0.5, 0.6, f"{summary.get('mean'):.2f}", ha="center", va="center", fontsize=32)
+        ax.text(0.5, 0.35, "Среднее значение индекса", ha="center", va="center")
+        return figure_to_png(fig)
+    rows = result.get("distribution") or result.get("score_distribution") or []
     if not rows:
         raise ValueError("Scale index score distribution is not available.")
     labels = [item.get("label") for item in rows]

@@ -776,6 +776,27 @@ export function ReliabilityItemChart({ result }) {
   );
 }
 
+export function ItemTotalCorrelationChart({ result }) {
+  const items = result?.item_total_correlations || result?.reliability?.item_total_correlations || result?.item_statistics || [];
+  const data = items.map((item) => ({ label: truncateLabel(item.label || item.code, 20), value: Number(item.item_total_correlation) })).filter((item) => !Number.isNaN(item.value));
+  if (!data.length) return chartEmpty("Item-total correlation недоступна.");
+  return <ChartBox minWidth={Math.max(640, data.length * 90)}><ResponsiveContainer><BarChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" tick={axisTick} interval={0} /><YAxis /><Tooltip /><ReferenceLine y={0.3} stroke="#eb5757" strokeDasharray="4 4" /><Bar dataKey="value" name="Item-total correlation" fill="#2f80ed" /></BarChart></ResponsiveContainer></ChartBox>;
+}
+
+export function AlphaIfDeletedTable({ result }) {
+  const items = result?.alpha_if_item_deleted || result?.reliability?.alpha_if_item_deleted || [];
+  if (!items.length) return chartEmpty("Alpha if item deleted недоступна.");
+  return <Box sx={{ overflowX: "auto" }}><Typography variant="subtitle1">Alpha if item deleted</Typography><Table size="small"><TableHead><TableRow><TableCell>Пункт</TableCell><TableCell align="right">Alpha</TableCell><TableCell align="right">Delta</TableCell><TableCell>Повышает alpha</TableCell><TableCell>Интерпретация</TableCell></TableRow></TableHead><TableBody>{items.map((item) => <TableRow key={item.code} sx={{ backgroundColor: item.improves_alpha ? "rgba(242, 201, 76, 0.2)" : undefined }}><TableCell>{item.label || item.code}</TableCell><TableCell align="right">{formatNumber(item.alpha_if_deleted)}</TableCell><TableCell align="right">{formatNumber(item.delta_alpha)}</TableCell><TableCell>{item.improves_alpha ? "да" : "нет"}</TableCell><TableCell>{item.interpretation || "—"}</TableCell></TableRow>)}</TableBody></Table></Box>;
+}
+
+export function InterItemCorrelationHeatmap({ result }) {
+  const correlations = result?.inter_item_correlations || result?.reliability?.inter_item_correlations || {};
+  const variables = correlations.variables || result?.variables || [];
+  const matrix = correlations.matrix || result?.inter_item_correlation_matrix || [];
+  if (!variables.length || !matrix.length) return chartEmpty("Матрица межпунктовых корреляций недоступна.");
+  return <Box sx={{ overflowX: "auto" }}><Typography variant="subtitle1">Межпунктовые корреляции</Typography><Table size="small"><TableHead><TableRow><TableCell>Пункт</TableCell>{variables.map((item) => <TableCell key={item.code} align="right">{truncateLabel(item.label || item.code, 18)}</TableCell>)}</TableRow></TableHead><TableBody>{variables.map((variable, rowIndex) => <TableRow key={variable.code}><TableCell>{variable.label || variable.code}</TableCell>{variables.map((column, columnIndex) => <TableCell key={column.code} align="right" sx={{ backgroundColor: heatColor(matrix[rowIndex]?.[columnIndex]) }}>{formatNumber(matrix[rowIndex]?.[columnIndex])}</TableCell>)}</TableRow>)}</TableBody></Table></Box>;
+}
+
 export function TimeDistributionChart({ data, title }) {
   const rows = (data || []).map((item) => ({
     label: item.label,
@@ -803,7 +824,7 @@ export function TimeDistributionChart({ data, title }) {
 }
 
 export function TimeScreenoutReasonsChart({ result }) {
-  const { data, note } = topItems((result?.screenout_reasons || []).map((reason) => ({
+  const { data, note } = topItems((result?.screenout?.reasons || result?.screenout_reasons || []).map((reason) => ({
     label: reason.reason,
     shortLabel: truncateLabel(reason.reason),
     count: Number(reason.count),
@@ -823,6 +844,48 @@ export function TimeScreenoutReasonsChart({ result }) {
       </ResponsiveContainer>
     </ChartBox>
   );
+}
+
+export function TimeFunnelChart({ result }) {
+  const data = result?.page_funnel?.steps || [];
+  if (!data.length) return chartEmpty("Воронка прохождения недоступна.");
+  return <ChartBox><ResponsiveContainer><BarChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" tick={axisTick} interval={0} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="count" name="Респонденты" fill="#2f80ed" /></BarChart></ResponsiveContainer></ChartBox>;
+}
+
+export function RetentionCurveChart({ result }) {
+  const data = result?.retention_curve?.points || [];
+  if (!data.length) return chartEmpty("Retention curve недоступна.");
+  return <ChartBox><ResponsiveContainer><LineChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" tick={axisTick} interval={0} /><YAxis domain={[0, 100]} /><Tooltip /><Line dataKey="retention_rate" name="Retention, %" stroke="#27ae60" strokeWidth={2} /></LineChart></ResponsiveContainer></ChartBox>;
+}
+
+export function CompletionTimeBoxplotApprox({ result }) {
+  const summary = result?.duration_summary || {};
+  if (!summary.count) return chartEmpty("Boxplot-показатели времени недоступны.");
+  return <Typography color="text.secondary" variant="body2">Boxplot-показатели: min {formatNumber(summary.min_seconds)}, P25 {formatNumber(summary.p25_seconds)}, медиана {formatNumber(summary.median_seconds)}, P75 {formatNumber(summary.p75_seconds)}, max {formatNumber(summary.max_seconds)}, IQR {formatNumber(summary.iqr_seconds)}.</Typography>;
+}
+
+export function DropoutByPageChart({ result }) {
+  const data = result?.dropout?.by_page || [];
+  if (!data.length) return chartEmpty("Dropout по страницам недоступен.");
+  return <ChartBox><ResponsiveContainer><BarChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="page_title" /><YAxis /><Tooltip /><Bar dataKey="dropout_rate" name="Dropout, %" fill="#eb5757" /></BarChart></ResponsiveContainer></ChartBox>;
+}
+
+export function GroupTimeBoxplotApprox({ result }) {
+  const rows = result?.group_comparison?.groups || [];
+  if (!rows.length) return chartEmpty("Сравнение времени по группам недоступно.");
+  return <Box sx={{ overflowX: "auto" }}><Typography variant="subtitle1">Время по группам</Typography><Table size="small"><TableHead><TableRow><TableCell>Группа</TableCell><TableCell align="right">n</TableCell><TableCell align="right">Медиана</TableCell><TableCell align="right">Среднее</TableCell><TableCell align="right">P25</TableCell><TableCell align="right">P75</TableCell></TableRow></TableHead><TableBody>{rows.map((item) => <TableRow key={String(item.group_value)}><TableCell>{item.group_label}</TableCell><TableCell align="right">{formatNumber(item.n)}</TableCell><TableCell align="right">{formatNumber(item.median_seconds)}</TableCell><TableCell align="right">{formatNumber(item.average_seconds)}</TableCell><TableCell align="right">{formatNumber(item.p25_seconds)}</TableCell><TableCell align="right">{formatNumber(item.p75_seconds)}</TableCell></TableRow>)}</TableBody></Table></Box>;
+}
+
+export function ResponseQualityFlagsTable({ result }) {
+  const rows = (result?.response_flags || []).slice(0, 50);
+  if (!rows.length) return chartEmpty("Флаги качества ответов не обнаружены.");
+  return <Box sx={{ overflowX: "auto" }}><Typography variant="subtitle1">Прохождения, требующие проверки</Typography><Table size="small"><TableHead><TableRow><TableCell>ID</TableCell><TableCell align="right">Длительность</TableCell><TableCell>Флаги</TableCell><TableCell>Причина</TableCell></TableRow></TableHead><TableBody>{rows.map((item) => <TableRow key={item.response_id}><TableCell>{item.response_id}</TableCell><TableCell align="right">{formatNumber(item.duration_seconds)}</TableCell><TableCell>{(item.flags || []).join(", ")}</TableCell><TableCell>{item.reason}</TableCell></TableRow>)}</TableBody></Table></Box>;
+}
+
+export function TimeFlowTable({ result }) {
+  const links = result?.flow?.links || [];
+  if (!links.length) return chartEmpty("Поток прохождения недоступен.");
+  return <Box sx={{ overflowX: "auto" }}><Typography variant="subtitle1">Агрегированный поток прохождения</Typography><Table size="small"><TableHead><TableRow><TableCell>Откуда</TableCell><TableCell>Куда</TableCell><TableCell align="right">Респондентов</TableCell></TableRow></TableHead><TableBody>{links.map((item, index) => <TableRow key={`${item.source}-${item.target}-${index}`}><TableCell>{item.source}</TableCell><TableCell>{item.target}</TableCell><TableCell align="right">{formatNumber(item.value)}</TableCell></TableRow>)}</TableBody></Table></Box>;
 }
 
 export function MissingAnalysisChart({ result }) {
@@ -893,7 +956,7 @@ export function MissingStackedStatusChart({ result }) {
 }
 
 export function ScaleIndexDistributionChart({ result }) {
-  const rows = (result?.score_distribution || []).map((item) => ({
+  const rows = (result?.distribution || result?.score_distribution || []).map((item) => ({
     label: item.label,
     count: Number(item.count),
     percent: item.percent,
@@ -913,6 +976,28 @@ export function ScaleIndexDistributionChart({ result }) {
       </ResponsiveContainer>
     </ChartBox>
   );
+}
+
+export function ScaleIndexScoreCard({ result }) {
+  const normalized = result?.normalized_score_summary || {};
+  const raw = result?.score_summary || {};
+  return <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, p: 2 }}><Typography variant="subtitle1">Сводка индекса</Typography><Typography>Среднее: {formatNumber(normalized.mean ?? raw.mean)}{normalized.mean !== null && normalized.mean !== undefined ? " из 100" : ""}</Typography><Typography variant="body2" color="text.secondary">Медиана: {formatNumber(normalized.median ?? raw.median)} · n: {formatNumber(result?.n ?? result?.n_scored)} · alpha: {formatNumber(result?.reliability?.cronbach_alpha ?? result?.reliability?.alpha)}</Typography></Box>;
+}
+
+export function ScaleIndexGroupsChart({ result }) {
+  const data = result?.groups?.items || [];
+  if (!data.length) return chartEmpty("Группы уровней индекса недоступны.");
+  return <ChartBox><ResponsiveContainer><BarChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="count" name="Респонденты" fill="#27ae60" /></BarChart></ResponsiveContainer></ChartBox>;
+}
+
+export function ScaleIndexBoxplotApprox({ result }) {
+  const summary = result?.normalized_score_summary?.n ? result.normalized_score_summary : result?.score_summary || {};
+  if (!summary.n) return chartEmpty("Boxplot-показатели индекса недоступны.");
+  return <Box><Typography variant="subtitle1">Boxplot-показатели индекса</Typography><Typography color="text.secondary" variant="body2">Табличное представление: min {formatNumber(summary.min)}, Q1 {formatNumber(summary.p25)}, медиана {formatNumber(summary.median)}, Q3 {formatNumber(summary.p75)}, max {formatNumber(summary.max)}.</Typography></Box>;
+}
+
+export function ScaleItemsCorrelationHeatmap({ result }) {
+  return <InterItemCorrelationHeatmap result={result?.reliability || {}} />;
 }
 
 export function CorrespondenceInertiaChart({ result }) {

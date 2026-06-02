@@ -1,11 +1,12 @@
 from django.test import SimpleTestCase
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from .analytics import classify_question_response_state
 from .analytics_result_format import standardize_analysis_result
 from .analytics_descriptive_profile import describe_numeric_values
-from .advanced_analytics_methods import compute_chi_square, compute_cramers_v, compute_factor_analysis, compute_group_comparison, compute_kmeans_clustering, compute_linear_regression, compute_logistic_regression
+from .advanced_analytics_methods import compute_chi_square, compute_cramers_v, compute_factor_analysis, compute_group_comparison, compute_kmeans_clustering, compute_linear_regression, compute_logistic_regression, compute_cronbach_alpha, compute_scale_index, compute_time_analysis
 
 
 class StandardizedAnalysisResultTests(SimpleTestCase):
@@ -126,6 +127,45 @@ class StandardizedAnalysisResultTests(SimpleTestCase):
         self.assertTrue(result["radar_profiles"])
         self.assertTrue(result["profile_heatmap"]["rows"])
         self.assertIn("cluster_quality", result)
+
+    def test_cronbach_alpha_contains_item_diagnostics(self):
+        variables = [
+            SimpleNamespace(code="q_1", label="Качество", question_id=1, qtype="scale", encoding="numeric"),
+            SimpleNamespace(code="q_2", label="Скорость", question_id=2, qtype="scale", encoding="numeric"),
+            SimpleNamespace(code="q_3", label="Удобство", question_id=3, qtype="scale", encoding="numeric"),
+        ]
+        rows = [{"q_1": index, "q_2": index + index % 2, "q_3": index + index % 3} for index in range(1, 15)]
+
+        result = compute_cronbach_alpha(rows, variables)
+
+        self.assertEqual(result["items_count"], 3)
+        self.assertEqual(result["cronbach_alpha"], result["alpha"])
+        self.assertEqual(len(result["item_total_correlations"]), 3)
+        self.assertEqual(len(result["alpha_if_item_deleted"]), 3)
+        self.assertEqual(len(result["inter_item_correlations"]["matrix"]), 3)
+
+    def test_scale_index_contains_normalized_scores_and_groups(self):
+        variables = [
+            SimpleNamespace(code="q_1", label="Качество", question_id=1),
+            SimpleNamespace(code="q_2", label="Сложность", question_id=2),
+        ]
+        rows = [
+            {"response_id": 1, "q_1": 1, "q_2": 5},
+            {"response_id": 2, "q_1": 3, "q_2": 3},
+            {"response_id": 3, "q_1": 5, "q_2": 1},
+        ]
+        configs = [
+            {"question_id": 1, "reverse": False},
+            {"question_id": 2, "reverse": True, "min_value": 1, "max_value": 5},
+        ]
+
+        result = compute_scale_index(rows, variables, configs)
+
+        self.assertTrue(result["reverse_coding"]["applied"])
+        self.assertEqual(result["scores"][0]["normalized_score"], 0)
+        self.assertEqual(result["scores"][-1]["normalized_score"], 100)
+        self.assertEqual(len(result["groups"]["items"]), 3)
+        self.assertEqual(result["index_title"], "Индекс шкалы")
 
     def test_dataset_quality_detects_missing_values_and_zero_variance(self):
         variables = [
@@ -362,3 +402,31 @@ class StandardizedAnalysisResultTests(SimpleTestCase):
         self.assertTrue(result["threshold_analysis"])
         self.assertTrue(result["diagnostics"]["calibration"]["bins"])
         self.assertIn("odds_ratio_confidence_interval_95", result["coefficients"][1])
+
+    def test_time_analysis_contains_dropout_quality_and_flow_contract(self):
+        started_at = datetime(2026, 1, 1, 12, 0, 0)
+        responses = [
+            {"response_id": 1, "started_at": started_at, "finished_at": started_at + timedelta(seconds=20), "is_complete": True, "complete_reason": "completed", "screened_out": False, "answered_question_ids": [1, 2]},
+            {"response_id": 2, "started_at": started_at, "finished_at": started_at + timedelta(seconds=120), "is_complete": True, "complete_reason": "completed", "screened_out": False, "answered_question_ids": [1, 2]},
+            {"response_id": 3, "started_at": started_at, "finished_at": started_at + timedelta(seconds=180), "is_complete": True, "complete_reason": "completed", "screened_out": False, "answered_question_ids": [1, 2]},
+            {"response_id": 4, "started_at": started_at, "finished_at": None, "is_complete": False, "complete_reason": None, "screened_out": False, "answered_question_ids": [1]},
+            {"response_id": 5, "started_at": started_at, "finished_at": started_at + timedelta(seconds=45), "screened_out_at": started_at + timedelta(seconds=40), "is_complete": True, "complete_reason": "screened_out", "screened_out": True, "screened_out_reason": "Возраст", "answered_question_ids": [1]},
+        ]
+
+        result = compute_time_analysis(
+            responses,
+            page_items=[
+                {"page_id": 1, "page_title": "Страница 1", "question_ids": [1]},
+                {"page_id": 2, "page_title": "Страница 2", "question_ids": [2]},
+            ],
+            too_fast_threshold_seconds=30,
+        )
+
+        self.assertEqual(result["method"], "time_and_dropout_analysis")
+        self.assertEqual(result["duration_summary"]["count"], 3)
+        self.assertEqual(result["quality_flags"]["too_fast"]["count"], 1)
+        self.assertEqual(result["dropout"]["by_page"][1]["dropout_count"], 2)
+        self.assertEqual(result["page_funnel"]["steps"][0]["label"], "Начали опрос")
+        self.assertTrue(result["retention_curve"]["points"])
+        self.assertEqual(result["screenout"]["top_reason"]["reason"], "Возраст")
+        self.assertTrue(result["flow"]["links"])

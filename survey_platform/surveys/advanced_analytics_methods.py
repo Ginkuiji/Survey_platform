@@ -1196,6 +1196,7 @@ def _describe_durations(values):
             "p25": None,
             "p75": None,
             "iqr": None,
+            "std": None,
         }
     p25 = _duration_percentile(values, 25)
     p75 = _duration_percentile(values, 75)
@@ -1208,6 +1209,7 @@ def _describe_durations(values):
         "p25": p25,
         "p75": p75,
         "iqr": float(p75 - p25) if p25 is not None and p75 is not None else None,
+        "std": float(np.std(values, ddof=1)) if np is not None and len(values) > 1 else None,
     }
 
 
@@ -1241,7 +1243,7 @@ def _duration_distribution(values, bucket_size_seconds=60, max_buckets=30):
             "count": count,
             "percent": _percent(count, total),
         })
-    return buckets, ("Duration distribution was truncated to max_buckets." if truncated else None)
+    return buckets, ("Распределение длительности сокращено до максимального числа интервалов." if truncated else None)
 
 
 def _time_group_label(value, value_labels):
@@ -1303,6 +1305,11 @@ def compute_time_analysis(
     group_variable=None,
     bucket_size_seconds=60,
     max_buckets=30,
+    page_items=None,
+    include_quality_flags=True,
+    include_page_dropout=True,
+    include_flow=True,
+    too_fast_threshold_seconds=None,
 ) -> dict:
     warnings = []
     total_started = len(response_items)
@@ -1314,6 +1321,7 @@ def compute_time_analysis(
     screenout_durations = []
     screenout_reason_values = defaultdict(list)
     response_metrics = {}
+    invalid_duration_count = 0
 
     for item in response_items:
         response_id = item.get("response_id")
@@ -1323,8 +1331,10 @@ def compute_time_analysis(
         is_complete = bool(item.get("is_complete"))
         complete_reason = item.get("complete_reason")
         duration = _duration_seconds(started_at, finished_at)
-        if duration is not None and duration < 0:
-            warnings.append(f"Negative duration skipped for response {response_id}.")
+        invalid_duration = duration is not None and duration <= 0
+        if duration is not None and duration <= 0:
+            warnings.append("Обнаружены неположительные длительности прохождения; они исключены из статистики.")
+            invalid_duration_count += 1
             duration = None
         if finished_at:
             total_finished += 1
@@ -1342,8 +1352,8 @@ def compute_time_analysis(
         if screened_out:
             total_screened_out += 1
             screenout_duration = _duration_seconds(started_at, item.get("screened_out_at")) or duration
-            if screenout_duration is not None and screenout_duration < 0:
-                warnings.append(f"Negative screenout duration skipped for response {response_id}.")
+            if screenout_duration is not None and screenout_duration <= 0:
+                warnings.append("Обнаружены неположительные длительности до screenout; они исключены из статистики.")
                 screenout_duration = None
             if screenout_duration is not None:
                 screenout_durations.append(screenout_duration)
@@ -1356,6 +1366,8 @@ def compute_time_analysis(
             "screened_out": screened_out,
             "completion_duration": completion_duration,
             "screenout_duration": screenout_duration,
+            "answered_question_ids": set(item.get("answered_question_ids") or []),
+            "invalid_duration": invalid_duration,
         }
 
     completion_distribution, completion_warning = _duration_distribution(completion_durations, bucket_size_seconds, max_buckets)
@@ -1406,13 +1418,88 @@ def compute_time_analysis(
             })
 
     group_time_test = _time_analysis_group_test(group_breakdown, warnings) if group_breakdown else None
-    for item in group_breakdown:
-        item.pop("_completion_values", None)
-
     completion_stats = _describe_durations(completion_durations)
     screenout_stats = _describe_durations(screenout_durations)
+    p25 = completion_stats["p25"]
+    p75 = completion_stats["p75"]
+    iqr = completion_stats["iqr"]
+    lower_fence = max(0, p25 - 1.5 * iqr) if p25 is not None and iqr is not None else None
+    upper_fence = p75 + 1.5 * iqr if p75 is not None and iqr is not None else None
+    median = completion_stats["median"]
+    fast_threshold = float(too_fast_threshold_seconds) if too_fast_threshold_seconds is not None else max(30, (median or 0) * 0.25)
+    short_outliers = [value for value in completion_durations if lower_fence is not None and value < lower_fence]
+    long_outliers = [value for value in completion_durations if upper_fence is not None and value > upper_fence]
+    too_fast_ids = {
+        response_id for response_id, metrics in response_metrics.items()
+        if metrics.get("completion_duration") is not None and metrics["completion_duration"] < fast_threshold
+    }
+    too_long_ids = {
+        response_id for response_id, metrics in response_metrics.items()
+        if metrics.get("completion_duration") is not None and upper_fence is not None and metrics["completion_duration"] > upper_fence
+    }
+    response_flags = []
+    if include_quality_flags:
+        for response_id, metrics in response_metrics.items():
+            flags = []
+            duration = metrics.get("completion_duration") or metrics.get("screenout_duration")
+            if response_id in too_fast_ids:
+                flags.append("too_fast")
+            if response_id in too_long_ids:
+                flags.append("too_long")
+            if metrics.get("invalid_duration"):
+                flags.append("invalid_duration")
+            if metrics.get("screened_out"):
+                flags.append("screened_out")
+            if not metrics.get("finished"):
+                flags.append("unfinished")
+            if flags:
+                response_flags.append({"response_id": response_id, "duration_seconds": duration, "flags": flags, "possibly_low_quality": bool({"too_fast", "too_long"} & set(flags)), "reason": "Прохождение требует проверки с учетом длительности и итогового статуса."})
+    page_items = page_items or []
+    dropout_by_page = []
+    funnel_steps = [{"step": 0, "label": "Начали опрос", "count": total_started, "percent_of_started": 100.0}]
+    if include_page_dropout:
+        previous_entered = total_started
+        for index, page in enumerate(page_items, start=1):
+            question_ids = set(page.get("question_ids") or [])
+            entered = sum(bool(metrics["answered_question_ids"] & question_ids) for metrics in response_metrics.values())
+            dropout = max(0, previous_entered - entered)
+            dropout_by_page.append({"page_id": page.get("page_id"), "page_title": page.get("page_title"), "page_order": page.get("page_order", index), "entered_count": previous_entered, "completed_page_count": entered, "dropout_count": dropout, "dropout_rate": _percent(dropout, previous_entered)})
+            funnel_steps.append({"step": index, "page_id": page.get("page_id"), "label": page.get("page_title"), "count": entered, "percent_of_started": _percent(entered, total_started)})
+            previous_entered = entered
+    funnel_steps.append({"step": 999, "label": "Завершили", "count": total_completed, "percent_of_started": _percent(total_completed, total_started)})
+    highest_dropout = max(dropout_by_page, key=lambda item: item["dropout_rate"], default=None)
+    flow_nodes = [{"id": "start", "label": "Начали"}, *[{"id": f"page_{item.get('page_id')}", "label": item.get("page_title")} for item in page_items], {"id": "completed", "label": "Завершили"}, {"id": "screenout", "label": "Отсечены"}, {"id": "unfinished", "label": "Не завершили"}]
+    flow_links = []
+    if include_flow:
+        previous = "start"
+        for step in funnel_steps[1:-1]:
+            current = f"page_{step.get('page_id')}"
+            flow_links.append({"source": previous, "target": current, "value": step["count"]})
+            previous = current
+        flow_links.extend([{"source": previous, "target": "completed", "value": total_completed}, {"source": previous, "target": "screenout", "value": total_screened_out}, {"source": previous, "target": "unfinished", "value": total_active_unfinished}])
+    duration_outliers = {"method": "iqr", "lower_fence_seconds": lower_fence, "upper_fence_seconds": upper_fence, "short_outliers_count": len(short_outliers), "long_outliers_count": len(long_outliers), "outliers_count": len(short_outliers) + len(long_outliers), "outliers_rate": _percent(len(short_outliers) + len(long_outliers), len(completion_durations))}
+    quality_flags = {"too_fast": {"threshold_seconds": fast_threshold, "count": len(too_fast_ids), "rate": _percent(len(too_fast_ids), len(completion_durations)), "interpretation": "Слишком быстрое прохождение может указывать на невнимательное заполнение, но не является доказательством низкого качества ответа."}, "too_long": {"threshold_seconds": upper_fence, "count": len(too_long_ids), "rate": _percent(len(too_long_ids), len(completion_durations))}, "possibly_low_quality_count": len(too_fast_ids | too_long_ids), "possibly_low_quality_rate": _percent(len(too_fast_ids | too_long_ids), len(completion_durations))}
+    if quality_flags["too_fast"]["rate"] >= 5:
+        warnings.append("Обнаружены слишком быстрые прохождения; они требуют проверки перед содержательной интерпретацией.")
+    if long_outliers:
+        warnings.append("Обнаружены аномально длинные прохождения; они могут быть связаны с перерывами при заполнении анкеты.")
+    if highest_dropout and highest_dropout["dropout_rate"] >= 20:
+        warnings.append("На отдельных страницах наблюдается повышенный dropout; страница может требовать содержательной проверки.")
+    if _percent(total_screened_out, total_started) >= 30:
+        warnings.append("Доля screenout заметна; следует проверить условия скрининга.")
+    duration_summary = {"count": completion_stats["count"], "average_seconds": completion_stats["average"], "median_seconds": median, "min_seconds": completion_stats["min"], "max_seconds": completion_stats["max"], "p25_seconds": p25, "p75_seconds": p75, "iqr_seconds": iqr, "std_seconds": completion_stats["std"], "invalid_duration_count": invalid_duration_count}
+    screenout_block = {"total_screened_out": total_screened_out, "screenout_rate": _percent(total_screened_out, total_started), "reasons": [{**item, "percent_of_screened_out": item["percent_screened_out"], "percent_of_started": _percent(item["count"], total_started)} for item in screenout_reasons], "top_reason": screenout_reasons[0] if screenout_reasons else None}
+    group_comparison = {"enabled": bool(group_breakdown), "group_variable": {"code": getattr(group_variable, "code", None), "label": getattr(group_variable, "label", None)} if group_variable else None, "groups": [{"group_value": item["group"], "group_label": item["group_label"], "n": item["total_started"], "median_seconds": item["completion_time"]["median"], "average_seconds": item["completion_time"]["average"], "p25_seconds": item["completion_time"]["p25"], "p75_seconds": item["completion_time"]["p75"], "iqr_seconds": item["completion_time"]["iqr"], "too_fast_count": sum(value < fast_threshold for value in item["_completion_values"]), "too_fast_rate": _percent(sum(value < fast_threshold for value in item["_completion_values"]), len(item["_completion_values"]))} for item in group_breakdown], "test": group_time_test, "warnings": []}
+    for item in group_breakdown:
+        item.pop("_completion_values", None)
+    notes = []
+    if include_page_dropout:
+        notes.append("Dropout по страницам рассчитан приближенно на основе наличия ответов на вопросы страниц.")
+    if len(response_flags) > 500:
+        notes.append("Список флагов респондентов ограничен первыми 500 записями.")
+    notes.append("Straight-lining и повторяющиеся паттерны ответов следует проверять отдельными методами контроля качества.")
     return {
-        "method": "time_analysis",
+        "method": "time_and_dropout_analysis",
         "n": total_started,
         "summary": {
             "total_started": total_started,
@@ -1423,6 +1510,7 @@ def compute_time_analysis(
             "completion_rate": _percent(total_completed, total_started),
             "screenout_rate": _percent(total_screened_out, total_started),
             "finish_rate": _percent(total_finished, total_started),
+            "active_unfinished_rate": _percent(total_active_unfinished, total_started),
             "average_completion_time_seconds": completion_stats["average"],
             "median_completion_time_seconds": completion_stats["median"],
             "min_completion_time_seconds": completion_stats["min"],
@@ -1433,11 +1521,24 @@ def compute_time_analysis(
             "max_screenout_time_seconds": screenout_stats["max"],
         },
         "completion_time_distribution": completion_distribution,
+        "duration_distribution": completion_distribution,
+        "duration_summary": duration_summary,
+        "duration_outliers": duration_outliers,
+        "quality_flags": quality_flags,
+        "response_flags": response_flags[:500],
+        "dropout": {"by_page": dropout_by_page, "highest_dropout_page": highest_dropout},
+        "page_funnel": {"steps": funnel_steps},
+        "retention_curve": {"unit": "page", "points": [{"step": item["step"], "label": item["label"], "retained_count": item["count"], "retention_rate": item["percent_of_started"]} for item in funnel_steps]},
+        "screenout": screenout_block,
+        "group_comparison": group_comparison,
+        "flow": {"nodes": flow_nodes if include_flow else [], "links": flow_links, "notes": ["Flow diagram построен приближенно по достижению страниц и итоговым статусам прохождения."] if include_flow else []},
         "screenout_time_distribution": screenout_distribution,
         "screenout_reasons": screenout_reasons,
         "group_breakdown": group_breakdown,
         "group_time_test": group_time_test,
         "warnings": warnings,
+        "recommendations": ["Проверьте слишком быстрые прохождения перед использованием данных в сложном анализе.", "Если dropout концентрируется на конкретной странице, проверьте длину, сложность и обязательность вопросов на этой странице."],
+        "notes": notes,
     }
 
 
@@ -2693,17 +2794,29 @@ def compute_group_comparison(
 def interpret_cronbach_alpha(alpha):
     if alpha is None:
         return "Недостаточно данных для интерпретации."
-    if alpha < 0.5:
-        return "Низкая согласованность шкалы"
     if alpha < 0.6:
-        return "Слабая согласованность шкалы"
+        return "Низкая внутренняя согласованность"
     if alpha < 0.7:
-        return "Приемлемая согласованность шкалы"
+        return "Сомнительная внутренняя согласованность"
     if alpha < 0.8:
-        return "Хорошая согласованность шкалы"
+        return "Приемлемая внутренняя согласованность"
     if alpha < 0.9:
-        return "Высокая согласованность шкалы"
-    return "Очень высокая согласованность; возможна избыточность пунктов"
+        return "Хорошая внутренняя согласованность"
+    return "Очень высокая внутренняя согласованность"
+
+
+def _interpret_item_total_correlation(value):
+    if value is None:
+        return "Недостаточно данных для интерпретации."
+    if value < 0:
+        return "Пункт имеет отрицательную связь с общей шкалой; стоит проверить reverse coding."
+    if value < 0.2:
+        return "Пункт слабо согласуется с общей шкалой."
+    if value < 0.3:
+        return "Пункт имеет пограничную связь с общей шкалой."
+    if value < 0.5:
+        return "Пункт приемлемо согласуется с общей шкалой."
+    return "Пункт хорошо согласуется с общей шкалой."
 
 
 def _complete_numeric_matrix(rows, variables, analysis_name):
@@ -2790,10 +2903,17 @@ def compute_cronbach_alpha(rows, variables, standardize=False) -> dict:
     item_means = np.mean(x_matrix, axis=0)
     item_stds = np.std(x_matrix, axis=0, ddof=1)
     item_statistics = []
+    alpha_if_item_deleted = []
+    item_total_correlations = []
     negative_item_total = False
 
     for index, variable in enumerate(variables):
         item_values = x_matrix[:, index]
+        raw_item_summary = _numeric_summary([
+            _as_float(row.get(variable.code))
+            for row in rows
+            if _is_numeric(row.get(variable.code))
+        ])
         item_total_correlation = None
         if k > 2:
             total_without_item = np.sum(np.delete(x_matrix, index, axis=1), axis=1)
@@ -2806,42 +2926,112 @@ def compute_cronbach_alpha(rows, variables, standardize=False) -> dict:
             reduced_matrix = np.delete(x_matrix, index, axis=1)
             alpha_if_deleted = _cronbach_alpha_from_matrix(reduced_matrix)
 
+        delta_alpha = alpha_if_deleted - selected_alpha if alpha_if_deleted is not None and selected_alpha is not None else None
+        improves_alpha = bool(delta_alpha is not None and delta_alpha > 0.02)
+        item_total_interpretation = _interpret_item_total_correlation(item_total_correlation)
         item_statistics.append({
             "code": variable.code,
             "label": variable.label,
-            "mean": float(item_means[index]),
+            "question_id": getattr(variable, "question_id", None),
+            "qtype": getattr(variable, "qtype", None),
+            "encoding": getattr(variable, "encoding", None),
+            "n": raw_item_summary["n"],
+            "missing_count": len(rows) - raw_item_summary["n"],
+            "missing_rate": round((len(rows) - raw_item_summary["n"]) / len(rows) * 100, 2) if rows else 0,
+            "mean": raw_item_summary["mean"],
+            "median": raw_item_summary["median"],
             "variance": float(item_variances[index]),
-            "std": float(item_stds[index]),
+            "std": raw_item_summary["std"],
+            "min": raw_item_summary["min"],
+            "max": raw_item_summary["max"],
+            "q1": raw_item_summary["p25"],
+            "q3": raw_item_summary["p75"],
+            "iqr": raw_item_summary["iqr"],
             "item_total_correlation": item_total_correlation,
             "alpha_if_deleted": alpha_if_deleted,
+            "delta_alpha": delta_alpha,
+            "improves_alpha": improves_alpha,
+            "interpretation": item_total_interpretation,
+        })
+        item_total_correlations.append({"code": variable.code, "label": variable.label, "item_total_correlation": item_total_correlation, "interpretation": item_total_interpretation})
+        alpha_if_item_deleted.append({
+            "code": variable.code, "label": variable.label, "alpha_if_deleted": alpha_if_deleted,
+            "delta_alpha": delta_alpha, "improves_alpha": improves_alpha,
+            "interpretation": "Удаление пункта может повысить alpha; пункт стоит проверить содержательно." if improves_alpha else "Удаление пункта не дает заметного повышения alpha.",
         })
 
     warnings = []
+    notes = []
     if n < 30:
         warnings.append("Малый объем выборки для анализа надежности; интерпретируйте α Кронбаха с осторожностью.")
-    if selected_alpha is not None and selected_alpha > 0.95:
-        warnings.append("Очень высокая α может указывать на избыточность пунктов.")
+    if k < 3:
+        warnings.append("Для устойчивой оценки надежности шкалы желательно использовать не менее трех пунктов.")
+    if selected_alpha is not None and selected_alpha < 0.7:
+        warnings.append("Cronbach’s alpha ниже 0.7, внутренняя согласованность шкалы может быть недостаточной.")
+    if selected_alpha is not None and selected_alpha >= 0.95:
+        warnings.append("Cronbach’s alpha очень высокая; пункты шкалы могут быть избыточными.")
     if mean_inter_item_correlation is not None and mean_inter_item_correlation < 0:
         warnings.append("Средняя межпунктовая корреляция отрицательна; выбранные пункты могут измерять разные конструкты.")
     if negative_item_total:
-        warnings.append("У некоторых пунктов отрицательная корреляция с суммарной шкалой; проверьте обратное кодирование или исключение пунктов.")
+        warnings.append("Некоторые пункты имеют отрицательную item-total correlation; возможно, требуется reverse coding или исключение пункта.")
+    if any(item["item_total_correlation"] is not None and item["item_total_correlation"] < 0.2 for item in item_total_correlations):
+        warnings.append("Некоторые пункты слабо связаны с общей шкалой.")
+    if any(item["improves_alpha"] for item in alpha_if_item_deleted):
+        warnings.append("Удаление одного или нескольких пунктов может повысить Cronbach’s alpha; эти пункты стоит проверить содержательно.")
+    upper_values = correlation_matrix[np.triu_indices(k, k=1)]
+    if any(value < 0 for value in upper_values):
+        warnings.append("Между некоторыми пунктами обнаружены отрицательные корреляции; возможно, часть пунктов требует обратного кодирования.")
+    if mean_inter_item_correlation is not None and mean_inter_item_correlation < 0.15:
+        warnings.append("Средняя межпунктовая корреляция низкая; пункты могут измерять разные конструкты.")
+    if mean_inter_item_correlation is not None and mean_inter_item_correlation > 0.7:
+        warnings.append("Средняя межпунктовая корреляция очень высокая; пункты могут быть избыточными или дублирующими.")
+    problematic_items = []
+    for item, deleted in zip(item_total_correlations, alpha_if_item_deleted):
+        reasons = []
+        value = item.get("item_total_correlation")
+        if value is not None and value < 0.2:
+            reasons.append("low_item_total_correlation")
+        if value is not None and value < 0:
+            reasons.extend(["negative_item_total_correlation", "possible_reverse_coding_needed"])
+        if deleted.get("improves_alpha"):
+            reasons.append("alpha_improves_if_deleted")
+        if reasons:
+            problematic_items.append({**item, "alpha_if_deleted": deleted.get("alpha_if_deleted"), "reasons": reasons, "recommendation": "Пункт стоит проверить содержательно: он может хуже согласовываться с остальными пунктами шкалы."})
 
     return {
         "method": "cronbach_alpha",
         "n": n,
         "n_items": k,
+        "items_count": k,
+        "complete_cases": n,
+        "min_answered_items": k,
         "standardize": standardize,
         "alpha": float(alpha),
+        "cronbach_alpha": float(alpha),
         "standardized_alpha": standardized_alpha,
         "interpretation": interpret_cronbach_alpha(selected_alpha),
+        "alpha_interpretation": interpret_cronbach_alpha(selected_alpha),
         "variables": [
             {"code": variable.code, "label": variable.label}
             for variable in variables
         ],
         "item_statistics": item_statistics,
+        "item_total_correlations": item_total_correlations,
+        "alpha_if_item_deleted": alpha_if_item_deleted,
         "inter_item_correlation_matrix": correlation_matrix.tolist(),
         "mean_inter_item_correlation": mean_inter_item_correlation,
+        "average_inter_item_correlation": mean_inter_item_correlation,
+        "inter_item_correlations": {
+            "variables": [{"code": variable.code, "label": variable.label} for variable in variables],
+            "matrix": correlation_matrix.tolist(),
+            "average_inter_item_correlation": mean_inter_item_correlation,
+            "min_inter_item_correlation": float(np.min(upper_values)) if len(upper_values) else None,
+            "max_inter_item_correlation": float(np.max(upper_values)) if len(upper_values) else None,
+        },
+        "problematic_items": problematic_items,
+        "recommendations": ["Проверьте пункты с низкой item-total correlation.", "Для проверки одномерности шкалы рекомендуется дополнительно использовать факторный анализ."],
         "warnings": warnings,
+        "notes": notes,
     }
 
 
@@ -2889,6 +3079,8 @@ def _numeric_summary(values):
             "max": None,
             "p25": None,
             "p75": None,
+            "q1": None,
+            "q3": None,
             "iqr": None,
         }
     mean_value = sum(clean_values) / n
@@ -2905,6 +3097,8 @@ def _numeric_summary(values):
         "max": float(clean_values[-1]),
         "p25": p25,
         "p75": p75,
+        "q1": p25,
+        "q3": p75,
         "iqr": (p75 - p25) if p25 is not None and p75 is not None else None,
     }
 
@@ -3123,9 +3317,16 @@ def compute_scale_index(
             reliability_result = compute_cronbach_alpha(transformed_rows, variables, standardize=False)
             reliability = {
                 "alpha": reliability_result.get("alpha"),
+                "cronbach_alpha": reliability_result.get("cronbach_alpha"),
                 "standardized_alpha": reliability_result.get("standardized_alpha"),
                 "interpretation": reliability_result.get("interpretation"),
+                "alpha_interpretation": reliability_result.get("alpha_interpretation"),
                 "mean_inter_item_correlation": reliability_result.get("mean_inter_item_correlation"),
+                "average_inter_item_correlation": reliability_result.get("average_inter_item_correlation"),
+                "item_total_correlations": reliability_result.get("item_total_correlations") or [],
+                "alpha_if_item_deleted": reliability_result.get("alpha_if_item_deleted") or [],
+                "inter_item_correlations": reliability_result.get("inter_item_correlations") or {},
+                "problematic_items": reliability_result.get("problematic_items") or [],
                 "warnings": reliability_result.get("warnings") or [],
             }
         except ValueError as exc:
@@ -3137,13 +3338,49 @@ def compute_scale_index(
         warnings.append("У некоторых пунктов отрицательная корреляция с суммарной шкалой; проверьте обратное кодирование и согласованность пунктов.")
     if len(score_values) < 30:
         warnings.append("Малый объем выборки для индекса шкалы.")
+    score_summary = _numeric_summary(score_values)
+    normalized_scores = []
+    observed_min = score_summary.get("min")
+    observed_max = score_summary.get("max")
+    for score in scores:
+        normalized = None
+        if observed_min is not None and observed_max is not None and observed_max > observed_min:
+            normalized = (score["score"] - observed_min) / (observed_max - observed_min) * 100
+        normalized_scores.append({**score, "normalized_score": normalized})
+    normalized_values = [item["normalized_score"] for item in normalized_scores if item["normalized_score"] is not None]
+    normalized_summary = _numeric_summary(normalized_values)
+    group_items = []
+    for key, label, lower, upper in (
+        ("low", "Низкий уровень индекса", None, 33.333333),
+        ("medium", "Средний уровень индекса", 33.333333, 66.666667),
+        ("high", "Высокий уровень индекса", 66.666667, None),
+    ):
+        count = sum(
+            1 for value in normalized_values
+            if (lower is None or value < lower) and (upper is None or value < upper)
+        )
+        group_items.append({"group": key, "label": label, "count": count, "percent": round(count / len(normalized_values) * 100, 2) if normalized_values else 0})
+    reverse_coding = {
+        "applied": any(config.get("reverse") for config in reverse_configs.values()),
+        "items": [
+            {"question_id": question_id, **config}
+            for question_id, config in reverse_configs.items()
+            if config.get("reverse")
+        ],
+        "interpretation": "Reverse coding выполнен по формуле max + min - value для пунктов с обратной формулировкой.",
+    }
+    if observed_min == observed_max and score_values:
+        warnings.append("Нормировка индекса в диапазон 0–100 недоступна: у рассчитанных значений нет вариативности.")
 
     return {
         "method": "scale_index",
         "title": title,
+        "index_title": title,
         "calculation": method,
         "n_items": len(variables),
+        "items_count": len(variables),
         "n_scored": len(score_values),
+        "n": len(score_values),
         "n_complete_cases_for_alpha": n_complete_cases_for_alpha,
         "missing_count": missing_count,
         "min_answered_items": min_answered_items,
@@ -3153,6 +3390,7 @@ def compute_scale_index(
                 "label": variable.label,
                 "question_id": variable.question_id,
                 "reverse": bool((reverse_configs.get(variable.question_id) or {}).get("reverse")),
+                "reverse_applied": bool((reverse_configs.get(variable.question_id) or {}).get("reverse")),
                 "min_value": (reverse_configs.get(variable.question_id) or {}).get("min_value")
                 if (reverse_configs.get(variable.question_id) or {}).get("reverse") else None,
                 "max_value": (reverse_configs.get(variable.question_id) or {}).get("max_value")
@@ -3160,12 +3398,17 @@ def compute_scale_index(
             }
             for variable in variables
         ],
-        "score_summary": _numeric_summary(score_values),
+        "reverse_coding": reverse_coding,
+        "score_summary": score_summary,
+        "normalized_score_summary": normalized_summary,
         "item_statistics": item_statistics,
         "reliability": reliability,
         "score_distribution": _numeric_distribution(score_values, buckets=10),
-        "scores": scores,
+        "distribution": _numeric_distribution(normalized_values, buckets=10),
+        "groups": {"method": "normalized_tertiles", "items": group_items},
+        "scores": normalized_scores,
         "warnings": warnings,
+        "notes": ["Нормировка 0–100 построена по наблюдаемому диапазону рассчитанных значений индекса."],
     }
 
 

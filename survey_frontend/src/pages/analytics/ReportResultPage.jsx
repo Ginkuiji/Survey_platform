@@ -62,8 +62,22 @@ import {
   RegressionCoefficientChart,
   ReliabilityItemChart,
   ScaleIndexDistributionChart,
+  ItemTotalCorrelationChart,
+  AlphaIfDeletedTable,
+  InterItemCorrelationHeatmap,
+  ScaleIndexScoreCard,
+  ScaleIndexGroupsChart,
+  ScaleIndexBoxplotApprox,
+  ScaleItemsCorrelationHeatmap,
   TimeDistributionChart,
   TimeScreenoutReasonsChart,
+  TimeFunnelChart,
+  RetentionCurveChart,
+  CompletionTimeBoxplotApprox,
+  DropoutByPageChart,
+  GroupTimeBoxplotApprox,
+  ResponseQualityFlagsTable,
+  TimeFlowTable,
 } from "./reportCharts";
 import StandardizedResultSummary from "./StandardizedResultSummary";
 
@@ -1481,6 +1495,8 @@ function renderTimeDistributionTable(title, rows) {
 function renderTimeAnalysisSection(section) {
   const result = section.result || {};
   const summary = result.summary || {};
+  const durationSummary = result.duration_summary || {};
+  const quality = result.quality_flags || {};
   const groupTimeTest = result.group_time_test;
   const summaryRows = [
     ["total_started", summary.total_started],
@@ -1511,6 +1527,9 @@ function renderTimeAnalysisSection(section) {
         <Chip label={`Доля отсева: ${formatNumber(summary.screenout_rate)}%`} />
         <Chip label={`Среднее время прохождения: ${formatDurationSeconds(summary.average_completion_time_seconds)}`} />
         <Chip label={`Среднее время до отсева: ${formatDurationSeconds(summary.average_screenout_time_seconds)}`} />
+        <Chip label={`Медианное время: ${formatDurationSeconds(durationSummary.median_seconds ?? summary.median_completion_time_seconds)}`} />
+        <Chip label={`P25 / P75: ${formatDurationSeconds(durationSummary.p25_seconds)} / ${formatDurationSeconds(durationSummary.p75_seconds)}`} />
+        <Chip label={`Слишком быстрых: ${formatNumber(quality.too_fast?.count)}`} />
       </Stack>
 
       {(result.warnings || []).map((warning) => (
@@ -1518,9 +1537,16 @@ function renderTimeAnalysisSection(section) {
       ))}
 
       <TimeDistributionChart
-        data={result.completion_time_distribution || []}
+        data={result.duration_distribution || result.completion_time_distribution || []}
         title="Распределение времени завершения"
       />
+      <TimeFunnelChart result={result} />
+      <RetentionCurveChart result={result} />
+      <CompletionTimeBoxplotApprox result={result} />
+      <DropoutByPageChart result={result} />
+      <GroupTimeBoxplotApprox result={result} />
+      <ResponseQualityFlagsTable result={result} />
+      <TimeFlowTable result={result} />
       <TimeDistributionChart
         data={result.screenout_time_distribution || []}
         title="Распределение времени до отсева"
@@ -1630,6 +1656,7 @@ function renderTimeAnalysisSection(section) {
           </Typography>
         </Stack>
       )}
+      {(result.notes || []).map((note) => <Alert severity="info" key={note}>{note}</Alert>)}
     </Stack>
   );
 }
@@ -1638,6 +1665,7 @@ function renderReliabilityAnalysisSection(section) {
   const result = section.result || {};
   const variables = result.variables || [];
   const matrix = result.inter_item_correlation_matrix || [];
+  const problematicItems = result.problematic_items || [];
 
   return (
     <Stack spacing={3}>
@@ -1648,6 +1676,8 @@ function renderReliabilityAnalysisSection(section) {
         <Chip label={`α Кронбаха: ${formatNumber(result.alpha)}`} />
         <Chip label={`Стандартизованная α: ${formatNumber(result.standardized_alpha)}`} />
         <Chip label={result.interpretation || "—"} />
+        <Chip label={`Средняя межпунктовая корреляция: ${formatNumber(result.average_inter_item_correlation ?? result.mean_inter_item_correlation)}`} />
+        <Chip label={`Проблемных пунктов: ${formatNumber(problematicItems.length)}`} />
       </Stack>
 
       {(result.warnings || []).map((warning) => (
@@ -1655,6 +1685,12 @@ function renderReliabilityAnalysisSection(section) {
       ))}
 
       <ReliabilityItemChart result={result} />
+      <ItemTotalCorrelationChart result={result} />
+      <AlphaIfDeletedTable result={result} />
+      <InterItemCorrelationHeatmap result={result} />
+
+      {!!problematicItems.length && <Box><Typography variant="subtitle1">Пункты для содержательной проверки</Typography>{problematicItems.map((item) => <Alert severity="warning" key={item.code}>{item.label || item.code}: {item.recommendation}</Alert>)}</Box>}
+      {(result.notes || []).map((note) => <Alert severity="info" key={note}>{note}</Alert>)}
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
@@ -1746,6 +1782,7 @@ function renderScaleIndexSection(section) {
         <Chip label={`Способ расчета: ${result.calculation || "—"}`} />
         <Chip label={`α Кронбаха: ${formatNumber(reliability.alpha)}`} />
         <Chip label={reliability.interpretation || "—"} />
+        <Chip label={`Среднее 0–100: ${formatNumber(result.normalized_score_summary?.mean)}`} />
       </Stack>
 
       {(result.warnings || []).map((warning) => (
@@ -1756,6 +1793,10 @@ function renderScaleIndexSection(section) {
       ))}
 
       <ScaleIndexDistributionChart result={result} />
+      <ScaleIndexScoreCard result={result} />
+      <ScaleIndexGroupsChart result={result} />
+      <ScaleIndexBoxplotApprox result={result} />
+      <ScaleItemsCorrelationHeatmap result={result} />
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
@@ -1814,6 +1855,7 @@ function renderScaleIndexSection(section) {
           </TableBody>
         </Table>
       </Box>
+      {(result.notes || []).map((note) => <Alert severity="info" key={note}>{note}</Alert>)}
 
       <Box>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>

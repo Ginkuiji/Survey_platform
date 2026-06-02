@@ -210,6 +210,10 @@ class TimeAnalysisSer(serializers.Serializer):
     survey_id = serializers.IntegerField()
     group_by = AdvancedVariableSer(required=False, allow_null=True)
     include_active = serializers.BooleanField(default=False)
+    include_quality_flags = serializers.BooleanField(default=True)
+    include_page_dropout = serializers.BooleanField(default=True)
+    include_flow = serializers.BooleanField(default=True)
+    too_fast_threshold_seconds = serializers.IntegerField(min_value=5, max_value=600, required=False, allow_null=True)
     bucket_size_seconds = serializers.IntegerField(
         min_value=10,
         max_value=3600,

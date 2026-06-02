@@ -77,6 +77,23 @@ RECOMMENDATIONS = {
         "Используйте elbow plot для оценки выбранного числа кластеров.",
         "Если кластер имеет мало респондентов, его следует рассматривать осторожно.",
     ],
+    "time_analysis": [
+        "Проверьте слишком быстрые прохождения перед использованием данных в сложном анализе.",
+        "Если dropout концентрируется на конкретной странице, проверьте длину, сложность и обязательность вопросов на этой странице.",
+        "При заметной доле screenout проверьте условия скрининга и основные причины отсева.",
+    ],
+    "reliability_analysis": [
+        "Проверьте пункты с низкой item-total correlation.",
+        "Если удаление пункта повышает alpha, оцените его формулировку и содержательное соответствие шкале.",
+        "Для шкал с обратными формулировками проверьте необходимость reverse coding.",
+        "После проверки надежности можно использовать выбранные пункты для построения composite score.",
+        "Для проверки одномерности шкалы рекомендуется дополнительно использовать факторный анализ.",
+    ],
+    "scale_index": [
+        "Проверьте содержательное соответствие пунктов единому исследовательскому конструкту.",
+        "Для пунктов с обратной формулировкой проверьте reverse coding.",
+        "Используйте нормировку 0–100 для интерпретации и сравнения шкал.",
+    ],
     "missing_analysis": ["Для вопросов с высокой долей пропусков проверьте формулировку, обязательность заполнения и условия ветвления."],
 }
 
@@ -139,9 +156,29 @@ VISUALIZATIONS = {
         {"type": "group_violin_plot", "title": "Violin plot", "recommended": False, "description": "Показывает форму распределения внутри групп."},
         {"type": "post_hoc_table", "title": "Таблица post-hoc сравнений", "recommended": True},
     ],
-    "time_analysis": [("time_distribution", "Распределение времени прохождения")],
-    "reliability_analysis": [("item_statistics", "Статистики пунктов шкалы")],
-    "scale_index": [("score_distribution", "Распределение индекса шкалы")],
+    "time_analysis": [
+        {"type": "histogram", "title": "Распределение времени прохождения", "recommended": True},
+        {"type": "boxplot", "title": "Boxplot времени прохождения", "recommended": True},
+        {"type": "funnel", "title": "Воронка прохождения по страницам", "recommended": True},
+        {"type": "retention_curve", "title": "Retention curve", "recommended": True},
+        {"type": "dropout_by_page", "title": "Dropout по страницам", "recommended": True},
+        {"type": "screenout_reasons", "title": "Причины screenout", "recommended": True},
+        {"type": "group_boxplot", "title": "Сравнение времени по группам", "recommended": False},
+        {"type": "flow", "title": "Поток прохождения", "recommended": False, "description": "Агрегированная таблица потока доступна в интерактивном отчете."},
+    ],
+    "reliability_analysis": [
+        {"type": "item_total_correlation", "title": "Item-total correlation", "recommended": True},
+        {"type": "alpha_if_deleted", "title": "Alpha if item deleted", "recommended": True},
+        {"type": "inter_item_correlation_heatmap", "title": "Межпунктовые корреляции", "recommended": True},
+        {"type": "item_statistics", "title": "Статистики пунктов шкалы", "recommended": False},
+    ],
+    "scale_index": [
+        {"type": "distribution", "title": "Распределение индекса", "recommended": True},
+        {"type": "boxplot", "title": "Boxplot индекса", "recommended": True},
+        {"type": "groups", "title": "Группы уровней индекса", "recommended": True},
+        {"type": "score_card", "title": "Score card среднего индекса", "recommended": True},
+        {"type": "items_correlation_heatmap", "title": "Корреляции пунктов индекса", "recommended": False},
+    ],
     "missing_analysis": [
         ("missing_rate", "Доля пропусков по вопросам"),
         ("missing_stacked_status", "Причины отсутствия ответов"),
@@ -407,10 +444,45 @@ def build_main_results(analysis_type, result):
         }
     if analysis_type == "missing_analysis":
         return result.get("detailed_missing_analysis") or result.get("summary") or {}
-    if analysis_type in ("time_analysis", "scale_index"):
-        return result.get("summary") or {}
+    if analysis_type == "time_analysis":
+        summary = result.get("summary") or {}
+        duration = result.get("duration_summary") or {}
+        quality = result.get("quality_flags") or {}
+        dropout = result.get("dropout") or {}
+        return {
+            **summary,
+            "median_duration_seconds": duration.get("median_seconds", summary.get("median_completion_time_seconds")),
+            "p25_duration_seconds": duration.get("p25_seconds"),
+            "p75_duration_seconds": duration.get("p75_seconds"),
+            "iqr_duration_seconds": duration.get("iqr_seconds"),
+            "too_fast_rate": (quality.get("too_fast") or {}).get("rate"),
+            "possibly_low_quality_rate": quality.get("possibly_low_quality_rate"),
+            "highest_dropout_page": dropout.get("highest_dropout_page"),
+        }
+    if analysis_type == "scale_index":
+        groups = (result.get("groups") or {}).get("items") or []
+        high = next((item for item in groups if item.get("group") == "high"), {})
+        reliability = result.get("reliability") or {}
+        return {
+            "method": result.get("calculation", result.get("method")),
+            "index_title": result.get("index_title", result.get("title")),
+            "n": result.get("n", result.get("n_scored")),
+            "items_count": result.get("items_count", result.get("n_items")),
+            "mean_score": (result.get("score_summary") or {}).get("mean"),
+            "mean_normalized_score": (result.get("normalized_score_summary") or {}).get("mean"),
+            "cronbach_alpha": reliability.get("cronbach_alpha", reliability.get("alpha")),
+            "high_group_percent": high.get("percent"),
+        }
     if analysis_type == "reliability_analysis":
-        return {key: result.get(key) for key in ("n", "n_items", "alpha", "standardized_alpha")}
+        return {
+            "method": result.get("method"),
+            "n": result.get("n"),
+            "items_count": result.get("items_count", result.get("n_items")),
+            "cronbach_alpha": result.get("cronbach_alpha", result.get("alpha")),
+            "average_inter_item_correlation": result.get("average_inter_item_correlation", result.get("mean_inter_item_correlation")),
+            "problematic_items_count": len(result.get("problematic_items") or []),
+            "items_improving_alpha_count": sum(bool(item.get("improves_alpha")) for item in result.get("alpha_if_item_deleted") or []),
+        }
     if analysis_type == "correspondence_analysis":
         return {key: result.get(key) for key in ("n", "n_dimensions", "total_inertia")}
     if analysis_type == "crosstab":
@@ -458,12 +530,17 @@ def build_effect_size_summary(analysis_type, result):
         value = result["cumulative_explained_variance"]
         interpretation = "факторы объясняют небольшую долю вариации" if value < 0.5 else "факторы объясняют заметную долю вариации"
         return {"name": "Накопленная объясненная дисперсия", "value": value, "interpretation": interpretation}
+    if analysis_type == "time_analysis":
+        value = (result.get("summary") or {}).get("completion_rate")
+        if value is not None:
+            interpretation = "высокая доля завершений" if value >= 80 else "умеренная доля завершений" if value >= 60 else "низкая доля завершений"
+            return {"name": "Доля полных завершений", "value": value, "interpretation": interpretation, "description": "Показывает долю начавших опрос респондентов, которые полностью завершили его."}
     if analysis_type == "reliability_analysis" and result.get("alpha") is not None:
-        return {"name": "α Кронбаха", "value": result["alpha"], "interpretation": interpret_cronbach_alpha(result["alpha"])}
+        return {"name": "Cronbach’s alpha", "value": result["alpha"], "interpretation": interpret_cronbach_alpha(result["alpha"]), "description": "Показывает внутреннюю согласованность пунктов шкалы."}
     if analysis_type == "scale_index":
         value = (result.get("reliability") or {}).get("alpha")
         if value is not None:
-            return {"name": "α Кронбаха", "value": value, "interpretation": interpret_cronbach_alpha(value)}
+            return {"name": "Cronbach’s alpha", "value": value, "interpretation": interpret_cronbach_alpha(value), "description": "Показывает внутреннюю согласованность пунктов индекса."}
     return {}
 
 
@@ -501,6 +578,34 @@ def _build_base_interpretation(analysis_type, result, effect_size):
             "limitations": [
                 "Статистическая связь не доказывает причинно-следственную зависимость.",
                 "При малых ожидаемых частотах χ²-критерий может быть ненадёжен.",
+            ],
+        }
+    if analysis_type == "time_analysis":
+        summary = result.get("summary") or {}
+        duration = result.get("duration_summary") or {}
+        dropout = (result.get("dropout") or {}).get("highest_dropout_page") or {}
+        quality = result.get("quality_flags") or {}
+        completion_rate = summary.get("completion_rate")
+        text = "Анализ показывает, как респонденты проходят опрос и на каких этапах возникает отсев."
+        if completion_rate is not None:
+            text += f" Полностью завершили опрос {completion_rate:.2f}% начавших."
+        if duration.get("median_seconds") is not None:
+            text += f" Медианное время полного прохождения составляет {duration['median_seconds']:.2f} сек."
+        if dropout.get("page_title"):
+            text += f" Наибольший dropout наблюдается на этапе «{dropout['page_title']}»: {dropout.get('dropout_rate', 0):.2f}%."
+        if (quality.get("too_fast") or {}).get("rate", 0) > 0:
+            text += f" Доля слишком быстрых прохождений составляет {(quality.get('too_fast') or {}).get('rate'):.2f}%."
+        return {
+            "summary": text,
+            "details": [
+                "Медиана и квартильный размах устойчивее среднего времени к аномально длинным прохождениям.",
+                "Воронка и retention curve показывают сохранение респондентов по этапам анкеты.",
+                "Флаги слишком быстрых и аномально длинных прохождений помогают выделить ответы для дополнительной проверки.",
+            ],
+            "limitations": [
+                "Dropout по страницам рассчитывается приближенно по наличию ответов на вопросы страниц.",
+                "Слишком быстрое прохождение является сигналом для проверки, но само по себе не доказывает низкое качество ответа.",
+                "Straight-lining и повторяющиеся паттерны ответов требуют отдельных методов контроля качества.",
             ],
         }
     if analysis_type == "crosstab":
@@ -576,6 +681,31 @@ def _build_base_interpretation(analysis_type, result, effect_size):
                 "При малой выборке или низком KMO факторное решение может быть нестабильным.",
                 "Переменные с cross-loading могут затруднять интерпретацию факторов.",
             ],
+        }
+    if analysis_type == "reliability_analysis":
+        alpha = result.get("cronbach_alpha", result.get("alpha"))
+        summary = (
+            "Шкала демонстрирует приемлемую внутреннюю согласованность. Выбранные пункты в целом могут рассматриваться как элементы одной шкалы."
+            if alpha is not None and alpha >= 0.7
+            else "Внутренняя согласованность шкалы ограничена. Часть пунктов может требовать reverse coding, уточнения формулировки или содержательной проверки."
+        )
+        if any(item.get("improves_alpha") for item in result.get("alpha_if_item_deleted") or []):
+            summary += " Удаление одного или нескольких пунктов может повысить alpha, поэтому эти пункты стоит проверить содержательно."
+        return {
+            "summary": summary,
+            "details": ["Cronbach’s alpha показывает внутреннюю согласованность пунктов шкалы.", "Item-total correlation показывает, насколько пункт согласуется с суммой остальных пунктов.", "Alpha if item deleted показывает, как изменится alpha при исключении конкретного пункта.", "Межпунктовые корреляции помогают увидеть связи между пунктами."],
+            "limitations": ["Cronbach’s alpha не доказывает одномерность шкалы; для проверки структуры можно использовать факторный анализ.", "Высокая alpha не гарантирует содержательную валидность шкалы.", "Решение об удалении пункта должно приниматься не только по статистике, но и по смыслу вопроса."],
+        }
+    if analysis_type == "scale_index":
+        normalized_mean = (result.get("normalized_score_summary") or {}).get("mean")
+        summary = "Индекс объединяет выбранные пункты в интегральный показатель."
+        if normalized_mean is not None:
+            summary += f" Среднее нормированное значение составляет {normalized_mean:.2f} из 100."
+        summary += " Содержательная интерпретация зависит от формулировок включенных вопросов и корректности reverse coding."
+        return {
+            "summary": summary,
+            "details": ["Composite score объединяет несколько пунктов анкеты в один интегральный показатель.", "Reverse coding используется для пунктов, направленных противоположно общей шкале.", "Нормировка 0–100 облегчает интерпретацию индекса и сравнение разных шкал."],
+            "limitations": ["Индекс имеет смысл только если выбранные пункты содержательно относятся к одному конструкту.", "Reverse coding должен быть задан корректно, иначе направление индекса может быть искажено.", "Нормировка 0–100 в текущей реализации основана на наблюдаемом диапазоне значений."],
         }
     return {
         "summary": ANALYSIS_PURPOSES.get(analysis_type, "Результат метода подготовлен для дальнейшей интерпретации."),
