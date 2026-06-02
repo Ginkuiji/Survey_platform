@@ -295,6 +295,10 @@ def run_cluster_analysis(payload: dict) -> dict:
         profile_rows=profile_dataset.rows,
         profile_variables=profile_dataset.variables,
         max_profile_features=payload.get("max_profile_features", 5),
+        include_elbow=payload.get("include_elbow", True),
+        elbow_min_k=payload.get("elbow_min_k", 2),
+        elbow_max_k=payload.get("elbow_max_k", 8),
+        include_pca_projection=payload.get("include_pca_projection", True),
     )
     result["profile_variables"] = [
         {

@@ -417,6 +417,10 @@ export function buildSectionPayload(surveyId, section, questionsById) {
       standardize: section.standardize ?? true,
       max_iter: section.max_iter || 300,
       max_profile_features: section.max_profile_features || 5,
+      include_elbow: section.include_elbow ?? true,
+      elbow_min_k: section.elbow_min_k ?? 2,
+      elbow_max_k: section.elbow_max_k ?? 8,
+      include_pca_projection: section.include_pca_projection ?? true,
     };
     if ((section.profileQuestionIds || []).length) {
       payload.profile_variables = section.profileQuestionIds.map((questionId) => {

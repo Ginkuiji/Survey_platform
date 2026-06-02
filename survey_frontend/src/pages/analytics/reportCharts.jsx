@@ -548,9 +548,9 @@ export function PcaBiplotChart({ result }) {
 }
 
 export function ClusterSizeChart({ result }) {
-  const clusters = (result?.clusters || []).map((cluster) => ({
-    cluster: `Кластер ${cluster.cluster}`,
-    size: Number(cluster.size),
+  const clusters = (result?.clusters || result?.cluster_sizes || []).map((cluster) => ({
+    cluster: cluster.label || `Кластер ${cluster.cluster}`,
+    size: Number(cluster.size ?? cluster.count),
     percent: cluster.percent,
   })).filter((item) => !Number.isNaN(item.size));
   if (!clusters.length) return chartEmpty();
@@ -604,6 +604,44 @@ export function ClusterTopFeaturesChart({ result }) {
       })}
     </Stack>
   );
+}
+
+export function ClusterProfileHeatmap({ result }) {
+  const rows = result?.profile_heatmap?.rows || (result?.cluster_profiles || []).map((profile) => ({ cluster_label: profile.label || `Кластер ${profile.cluster}`, values: profile.profile_values || [] }));
+  const variables = rows[0]?.values || [];
+  if (!rows.length || !variables.length) return chartEmpty("Профиль кластеров недоступен для этого результата.");
+  return <Box sx={{ overflowX: "auto" }}><Typography variant="subtitle1">Тепловая карта профилей кластеров</Typography><Table size="small"><TableHead><TableRow><TableCell>Кластер</TableCell>{variables.map((item) => <TableCell key={item.code} align="right">{item.label || item.code}</TableCell>)}</TableRow></TableHead><TableBody>{rows.map((row) => <TableRow key={row.cluster_label || row.cluster}><TableCell>{row.cluster_label || `Кластер ${row.cluster}`}</TableCell>{(row.values || []).map((item) => { const value = item.standardized_value ?? item.standardized_difference ?? item.value; return <TableCell key={item.code} align="right" sx={{ backgroundColor: heatColor(value, "absolute") }}>{formatNumber(value)}</TableCell>; })}</TableRow>)}</TableBody></Table></Box>;
+}
+
+export function ClusterPcaScatterPlot({ result }) {
+  const points = result?.dimension_reduction?.points || [];
+  if (!result?.dimension_reduction?.available || !points.length) return chartEmpty("Для двумерной визуализации кластеров недостаточно данных.");
+  const clusters = [...new Set(points.map((item) => item.cluster))];
+  return <ChartBox><ResponsiveContainer><ScatterChart><CartesianGrid /><XAxis type="number" dataKey="x" name="PC1" /><YAxis type="number" dataKey="y" name="PC2" /><Tooltip cursor={{ strokeDasharray: "3 3" }} /><Legend />{clusters.map((cluster, index) => <Scatter key={cluster} name={`Кластер ${cluster}`} data={points.filter((item) => item.cluster === cluster)} fill={COLORS[index % COLORS.length]} />)}</ScatterChart></ResponsiveContainer></ChartBox>;
+}
+
+export function ClusterRadarChart({ result }) {
+  const profiles = result?.radar_profiles || [];
+  if (!profiles.length) return chartEmpty("Radar profile недоступен для этого результата.");
+  return <Box sx={{ overflowX: "auto" }}><Typography variant="subtitle1">Radar-профили кластеров</Typography><Table size="small"><TableHead><TableRow><TableCell>Кластер</TableCell><TableCell>Признак</TableCell><TableCell align="right">Стандартизированное значение</TableCell></TableRow></TableHead><TableBody>{profiles.flatMap((profile) => (profile.values || []).map((item) => <TableRow key={`${profile.cluster}-${item.code}`}><TableCell>{profile.cluster_label || `Кластер ${profile.cluster}`}</TableCell><TableCell>{item.axis || item.code}</TableCell><TableCell align="right">{formatNumber(item.value)}</TableCell></TableRow>))}</TableBody></Table></Box>;
+}
+
+export function SilhouettePlot({ result }) {
+  const data = result?.silhouette?.cluster_summary || [];
+  if (!data.length) return chartEmpty("Silhouette plot недоступен для этого результата.");
+  return <ChartBox><ResponsiveContainer><BarChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" /><YAxis domain={[-1, 1]} /><Tooltip /><Legend /><ReferenceLine y={0} stroke="#666" /><Bar dataKey="mean_silhouette" name="Средний silhouette" fill="#27ae60" /><Bar dataKey="min_silhouette" name="Минимальный silhouette" fill="#eb5757" /></BarChart></ResponsiveContainer></ChartBox>;
+}
+
+export function ElbowPlot({ result }) {
+  const data = result?.elbow?.points || [];
+  if (!data.length) return chartEmpty("Elbow plot недоступен для этого результата.");
+  return <Stack spacing={1}><ChartBox><ResponsiveContainer><LineChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="k" /><YAxis /><Tooltip /><ReferenceLine x={result.elbow.suggested_k} stroke="#eb5757" strokeDasharray="4 4" /><Line dataKey="inertia" name="Inertia" stroke="#2f80ed" strokeWidth={2} /></LineChart></ResponsiveContainer></ChartBox><Typography color="text.secondary" variant="body2">{result.elbow.interpretation}</Typography></Stack>;
+}
+
+export function ClusterDistanceChart({ result }) {
+  const data = result?.cluster_distances?.summary || [];
+  if (!data.length) return chartEmpty("Расстояния до центроидов недоступны для этого результата.");
+  return <ChartBox><ResponsiveContainer><BarChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" /><YAxis /><Tooltip /><Legend /><Bar dataKey="mean_distance_to_centroid" name="Среднее расстояние" fill="#2f80ed" /><Bar dataKey="max_distance_to_centroid" name="Максимальное расстояние" fill="#f2994a" /></BarChart></ResponsiveContainer></ChartBox>;
 }
 
 export function GroupComparisonMeanChart({ result }) {

@@ -5,7 +5,7 @@ from unittest.mock import patch
 from .analytics import classify_question_response_state
 from .analytics_result_format import standardize_analysis_result
 from .analytics_descriptive_profile import describe_numeric_values
-from .advanced_analytics_methods import compute_chi_square, compute_cramers_v, compute_factor_analysis, compute_group_comparison, compute_linear_regression, compute_logistic_regression
+from .advanced_analytics_methods import compute_chi_square, compute_cramers_v, compute_factor_analysis, compute_group_comparison, compute_kmeans_clustering, compute_linear_regression, compute_logistic_regression
 
 
 class StandardizedAnalysisResultTests(SimpleTestCase):
@@ -101,6 +101,31 @@ class StandardizedAnalysisResultTests(SimpleTestCase):
         self.assertEqual(len(result["factor_structure"]), 2)
         self.assertIn("Фактор 1", result["factor_scores"][0])
         self.assertTrue(result["biplot"]["available"])
+
+    def test_cluster_analysis_contains_segment_diagnostics(self):
+        variables = [
+            SimpleNamespace(code="q_1", label="Удовлетворенность", encoding="numeric"),
+            SimpleNamespace(code="q_2", label="Лояльность", encoding="numeric"),
+        ]
+        rows = [
+            {"response_id": index, "q_1": index % 4, "q_2": index % 3}
+            for index in range(1, 21)
+        ] + [
+            {"response_id": index, "q_1": 20 + index % 4, "q_2": 15 + index % 3}
+            for index in range(21, 41)
+        ]
+
+        result = compute_kmeans_clustering(rows, variables, n_clusters=2, elbow_max_k=4)
+
+        self.assertEqual(len(result["cluster_sizes"]), 2)
+        self.assertEqual(len(result["cluster_centroids"]), 2)
+        self.assertEqual(len(result["cluster_distances"]["summary"]), 2)
+        self.assertEqual(len(result["cluster_profiles"]), 2)
+        self.assertTrue(result["elbow"]["points"])
+        self.assertTrue(result["dimension_reduction"]["available"])
+        self.assertTrue(result["radar_profiles"])
+        self.assertTrue(result["profile_heatmap"]["rows"])
+        self.assertIn("cluster_quality", result)
 
     def test_dataset_quality_detects_missing_values_and_zero_variance(self):
         variables = [

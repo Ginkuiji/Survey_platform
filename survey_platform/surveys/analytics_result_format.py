@@ -70,6 +70,13 @@ RECOMMENDATIONS = {
         "Переменные с низкой communality или cross-loading стоит проверить и при необходимости исключить из шкалы.",
         "После выбора набора вопросов для шкалы рекомендуется проверить надежность шкалы с помощью alpha Кронбаха.",
     ],
+    "cluster_analysis": [
+        "Интерпретируйте кластеры по профилям и топ отличающим признакам, а не только по номерам кластеров.",
+        "Проверьте silhouette score и размеры кластеров перед содержательной интерпретацией.",
+        "Используйте PCA scatterplot для визуальной проверки разделения кластеров.",
+        "Используйте elbow plot для оценки выбранного числа кластеров.",
+        "Если кластер имеет мало респондентов, его следует рассматривать осторожно.",
+    ],
     "missing_analysis": ["Для вопросов с высокой долей пропусков проверьте формулировку, обязательность заполнения и условия ветвления."],
 }
 
@@ -117,7 +124,15 @@ VISUALIZATIONS = {
         {"type": "factor_score_scatterplot", "title": "Диаграмма факторных значений", "recommended": False},
         {"type": "pca_biplot", "title": "PCA biplot", "recommended": False},
     ],
-    "cluster_analysis": [("cluster_sizes", "Размеры кластеров"), ("cluster_profiles", "Профили кластеров")],
+    "cluster_analysis": [
+        {"type": "cluster_sizes", "title": "Размеры кластеров", "recommended": True},
+        {"type": "profile_heatmap", "title": "Профили кластеров", "recommended": True},
+        {"type": "pca_scatter", "title": "PCA scatterplot кластеров", "recommended": True},
+        {"type": "radar", "title": "Radar chart профиля кластера", "recommended": False},
+        {"type": "silhouette", "title": "Silhouette plot", "recommended": True},
+        {"type": "elbow", "title": "Elbow plot", "recommended": True},
+        {"type": "distances", "title": "Расстояния до центроидов", "recommended": False},
+    ],
     "group_comparison": [
         {"type": "group_boxplot", "title": "Boxplot по группам", "recommended": True, "description": "Показывает медиану, квартильный размах и выбросы в каждой группе."},
         {"type": "group_mean_ci_plot", "title": "Средние значения с доверительными интервалами", "recommended": True, "description": "Показывает различия средних значений между группами."},
@@ -343,7 +358,13 @@ def build_main_results(analysis_type, result):
             "recommended_n_factors": recommendations.get("recommended_n_factors", recommendations.get("kaiser_n_factors")),
         }
     if analysis_type == "cluster_analysis":
-        return {"n_clusters": result.get("n_clusters"), "cluster_sizes": result.get("clusters", []), "silhouette_score": result.get("silhouette_score")}
+        sizes = [item.get("size", item.get("count")) for item in (result.get("clusters") or result.get("cluster_sizes") or [])]
+        sizes = [value for value in sizes if value is not None]
+        return {
+            **{key: result.get(key) for key in ("method", "n", "n_clusters", "n_variables", "silhouette_score", "inertia")},
+            "min_cluster_size": min(sizes) if sizes else None,
+            "max_cluster_size": max(sizes) if sizes else None,
+        }
     if analysis_type == "group_comparison":
         groups = result.get("groups") or []
         highest = max(groups, key=lambda item: item.get("mean", float("-inf")), default=None)
@@ -359,6 +380,30 @@ def build_main_results(analysis_type, result):
             "highest_group": {"label": highest.get("label"), "mean": highest.get("mean"), "median": highest.get("median")} if highest else None,
             "lowest_group": {"label": lowest.get("label"), "mean": lowest.get("mean"), "median": lowest.get("median")} if lowest else None,
             "significant_post_hoc_pairs_count": sum(bool(item.get("significant")) for item in comparisons),
+        }
+    if analysis_type == "cluster_analysis":
+        silhouette = result.get("silhouette_score")
+        summary = f"Выделено {result.get('n_clusters', '—')} кластеров респондентов."
+        if silhouette is not None:
+            summary += f" Silhouette score равен {silhouette:.3f}: {interpret_silhouette(silhouette)}. Сегменты следует рассматривать как предварительные и проверять содержательно."
+        else:
+            summary += " Silhouette score недоступен; интерпретация разделения кластеров ограничена."
+        return {
+            "summary": summary,
+            "details": [
+                "Кластеризация группирует респондентов по схожести выбранных признаков.",
+                "Размер кластера показывает, какая часть выборки попала в данный сегмент.",
+                "Профиль кластера показывает средние значения признаков внутри сегмента.",
+                "Топ отличающих признаков показывает, по каким переменным кластер сильнее всего отличается от общей выборки.",
+                "Silhouette score помогает оценить разделенность кластеров.",
+                "Elbow plot помогает подобрать разумное число кластеров по снижению inertia.",
+            ],
+            "limitations": [
+                "Кластеризация является разведочным методом и не доказывает существование естественных групп в генеральной совокупности.",
+                "Результат зависит от выбранных переменных, масштаба данных и числа кластеров.",
+                "При низком silhouette score сегменты могут быть нестабильными.",
+                "Названия и смысл кластеров должны задаваться исследователем на основе профиля признаков.",
+            ],
         }
     if analysis_type == "missing_analysis":
         return result.get("detailed_missing_analysis") or result.get("summary") or {}
@@ -408,7 +453,7 @@ def build_effect_size_summary(analysis_type, result):
         return result.get("effect_size") or {}
     if analysis_type == "cluster_analysis" and result.get("silhouette_score") is not None:
         value = result["silhouette_score"]
-        return {"name": "Silhouette score", "value": value, "interpretation": interpret_silhouette(value)}
+        return {"name": "Silhouette score", "value": value, "interpretation": interpret_silhouette(value), "description": "Показывает, насколько объекты похожи на свой кластер по сравнению с ближайшим другим кластером."}
     if analysis_type == "factor_analysis" and result.get("cumulative_explained_variance") is not None:
         value = result["cumulative_explained_variance"]
         interpretation = "факторы объясняют небольшую долю вариации" if value < 0.5 else "факторы объясняют заметную долю вариации"
@@ -762,6 +807,7 @@ def collect_warnings(result):
     warnings.extend(chi_square.get("warnings") or [])
     warnings.extend((result.get("kmo") or {}).get("warnings") or [])
     warnings.extend((result.get("bartlett") or {}).get("warnings") or [])
+    warnings.extend((result.get("cluster_quality") or {}).get("warnings") or [])
     if "p_value" in chi_square and chi_square.get("p_value") is None:
         warnings.append("Для данного метода не удалось рассчитать p-value.")
     return warnings

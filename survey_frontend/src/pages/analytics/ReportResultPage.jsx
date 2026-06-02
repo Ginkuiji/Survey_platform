@@ -26,6 +26,12 @@ import {
 import {
   ClusterSizeChart,
   ClusterTopFeaturesChart,
+  ClusterProfileHeatmap,
+  ClusterPcaScatterPlot,
+  ClusterRadarChart,
+  SilhouettePlot,
+  ElbowPlot,
+  ClusterDistanceChart,
   ChiSquareContributionHeatmap,
   ChiSquareResidualHeatmap,
   CoefficientConfidenceIntervalChart,
@@ -1185,6 +1191,10 @@ function renderClusterAnalysisSection(section) {
   const variables = result.variables || [];
   const clusters = result.clusters || [];
   const profiles = result.cluster_profiles || [];
+  const quality = result.cluster_quality || {};
+  const topFeatures = result.top_distinguishing_features || [];
+  const clusterSizes = result.cluster_sizes || clusters;
+  const sizeValues = clusterSizes.map((item) => item.size ?? item.count).filter((value) => value !== null && value !== undefined);
 
   return (
     <Stack spacing={3}>
@@ -1195,13 +1205,25 @@ function renderClusterAnalysisSection(section) {
         <Chip label={`Кластеров: ${formatNumber(result.n_clusters)}`} />
         <Chip label={`Стандартизация: ${result.standardize ? "да" : "нет"}`} />
         <Chip label={`Инерция: ${formatNumber(result.inertia)}`} />
+        <Chip label={`Silhouette: ${formatNumber(result.silhouette_score ?? quality.silhouette_score)}`} />
+        <Chip label={`Минимальный кластер: ${formatNumber(sizeValues.length ? Math.min(...sizeValues) : null)}`} />
+        <Chip label={`Максимальный кластер: ${formatNumber(sizeValues.length ? Math.max(...sizeValues) : null)}`} />
       </Stack>
 
       {(result.warnings || []).map((warning) => (
         <Alert key={warning} severity="warning">{warning}</Alert>
       ))}
+      {(quality.warnings || []).map((warning) => (
+        <Alert key={warning} severity="warning">{warning}</Alert>
+      ))}
 
       <ClusterSizeChart result={result} />
+      <ClusterProfileHeatmap result={result} />
+      <ClusterPcaScatterPlot result={result} />
+      <ClusterRadarChart result={result} />
+      <SilhouettePlot result={result} />
+      <ElbowPlot result={result} />
+      <ClusterDistanceChart result={result} />
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Table size="small">
@@ -1241,6 +1263,14 @@ function renderClusterAnalysisSection(section) {
       <ClusterTopFeaturesChart result={result} />
 
       {renderClusterProfiles(profiles)}
+
+      {!!topFeatures.length && (
+        <Box sx={{ width: "100%", overflowX: "auto" }}>
+          <Typography variant="subtitle1">Топ отличающих признаков</Typography>
+          <Table size="small"><TableHead><TableRow><TableCell>Кластер</TableCell><TableCell>Признак</TableCell><TableCell align="right">Отличие</TableCell><TableCell>Направление</TableCell></TableRow></TableHead><TableBody>{topFeatures.map((item, index) => <TableRow key={`${item.cluster}-${item.code}-${index}`}><TableCell>{item.cluster_label || item.cluster}</TableCell><TableCell>{item.label || item.code}</TableCell><TableCell align="right">{formatNumber(item.standardized_difference)}</TableCell><TableCell>{item.direction === "higher" ? "выше среднего" : "ниже среднего"}</TableCell></TableRow>)}</TableBody></Table>
+        </Box>
+      )}
+      {(result.notes || []).map((note) => <Alert key={note} severity="info">{note}</Alert>)}
     </Stack>
   );
 }

@@ -309,6 +309,11 @@ def _method_specific_checks(analysis_type, result, dataset):
             "min_cluster_size": min(sizes) if sizes else None,
             "max_cluster_size": max(sizes) if sizes else None,
             "cluster_size_ratio": round(max(sizes) / min(sizes), 2) if sizes and min(sizes) else None,
+            "largest_cluster_rate": round(max(sizes) / sum(sizes) * 100, 2) if sizes and sum(sizes) else None,
+            "weak_profile_clusters": [
+                item for item in result.get("cluster_profiles") or []
+                if not item.get("top_distinguishing_features")
+            ],
         }
     if analysis_type == "group_comparison":
         sizes = [group.get("n") for group in result.get("groups") or [] if group.get("n") is not None]
@@ -508,6 +513,12 @@ def build_applicability_warnings(analysis_type, result, payload=None, dataset=No
             warnings.append("Один или несколько кластеров содержат мало респондентов.")
         if checks.get("n_clusters") and result.get("n") is not None and result["n"] < checks["n_clusters"] * 10:
             warnings.append("Количество кластеров слишком велико для доступного числа наблюдений.")
+        if checks.get("cluster_size_ratio") is not None and checks["cluster_size_ratio"] >= 10:
+            warnings.append("Размеры кластеров сильно различаются; сегментацию следует интерпретировать осторожно.")
+        if checks.get("largest_cluster_rate") is not None and checks["largest_cluster_rate"] > 70:
+            warnings.append("Один кластер содержит большую часть выборки, поэтому структура сегментов может быть слабой.")
+        if checks.get("weak_profile_clusters"):
+            warnings.append("Профили некоторых кластеров выражены слабо; отличающие признаки почти не выделяются.")
     elif analysis_type == "group_comparison":
         if checks.get("min_group_size") is not None and checks["min_group_size"] < 5:
             warnings.append("В одной или нескольких группах меньше 5 наблюдений; сравнение групп может быть ненадежным.")

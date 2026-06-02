@@ -153,11 +153,20 @@ class ClusterAnalysisSer(serializers.Serializer):
     standardize = serializers.BooleanField(default=True)
     max_iter = serializers.IntegerField(min_value=10, max_value=1000, required=False, default=300)
     max_profile_features = serializers.IntegerField(min_value=1, max_value=20, required=False, default=5)
+    include_elbow = serializers.BooleanField(default=True)
+    elbow_min_k = serializers.IntegerField(min_value=1, max_value=10, default=2)
+    elbow_max_k = serializers.IntegerField(min_value=2, max_value=15, default=8)
+    include_pca_projection = serializers.BooleanField(default=True)
 
     def validate_variables(self, value):
         if len(value) < 2:
             raise serializers.ValidationError("Cluster analysis requires at least two variables.")
         return value
+
+    def validate(self, attrs):
+        if attrs.get("elbow_min_k", 2) >= attrs.get("elbow_max_k", 8):
+            raise serializers.ValidationError("elbow_min_k must be less than elbow_max_k.")
+        return attrs
 
 
 class GroupComparisonSer(serializers.Serializer):

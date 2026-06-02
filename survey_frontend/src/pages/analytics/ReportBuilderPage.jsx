@@ -207,6 +207,10 @@ function createSection(type) {
       standardize: true,
       max_iter: 300,
       max_profile_features: 5,
+      include_elbow: true,
+      elbow_min_k: 2,
+      elbow_max_k: 8,
+      include_pca_projection: true,
     };
   }
 
@@ -798,6 +802,15 @@ function SectionFields({ section, questions, updateSection }) {
           }
           label="Стандартизировать переменные"
         />
+
+        <FormControlLabel control={<Checkbox checked={section.include_elbow ?? true} onChange={(event) => updateSection(section.id, { include_elbow: event.target.checked })} />} label="Рассчитать elbow plot" />
+        {(section.include_elbow ?? true) && (
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+            <TextField fullWidth type="number" label="Elbow: минимум k" inputProps={{ min: 1, max: 10 }} value={section.elbow_min_k ?? 2} onChange={(event) => updateSection(section.id, { elbow_min_k: Number(event.target.value) })} />
+            <TextField fullWidth type="number" label="Elbow: максимум k" inputProps={{ min: 2, max: 15 }} value={section.elbow_max_k ?? 8} onChange={(event) => updateSection(section.id, { elbow_max_k: Number(event.target.value) })} />
+          </Stack>
+        )}
+        <FormControlLabel control={<Checkbox checked={section.include_pca_projection ?? true} onChange={(event) => updateSection(section.id, { include_pca_projection: event.target.checked })} />} label="Подготовить PCA-проекцию кластеров" />
       </Stack>
     );
   }
