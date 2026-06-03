@@ -1,0 +1,288 @@
+from rest_framework import serializers
+
+
+ENCODING_CHOICES = (
+    "numeric",
+    "binary",
+    "ordinal",
+    "one_hot",
+    "rank",
+    "matrix_ordinal",
+    "matrix_multi_binary",
+)
+
+MEASURE_CHOICES = (
+    "nominal",
+    "ordinal",
+    "interval",
+    "ratio",
+    "binary",
+)
+
+
+class AdvancedVariableSer(serializers.Serializer):
+    question_id = serializers.IntegerField()
+    encoding = serializers.ChoiceField(choices=ENCODING_CHOICES)
+    measure = serializers.ChoiceField(choices=MEASURE_CHOICES)
+
+
+class ScaleIndexItemSer(serializers.Serializer):
+    question_id = serializers.IntegerField()
+    encoding = serializers.ChoiceField(choices=ENCODING_CHOICES)
+    measure = serializers.ChoiceField(choices=MEASURE_CHOICES)
+    reverse = serializers.BooleanField(default=False)
+    min_value = serializers.FloatField(required=False, allow_null=True)
+    max_value = serializers.FloatField(required=False, allow_null=True)
+
+
+class ScaleIndexSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    title = serializers.CharField(required=False, allow_blank=True, default="Индекс шкалы")
+    items = ScaleIndexItemSer(many=True, allow_empty=False)
+    method = serializers.ChoiceField(
+        choices=("mean", "sum", "standardized_mean"),
+        default="mean",
+    )
+    min_answered_items = serializers.IntegerField(min_value=1, required=False, default=1)
+    include_cronbach_alpha = serializers.BooleanField(default=True)
+
+    def validate_items(self, value):
+        if len(value) < 2:
+            raise serializers.ValidationError("Scale index requires at least two items.")
+        return value
+
+    def validate(self, attrs):
+        items = attrs.get("items", [])
+        min_answered_items = attrs.get("min_answered_items", 1)
+
+        if min_answered_items > len(items):
+            raise serializers.ValidationError("min_answered_items cannot be greater than number of items.")
+
+        for item in items:
+            if item.get("reverse"):
+                min_value = item.get("min_value")
+                max_value = item.get("max_value")
+                if min_value is None or max_value is None:
+                    raise serializers.ValidationError("Reverse-coded items require min_value and max_value.")
+                if max_value <= min_value:
+                    raise serializers.ValidationError("max_value must be greater than min_value for reverse-coded items.")
+
+        return attrs
+
+
+class MissingAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    group_by = AdvancedVariableSer(required=False, allow_null=True)
+    include_screened_out = serializers.BooleanField(default=False)
+    include_group_breakdown = serializers.BooleanField(default=False)
+
+    def validate_group_by(self, value):
+        if not value:
+            return value
+        if value.get("encoding") not in ("binary", "ordinal"):
+            raise serializers.ValidationError(
+                "Missing analysis group_by supports only binary or ordinal categorical variables."
+            )
+        return value
+
+
+class CorrelationAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    method = serializers.ChoiceField(choices=("pearson", "spearman", "kendall"), default="pearson")
+    variables = AdvancedVariableSer(many=True, allow_empty=False)
+
+    def validate_variables(self, value):
+        if len(value) < 2:
+            raise serializers.ValidationError("Correlation requires at least two variables.")
+        return value
+
+
+class CrosstabAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    row = AdvancedVariableSer()
+    column = AdvancedVariableSer()
+
+
+class ChiSquareAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    row = AdvancedVariableSer()
+    column = AdvancedVariableSer()
+
+
+class RegressionAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    target = AdvancedVariableSer()
+    features = AdvancedVariableSer(many=True, allow_empty=False)
+    include_intercept = serializers.BooleanField(default=True)
+
+    def validate_features(self, value):
+        if len(value) < 1:
+            raise serializers.ValidationError("Regression requires at least one feature.")
+        return value
+
+
+class FactorAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    variables = AdvancedVariableSer(many=True, allow_empty=False)
+    n_factors = serializers.IntegerField(min_value=1, required=False, default=2)
+    rotation = serializers.ChoiceField(choices=("none", "varimax"), required=False, default="varimax")
+    standardize = serializers.BooleanField(default=True)
+    include_factor_scores = serializers.BooleanField(default=False)
+    parallel_analysis = serializers.BooleanField(default=True)
+    parallel_iterations = serializers.IntegerField(min_value=20, max_value=500, default=100)
+    parallel_percentile = serializers.IntegerField(min_value=50, max_value=99, default=95)
+
+    def validate_variables(self, value):
+        if len(value) < 3:
+            raise serializers.ValidationError("Factor analysis requires at least three variables.")
+        return value
+
+    def validate(self, attrs):
+        variables = attrs.get("variables", [])
+        n_factors = attrs.get("n_factors", 2)
+        if n_factors >= len(variables):
+            raise serializers.ValidationError("n_factors must be less than number of variables.")
+        return attrs
+
+
+class ClusterAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    variables = AdvancedVariableSer(many=True, allow_empty=False)
+    profile_variables = AdvancedVariableSer(many=True, required=False, allow_empty=True)
+    n_clusters = serializers.IntegerField(min_value=2, max_value=10, required=False, default=3)
+    standardize = serializers.BooleanField(default=True)
+    max_iter = serializers.IntegerField(min_value=10, max_value=1000, required=False, default=300)
+    max_profile_features = serializers.IntegerField(min_value=1, max_value=20, required=False, default=5)
+    include_elbow = serializers.BooleanField(default=True)
+    elbow_min_k = serializers.IntegerField(min_value=1, max_value=10, default=2)
+    elbow_max_k = serializers.IntegerField(min_value=2, max_value=15, default=8)
+    include_pca_projection = serializers.BooleanField(default=True)
+
+    def validate_variables(self, value):
+        if len(value) < 2:
+            raise serializers.ValidationError("Cluster analysis requires at least two variables.")
+        return value
+
+    def validate(self, attrs):
+        if attrs.get("elbow_min_k", 2) >= attrs.get("elbow_max_k", 8):
+            raise serializers.ValidationError("elbow_min_k must be less than elbow_max_k.")
+        return attrs
+
+
+class GroupComparisonSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    group = AdvancedVariableSer()
+    value = AdvancedVariableSer()
+    method = serializers.ChoiceField(
+        choices=("t_test", "anova", "mann_whitney", "kruskal_wallis"),
+        default="anova",
+    )
+    alpha = serializers.FloatField(default=0.05, min_value=0.001, max_value=0.2)
+    post_hoc = serializers.BooleanField(default=False)
+    post_hoc_method = serializers.ChoiceField(
+        choices=("auto", "pairwise_t_test", "pairwise_mann_whitney", "tukey_hsd"),
+        default="auto",
+        required=False,
+    )
+    p_adjust = serializers.ChoiceField(
+        choices=("bonferroni", "holm"),
+        default="bonferroni",
+        required=False,
+    )
+
+    def validate(self, attrs):
+        if attrs["group"]["question_id"] == attrs["value"]["question_id"]:
+            raise serializers.ValidationError("Group and value variables must be different questions.")
+        method = attrs.get("method")
+        post_hoc_method = attrs.get("post_hoc_method", "auto")
+        if not attrs.get("post_hoc", False):
+            return attrs
+        if post_hoc_method == "tukey_hsd" and method != "anova":
+            raise serializers.ValidationError("Tukey HSD can be used only with ANOVA.")
+        if post_hoc_method == "pairwise_t_test" and method != "anova":
+            raise serializers.ValidationError("Pairwise t-tests can be used only with ANOVA.")
+        if post_hoc_method == "pairwise_mann_whitney" and method != "kruskal_wallis":
+            raise serializers.ValidationError("Pairwise Mann-Whitney tests can be used only with Kruskal-Wallis.")
+        return attrs
+
+
+class TimeAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    group_by = AdvancedVariableSer(required=False, allow_null=True)
+    include_active = serializers.BooleanField(default=False)
+    include_quality_flags = serializers.BooleanField(default=True)
+    include_page_dropout = serializers.BooleanField(default=True)
+    include_flow = serializers.BooleanField(default=True)
+    too_fast_threshold_seconds = serializers.IntegerField(min_value=5, max_value=600, required=False, allow_null=True)
+    bucket_size_seconds = serializers.IntegerField(
+        min_value=10,
+        max_value=3600,
+        required=False,
+        default=60,
+    )
+    max_buckets = serializers.IntegerField(
+        min_value=5,
+        max_value=100,
+        required=False,
+        default=30,
+    )
+
+    def validate_group_by(self, value):
+        if not value:
+            return value
+        if value.get("encoding") not in ("binary", "ordinal"):
+            raise serializers.ValidationError(
+                "Time analysis group_by supports only binary or ordinal categorical variables."
+            )
+        return value
+
+
+class ReliabilityAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    variables = AdvancedVariableSer(many=True, allow_empty=False)
+    standardize = serializers.BooleanField(default=False)
+
+    def validate_variables(self, value):
+        if len(value) < 2:
+            raise serializers.ValidationError("Cronbach's alpha requires at least two variables.")
+        return value
+
+
+class CorrespondenceAnalysisSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    row = AdvancedVariableSer()
+    column = AdvancedVariableSer()
+    n_dimensions = serializers.IntegerField(min_value=1, max_value=5, required=False, default=2)
+
+    def validate(self, attrs):
+        if attrs["row"]["question_id"] == attrs["column"]["question_id"]:
+            raise serializers.ValidationError("Row and column variables must be different questions.")
+        return attrs
+
+
+class LogisticRegressionSer(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    target = AdvancedVariableSer()
+    features = AdvancedVariableSer(many=True, allow_empty=False)
+    include_intercept = serializers.BooleanField(default=True)
+    threshold = serializers.FloatField(default=0.5, min_value=0.01, max_value=0.99)
+    max_iter = serializers.IntegerField(default=1000, min_value=50, max_value=10000)
+    learning_rate = serializers.FloatField(default=0.1, min_value=0.0001, max_value=1.0)
+    regularization = serializers.ChoiceField(
+        choices=("none", "l2"),
+        default="l2",
+        required=False,
+    )
+    lambda_ = serializers.FloatField(default=0.01, min_value=0.0, max_value=10.0, required=False)
+
+    def validate_features(self, value):
+        if len(value) < 1:
+            raise serializers.ValidationError("Logistic regression requires at least one feature.")
+        return value
+
+    def validate(self, attrs):
+        target_question_id = attrs["target"]["question_id"]
+        feature_question_ids = [item["question_id"] for item in attrs["features"]]
+        if target_question_id in feature_question_ids:
+            raise serializers.ValidationError("Target question must not be used as a feature.")
+        return attrs

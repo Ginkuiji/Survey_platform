@@ -32,7 +32,7 @@ from .serializers import (
     AnalyticsCsvExportSer, AnalyticsPdfExportSer, AnalyticsXlsxExportSer
 )
 from .permissions import IsAdminRole, IsOrganizerOrAdmin
-from .analytics import question_distribution, survey_distribution
+from survey_analytics.analytics import question_distribution, survey_distribution
 from .answer_services import (
     CHOICE_QTYPES,
     MATRIX_QTYPES,
@@ -42,7 +42,7 @@ from .answer_services import (
     answer_has_value,
     validate_answer_payload,
 )
-from .advanced_analytics_serializers import (
+from survey_analytics.advanced_analytics_serializers import (
     ChiSquareAnalysisSer,
     ClusterAnalysisSer,
     CorrespondenceAnalysisSer,
@@ -57,7 +57,7 @@ from .advanced_analytics_serializers import (
     ScaleIndexSer,
     TimeAnalysisSer,
 )
-from .advanced_analytics_services import (
+from survey_analytics.advanced_analytics_services import (
     run_chi_square_analysis,
     run_cluster_analysis,
     run_correspondence_analysis,
@@ -72,7 +72,7 @@ from .advanced_analytics_services import (
     run_scale_index_analysis,
     run_time_analysis,
 )
-from .advanced_analytics_charts import build_report_section_chart
+from survey_analytics.advanced_analytics_charts import build_report_section_chart
 from .pdf_export import build_analytics_pdf
 from .csv_export import build_analytics_csv
 from .xlsx_export import build_analytics_xlsx

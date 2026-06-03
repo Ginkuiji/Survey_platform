@@ -3,13 +3,20 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from .analytics import classify_question_response_state
-from .analytics_result_format import standardize_analysis_result
-from .analytics_descriptive_profile import describe_numeric_values
-from .advanced_analytics_methods import compute_chi_square, compute_cramers_v, compute_factor_analysis, compute_group_comparison, compute_kmeans_clustering, compute_linear_regression, compute_logistic_regression, compute_cronbach_alpha, compute_scale_index, compute_time_analysis
+from survey_analytics.analytics import classify_question_response_state
+from survey_analytics.analytics_result_format import standardize_analysis_result
+from survey_analytics.analytics_descriptive_profile import describe_numeric_values
+from survey_analytics.advanced_analytics_methods import compute_chi_square, compute_cramers_v, compute_factor_analysis, compute_group_comparison, compute_kmeans_clustering, compute_linear_regression, compute_logistic_regression, compute_cronbach_alpha, compute_scale_index, compute_time_analysis
 
 
 class StandardizedAnalysisResultTests(SimpleTestCase):
+    def test_legacy_analytics_imports_remain_available(self):
+        from surveys import analytics as legacy_analytics
+        from surveys.advanced_analytics_methods import compute_time_analysis as legacy_compute_time_analysis
+
+        self.assertIs(legacy_compute_time_analysis, compute_time_analysis)
+        self.assertTrue(callable(legacy_analytics._response_seen_question_ids))
+
     def test_correlation_contains_required_fields_and_small_sample_warning(self):
         result = {
             "dataset_size": 12,
@@ -278,7 +285,7 @@ class StandardizedAnalysisResultTests(SimpleTestCase):
         self.assertEqual(variable["missing_count"], 1)
         self.assertEqual(variable["outliers"]["method"], "iqr")
 
-    @patch("surveys.analytics._response_seen_question_ids", return_value=set())
+    @patch("survey_analytics.analytics._response_seen_question_ids", return_value=set())
     def test_missing_state_classifier_distinguishes_branching_progress_and_screenout(self, _seen):
         question = SimpleNamespace(id=1)
         pages = []
