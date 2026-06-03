@@ -1,0 +1,180 @@
+﻿ANALYSIS_TITLES = {
+    "correlation": "Корреляционный анализ",
+    "crosstab": "Таблица сопряженности",
+    "chi_square": "χ²-критерий независимости",
+    "correspondence_analysis": "Анализ соответствий",
+    "regression": "Линейная регрессия",
+    "logistic_regression": "Логистическая регрессия",
+    "factor_analysis": "Факторный анализ",
+    "cluster_analysis": "Кластерный анализ",
+    "group_comparison": "Сравнение групп",
+    "time_analysis": "Анализ времени прохождения и отсева",
+    "reliability_analysis": "Анализ надежности шкалы",
+    "scale_index": "Индекс шкалы",
+    "missing_analysis": "Анализ пропусков",
+}
+
+ANALYSIS_PURPOSES = {
+    "correlation": "Метод используется для оценки направления и силы связи между числовыми или порядковыми переменными.",
+    "crosstab": "Метод показывает совместное распределение значений двух категориальных переменных.",
+    "chi_square": "Метод используется для проверки связи между двумя категориальными переменными.",
+    "correspondence_analysis": "Метод помогает визуально исследовать связи между категориями таблицы сопряженности.",
+    "regression": "Метод используется для оценки влияния факторов на числовую целевую переменную.",
+    "logistic_regression": "Метод оценивает влияние факторов на вероятность наступления бинарного события.",
+    "factor_analysis": "Метод используется для выявления скрытых факторов, объясняющих связи между переменными.",
+    "cluster_analysis": "Метод используется для выделения групп респондентов со схожими характеристиками.",
+    "group_comparison": "Метод используется для проверки различий показателя между группами.",
+    "time_analysis": "Метод показывает время прохождения опроса, завершения и отсева респондентов.",
+    "reliability_analysis": "Метод оценивает внутреннюю согласованность пунктов шкалы.",
+    "scale_index": "Метод объединяет ответы по нескольким пунктам в интегральный показатель.",
+    "missing_analysis": "Метод помогает найти пропуски ответов и отличить их от ветвления анкеты.",
+}
+
+RECOMMENDATIONS = {
+    "correlation": ["Для значимых связей рекомендуется построить диаграмму рассеяния и проверить наличие выбросов."],
+    "chi_square": ["Для интерпретации связи учитывайте не только p-value, но и V Крамера, а также распределение по ячейкам таблицы."],
+    "crosstab": [
+        "Для проверки статистической значимости связи можно дополнительно использовать χ²-критерий и Cramér’s V.",
+        "Для интерпретации таблицы важно смотреть не только абсолютные частоты, но и проценты по строкам и по всей выборке.",
+    ],
+    "group_comparison": ["Сопоставляйте p-value с размером эффекта, распределениями внутри групп и результатами post-hoc сравнений."],
+    "regression": [
+        "Сравнивайте R² и adjusted R², особенно если в модели несколько предикторов.",
+        "Проверяйте VIF: высокая мультиколлинеарность делает коэффициенты нестабильными.",
+        "Используйте график остатков для проверки применимости линейной модели.",
+        "Не интерпретируйте регрессионные коэффициенты как причинное влияние без соответствующего дизайна исследования.",
+    ],
+    "logistic_regression": [
+        "Интерпретируйте коэффициенты логистической регрессии через odds ratio.",
+        "При дисбалансе классов accuracy следует оценивать вместе с precision, recall, F1 и balanced accuracy.",
+        "ROC-AUC помогает оценить способность модели различать классы независимо от одного выбранного порога.",
+        "Проверьте events per variable: при малом числе событий коэффициенты могут быть нестабильными.",
+    ],
+    "factor_analysis": [
+        "Проверьте KMO и критерий Бартлетта перед содержательной интерпретацией факторов.",
+        "Используйте scree plot и parallel analysis для выбора числа факторов.",
+        "Интерпретируйте фактор по вопросам с наибольшими абсолютными нагрузками.",
+        "Переменные с низкой communality или cross-loading стоит проверить и при необходимости исключить из шкалы.",
+        "После выбора набора вопросов для шкалы рекомендуется проверить надежность шкалы с помощью alpha Кронбаха.",
+    ],
+    "cluster_analysis": [
+        "Интерпретируйте кластеры по профилям и топ отличающим признакам, а не только по номерам кластеров.",
+        "Проверьте silhouette score и размеры кластеров перед содержательной интерпретацией.",
+        "Используйте PCA scatterplot для визуальной проверки разделения кластеров.",
+        "Используйте elbow plot для оценки выбранного числа кластеров.",
+        "Если кластер имеет мало респондентов, его следует рассматривать осторожно.",
+    ],
+    "time_analysis": [
+        "Проверьте слишком быстрые прохождения перед использованием данных в сложном анализе.",
+        "Если dropout концентрируется на конкретной странице, проверьте длину, сложность и обязательность вопросов на этой странице.",
+        "При заметной доле screenout проверьте условия скрининга и основные причины отсева.",
+    ],
+    "reliability_analysis": [
+        "Проверьте пункты с низкой item-total correlation.",
+        "Если удаление пункта повышает alpha, оцените его формулировку и содержательное соответствие шкале.",
+        "Для шкал с обратными формулировками проверьте необходимость reverse coding.",
+        "После проверки надежности можно использовать выбранные пункты для построения composite score.",
+        "Для проверки одномерности шкалы рекомендуется дополнительно использовать факторный анализ.",
+    ],
+    "scale_index": [
+        "Проверьте содержательное соответствие пунктов единому исследовательскому конструкту.",
+        "Для пунктов с обратной формулировкой проверьте reverse coding.",
+        "Используйте нормировку 0–100 для интерпретации и сравнения шкал.",
+    ],
+    "missing_analysis": ["Для вопросов с высокой долей пропусков проверьте формулировку, обязательность заполнения и условия ветвления."],
+}
+
+VISUALIZATIONS = {
+    "correlation": [
+        ("correlation_heatmap", "Тепловая карта корреляций"),
+        ("correlation_scatterplot", "Диаграмма рассеяния"),
+        ("ranked_scatterplot", "Ранговая диаграмма рассеяния"),
+        ("correlation_network", "Сеть сильных корреляций"),
+    ],
+    "crosstab": [
+        {"type": "stacked_bar", "title": "Составная столбчатая диаграмма", "recommended": True, "description": "Показывает распределение категорий столбцовой переменной внутри категорий строковой переменной."},
+        {"type": "crosstab_table", "title": "Таблица сопряженности", "recommended": True},
+        {"type": "mosaic_plot", "title": "Mosaic plot", "recommended": False, "description": "Показывает структуру совместного распределения категорий."},
+    ],
+    "chi_square": [
+        {"type": "stacked_bar", "title": "Составная столбчатая диаграмма", "recommended": True},
+        {"type": "standardized_residual_heatmap", "title": "Тепловая карта стандартизированных остатков", "recommended": True, "description": "Показывает ячейки, которые сильнее всего отличаются от ожидаемых частот."},
+        {"type": "chi_square_contribution_heatmap", "title": "Тепловая карта вкладов в χ²", "recommended": True, "description": "Показывает, какие ячейки дают наибольший вклад в значение χ²."},
+        {"type": "mosaic_plot", "title": "Mosaic plot", "recommended": False},
+    ],
+    "correspondence_analysis": [("correspondence_map", "Карта соответствий"), ("inertia_chart", "Объясненная инерция")],
+    "regression": [
+        {"type": "regression_coefficients", "title": "Коэффициенты регрессии", "recommended": True, "description": "Показывает направление и величину связи предикторов с целевой переменной."},
+        {"type": "coefficient_confidence_intervals", "title": "Доверительные интервалы коэффициентов", "recommended": True, "description": "Показывает неопределенность оценки коэффициентов."},
+        {"type": "observed_vs_predicted", "title": "Наблюдаемые и предсказанные значения", "recommended": True, "description": "Показывает, насколько хорошо модель воспроизводит фактические значения."},
+        {"type": "residual_plot", "title": "График остатков", "recommended": True, "description": "Помогает оценить нелинейность, выбросы и неоднородность дисперсии."},
+        {"type": "residual_histogram", "title": "Распределение остатков", "recommended": False},
+        {"type": "partial_effect", "title": "Частичный эффект фактора", "recommended": False},
+    ],
+    "logistic_regression": [
+        {"type": "odds_ratio_forest_plot", "title": "Odds ratio по факторам", "recommended": True},
+        {"type": "confusion_matrix_heatmap", "title": "Матрица ошибок", "recommended": True},
+        {"type": "roc_curve", "title": "ROC-кривая", "recommended": True},
+        {"type": "probability_histogram", "title": "Распределение предсказанных вероятностей", "recommended": True},
+        {"type": "calibration_plot", "title": "Калибровка вероятностей", "recommended": False},
+        {"type": "threshold_metrics", "title": "Метрики при разных порогах", "recommended": False},
+    ],
+    "factor_analysis": [
+        {"type": "scree_plot", "title": "Scree plot", "recommended": True, "description": "Показывает eigenvalues компонентов и помогает выбрать число факторов."},
+        {"type": "parallel_analysis_plot", "title": "Parallel analysis", "recommended": True, "description": "Сравнивает eigenvalues реальных данных со случайными данными."},
+        {"type": "factor_loadings_heatmap", "title": "Тепловая карта факторных нагрузок", "recommended": True},
+        {"type": "explained_variance_bar", "title": "Объясненная дисперсия", "recommended": True},
+        {"type": "communalities_bar", "title": "Communalities", "recommended": True},
+        {"type": "factor_score_scatterplot", "title": "Диаграмма факторных значений", "recommended": False},
+        {"type": "pca_biplot", "title": "PCA biplot", "recommended": False},
+    ],
+    "cluster_analysis": [
+        {"type": "cluster_sizes", "title": "Размеры кластеров", "recommended": True},
+        {"type": "profile_heatmap", "title": "Профили кластеров", "recommended": True},
+        {"type": "pca_scatter", "title": "PCA scatterplot кластеров", "recommended": True},
+        {"type": "radar", "title": "Radar chart профиля кластера", "recommended": False},
+        {"type": "silhouette", "title": "Silhouette plot", "recommended": True},
+        {"type": "elbow", "title": "Elbow plot", "recommended": True},
+        {"type": "distances", "title": "Расстояния до центроидов", "recommended": False},
+    ],
+    "group_comparison": [
+        {"type": "group_boxplot", "title": "Boxplot по группам", "recommended": True, "description": "Показывает медиану, квартильный размах и выбросы в каждой группе."},
+        {"type": "group_mean_ci_plot", "title": "Средние значения с доверительными интервалами", "recommended": True, "description": "Показывает различия средних значений между группами."},
+        {"type": "group_violin_plot", "title": "Violin plot", "recommended": False, "description": "Показывает форму распределения внутри групп."},
+        {"type": "post_hoc_table", "title": "Таблица post-hoc сравнений", "recommended": True},
+    ],
+    "time_analysis": [
+        {"type": "histogram", "title": "Распределение времени прохождения", "recommended": True},
+        {"type": "boxplot", "title": "Boxplot времени прохождения", "recommended": True},
+        {"type": "funnel", "title": "Воронка прохождения по страницам", "recommended": True},
+        {"type": "retention_curve", "title": "Retention curve", "recommended": True},
+        {"type": "dropout_by_page", "title": "Dropout по страницам", "recommended": True},
+        {"type": "screenout_reasons", "title": "Причины screenout", "recommended": True},
+        {"type": "group_boxplot", "title": "Сравнение времени по группам", "recommended": False},
+        {"type": "flow", "title": "Поток прохождения", "recommended": False, "description": "Агрегированная таблица потока доступна в интерактивном отчете."},
+    ],
+    "reliability_analysis": [
+        {"type": "item_total_correlation", "title": "Item-total correlation", "recommended": True},
+        {"type": "alpha_if_deleted", "title": "Alpha if item deleted", "recommended": True},
+        {"type": "inter_item_correlation_heatmap", "title": "Межпунктовые корреляции", "recommended": True},
+        {"type": "item_statistics", "title": "Статистики пунктов шкалы", "recommended": False},
+    ],
+    "scale_index": [
+        {"type": "distribution", "title": "Распределение индекса", "recommended": True},
+        {"type": "boxplot", "title": "Boxplot индекса", "recommended": True},
+        {"type": "groups", "title": "Группы уровней индекса", "recommended": True},
+        {"type": "score_card", "title": "Score card среднего индекса", "recommended": True},
+        {"type": "items_correlation_heatmap", "title": "Корреляции пунктов индекса", "recommended": False},
+    ],
+    "missing_analysis": [
+        ("missing_rate", "Доля пропусков по вопросам"),
+        ("missing_stacked_status", "Причины отсутствия ответов"),
+    ],
+}
+
+CORRELATION_METHOD_HINTS = {
+    "pearson": "Pearson оценивает линейную связь числовых переменных. Проверьте диаграмму рассеяния и выбросы.",
+    "spearman": "Spearman оценивает монотонную связь по рангам и подходит для порядковых данных или нелинейной монотонной зависимости.",
+    "kendall": "Kendall оценивает ранговую согласованность и полезен для порядковых данных, небольших выборок и большого числа совпадающих рангов.",
+}
+
