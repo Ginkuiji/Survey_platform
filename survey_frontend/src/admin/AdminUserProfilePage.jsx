@@ -61,7 +61,7 @@ export default function AdminUserProfilePage() {
 
   const handleDelete = async () => {
     await deleteUser(id);
-    navigate("/admin/users");
+    navigate("/management/users");
   };
 
   if (isLoading || !form) return null;

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSurveys } from "../api/surveys";
 import { fetchUserProfile } from "../api/users";
+import { formatDate } from "../utils/date";
 import {
   Card,
   CardContent,
@@ -132,11 +133,11 @@ export default function SurveyListPage() {
               {/* Правая часть: даты */}
               <Box sx={{ textAlign: "right", minWidth: 140 }}>
                 <Typography variant="caption" sx={{ color: "gray", display: "block" }}>
-                  Начало: {s.starts_at || "—"}
+                  Начало: {formatDate(s.starts_at)}
                 </Typography>
 
                 <Typography variant="caption" sx={{ color: "gray", display: "block" }}>
-                  Конец: {s.ends_at || "—"}
+                  Конец: {formatDate(s.ends_at)}
                 </Typography>
               </Box>
             </CardContent>

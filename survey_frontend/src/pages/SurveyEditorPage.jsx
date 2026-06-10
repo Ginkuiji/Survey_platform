@@ -351,7 +351,7 @@ export default function SurveyEditorPage() {
       await saveConditionsForSurvey(newSurvey.id, survey.pages, buildPages(savedSurvey));
 
       alert("Создана копия опроса");
-      navigate(`/admin/surveys/${newSurvey.id}`);
+      navigate(`/management/surveys/${newSurvey.id}`);
       return;
     }
 

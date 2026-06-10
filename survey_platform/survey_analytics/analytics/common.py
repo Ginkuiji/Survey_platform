@@ -95,6 +95,21 @@ def get_question_answers(question_id: int, completed_response_ids: Optional[Iter
 
 # ---- Analysis base layer --------------------------------------------------
 
+def _extract_scale_value(answer: Answer) -> Optional[float]:
+    numeric_value = getattr(answer, "num", None)
+    if numeric_value is None:
+        numeric_value = getattr(answer, "number", None)
+    if numeric_value is not None:
+        return float(numeric_value)
+    text_value = getattr(answer, "text", None)
+    if text_value not in (None, ""):
+        try:
+            return float(text_value)
+        except ValueError:
+            return None
+    return None
+
+
 def _answer_has_value(question: Question, answer: Answer) -> bool:
     if question.qtype in (Question.SINGLE, Question.MULTI, Question.DROPDOWN, Question.YESNO):
         return bool(list(answer.selected_options.all()))

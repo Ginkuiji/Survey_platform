@@ -17,6 +17,17 @@ class StandardizedAnalysisResultTests(SimpleTestCase):
         self.assertIs(legacy_compute_time_analysis, compute_time_analysis)
         self.assertTrue(callable(legacy_analytics._response_seen_question_ids))
 
+    def test_answer_has_value_handles_scale_answers_after_analytics_split(self):
+        from survey_analytics.analytics import _answer_has_value
+        from surveys.models import Question
+
+        question = SimpleNamespace(qtype=Question.SCALE)
+
+        self.assertTrue(_answer_has_value(question, SimpleNamespace(num=5, text="")))
+        self.assertTrue(_answer_has_value(question, SimpleNamespace(num=None, text="4")))
+        self.assertTrue(_answer_has_value(question, SimpleNamespace(number=5, text="")))
+        self.assertFalse(_answer_has_value(question, SimpleNamespace(num=None, text="not-a-number")))
+
     def test_correlation_contains_required_fields_and_small_sample_warning(self):
         result = {
             "dataset_size": 12,

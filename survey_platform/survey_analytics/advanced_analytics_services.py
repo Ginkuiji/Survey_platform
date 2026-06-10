@@ -546,8 +546,8 @@ def run_missing_analysis(payload: dict) -> dict:
         context = {
             "total_screened_out": len(screened_out_responses),
             "note": (
-                "Screened out responses are excluded from main missing analysis. "
-                "They are shown separately because respondents intentionally left the questionnaire due to screening logic."
+                "Респонденты, отсеянные скрининговой логикой, исключены из основной оценки пропусков. "
+                "Они показаны отдельно, потому что завершили анкету досрочно по правилам отбора."
             ),
         }
         if screened_out_responses:

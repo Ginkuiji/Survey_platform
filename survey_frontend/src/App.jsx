@@ -19,6 +19,10 @@ import SurveyAnalyticsPage from './pages/analytics/SurveyAnalyticPage';
 import ReportBuilderPage from "./pages/analytics/ReportBuilderPage";
 import ReportResultPage from "./pages/analytics/ReportResultPage";
 import CreateSurveyPage from './pages/CreateSurveyPage';
+import RequireRole from './components/RequireRole';
+
+const adminOnly = ["admin"];
+const organizerOrAdmin = ["admin", "organizer"];
 
 export default function App() {
   return(
@@ -31,11 +35,11 @@ export default function App() {
         <Route path='/register' element={<RegisterPage/>}/>
         <Route path='/profile' element={<MainLayout><UserProfilePage/></MainLayout>}/>
         
-        <Route path='/admin/dashboard' element={<MainLayout><AdminDashboardPage/></MainLayout>}/>
-        <Route path='/admin/users' element={<MainLayout><AdminUsersPage/></MainLayout>}/>
-        <Route path='/admin/users/:id' element={<MainLayout><AdminUserProfilePage/></MainLayout>} />
-        <Route path='/admin/surveys' element={<MainLayout><AdminSurveysPage/></MainLayout>}/>
-        <Route path='/admin/surveys/:id' element={<MainLayout><AdminSurveyEditorPage/></MainLayout>}/>
+        <Route path='/management/dashboard' element={<RequireRole allowedRoles={adminOnly}><MainLayout><AdminDashboardPage/></MainLayout></RequireRole>}/>
+        <Route path='/management/users' element={<RequireRole allowedRoles={adminOnly}><MainLayout><AdminUsersPage/></MainLayout></RequireRole>}/>
+        <Route path='/management/users/:id' element={<RequireRole allowedRoles={adminOnly}><MainLayout><AdminUserProfilePage/></MainLayout></RequireRole>} />
+        <Route path='/management/surveys' element={<RequireRole allowedRoles={organizerOrAdmin}><MainLayout><AdminSurveysPage/></MainLayout></RequireRole>}/>
+        <Route path='/management/surveys/:id' element={<RequireRole allowedRoles={organizerOrAdmin}><MainLayout><AdminSurveyEditorPage/></MainLayout></RequireRole>}/>
         
         <Route path='/analytics/surveys' element={<MainLayout><SurveyAnalyticsListPage/></MainLayout>}/>
         <Route path='/analytics/surveys/:id' element={<MainLayout><SurveyAnalyticsPage/></MainLayout>}/>

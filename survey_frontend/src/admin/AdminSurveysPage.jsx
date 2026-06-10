@@ -121,7 +121,7 @@ export default function AdminSurveysPage() {
                   key={s.id}
                   hover
                   sx={{ cursor: "pointer" }}
-                  onClick={() => navigate(`/admin/surveys/${s.id}`)}
+                  onClick={() => navigate(`/management/surveys/${s.id}`)}
                 >
                   <TableCell>{s.title}</TableCell>
                   <TableCell>{s.description}</TableCell>

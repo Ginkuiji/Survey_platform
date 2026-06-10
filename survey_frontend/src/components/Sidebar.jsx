@@ -90,7 +90,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
           </ListItemButton>
 
           {isOrganizer && (
-            <ListItemButton component={Link} to="/admin/surveys">
+            <ListItemButton component={Link} to="/management/surveys">
               <ListItemText primary="Мои опросы" />
             </ListItemButton>
           )}
@@ -105,24 +105,24 @@ export default function Sidebar({ mobileOpen, onClose }) {
               <ListItemText primary="Создать опрос" />
             </ListItemButton>
 
-            <ListItemButton component={Link} to="/">
+            {/* <ListItemButton component={Link} to="/">
               <ListItemText primary="Пройти опрос" />
-            </ListItemButton>
+            </ListItemButton> */}
           </>
           )}
 
           {isAdmin && (
             <>
-              <ListItemButton component={Link} to="/admin/dashboard">
+              <ListItemButton component={Link} to="/management/dashboard">
                 <ListItemText primary="Админ-панель" />
               </ListItemButton>
 
-              <ListItemButton component={Link} to="/admin/users">
+              <ListItemButton component={Link} to="/management/users">
                 <ListItemText primary="Пользователи" />
               </ListItemButton>
 
-              <ListItemButton component={Link} to="/admin/surveys">
-                <ListItemText primary="Опросы" />
+              <ListItemButton component={Link} to="/management/surveys">
+                <ListItemText primary="Редактор опросов" />
               </ListItemButton>
             </>
           )}

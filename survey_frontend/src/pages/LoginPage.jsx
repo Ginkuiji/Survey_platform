@@ -1,6 +1,7 @@
-import { Container, TextField, Button, Typography, Box } from "@mui/material";
+import { TextField, Button, Typography, Box } from "@mui/material";
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { API_URL } from "../api/client";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -15,7 +16,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/token/", {
+      const res = await fetch(`${API_URL}/token/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -36,7 +37,7 @@ export default function LoginPage() {
       localStorage.setItem("accessToken", data.access);
       localStorage.setItem("refreshToken", data.refresh);
 
-      const meRes = await fetch("http://127.0.0.1:8000/api/users/me/", {
+      const meRes = await fetch(`${API_URL}/users/me/`, {
         headers: {
           Authorization: `Bearer ${data.access}`,
         },
@@ -51,7 +52,7 @@ export default function LoginPage() {
       localStorage.setItem("currentUser", JSON.stringify(meData));
 
       if (meData.role === "admin") {
-        navigate("/admin/dashboard");
+        navigate("/management/dashboard");
       } else {
         navigate("/");
       }

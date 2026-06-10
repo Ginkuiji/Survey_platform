@@ -606,7 +606,7 @@ export default function SurveyPassPage() {
   }
 
   return (
-    <Container maxWidth="md" sx={{ mt: 4 }}>
+    <Container maxWidth="md" sx={{ mt: 4, width: 100 }}>
       <Button
         startIcon={<ArrowBackIcon />}
         onClick={() => navigate(-1)}

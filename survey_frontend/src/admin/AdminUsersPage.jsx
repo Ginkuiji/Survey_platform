@@ -14,6 +14,7 @@ import {
 } from "@mui/material";
 import { fetchAllUsers } from "../api/users";
 import { useNavigate } from "react-router-dom";
+import { formatDateTime } from "../utils/date";
 
 export default function AdminUsersPage() {
   const navigate = useNavigate();
@@ -72,12 +73,12 @@ export default function AdminUsersPage() {
                   key={user.id}
                   hover
                   sx={{ cursor: "pointer" }}
-                  onClick={() => navigate(`/admin/users/${user.id}`)}
+                  onClick={() => navigate(`/management/users/${user.id}`)}
                 >
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{user.first_name} {user.last_name}</TableCell>
                   <TableCell>{user.role}</TableCell>
-                  <TableCell>{user.date_joined}</TableCell>
+                  <TableCell>{formatDateTime(user.date_joined)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

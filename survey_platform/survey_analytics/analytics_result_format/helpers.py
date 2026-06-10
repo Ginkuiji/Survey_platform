@@ -145,6 +145,8 @@ def build_correlation_network(result):
             {
                 "source": item["left"],
                 "target": item["right"],
+                "source_label": item["left_label"],
+                "target_label": item["right_label"],
                 "coefficient": item["coefficient"],
                 "strength": item["strength"],
             }

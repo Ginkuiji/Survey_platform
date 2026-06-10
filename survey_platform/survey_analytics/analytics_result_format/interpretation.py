@@ -12,9 +12,9 @@ def _build_base_interpretation(analysis_type, result, effect_size):
         if strongest:
             item = strongest[0]
             summary = (
-                f"Наиболее выраженная связь обнаружена между переменными {item['left']} и {item['right']}: "
-                f"r = {item['coefficient']:.3f}. Связь {correlation_direction(item['coefficient'])} и "
-                f"{interpret_correlation(item['coefficient'])}."
+                f"Наиболее выраженная связь обнаружена между «{item['left_label']}» и «{item['right_label']}»: "
+                f"r = {item['coefficient']:.3f}. Направление связи: {correlation_direction(item['coefficient'])}; "
+                f"сила связи: {interpret_correlation(item['coefficient'])}."
             )
         else:
             summary = "Для выбранных переменных не удалось выделить парную корреляционную связь."

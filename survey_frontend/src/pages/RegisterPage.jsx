@@ -1,6 +1,7 @@
-import { Container, TextField, Button, Typography, Box } from "@mui/material";
+import { TextField, Button, Typography, Box } from "@mui/material";
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { API_URL } from "../api/client";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -25,7 +26,7 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/auth/register/", {
+      const res = await fetch(`${API_URL}/auth/register/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -119,6 +120,18 @@ export default function RegisterPage() {
         <Button variant="contained" fullWidth onClick={handleRegister} disabled={loading}>
           {loading? "Регистрация..." : "Зарегистрироваться"}
         </Button>
+
+        {error && (
+          <Typography color="error" sx={{ mt: 2, textAlign: "center" }}>
+            {error}
+          </Typography>
+        )}
+
+        {success && (
+          <Typography color="success.main" sx={{ mt: 2, textAlign: "center" }}>
+            {success}
+          </Typography>
+        )}
 
         <Typography sx={{ mt: 2 }}>
           Уже есть аккаунт? <Link to="/login">Войти</Link>

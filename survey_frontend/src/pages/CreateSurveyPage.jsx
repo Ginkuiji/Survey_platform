@@ -222,7 +222,7 @@ export default function CreateSurveyPage() {
     await saveSurveyConditions(created.id, conditionsPayload);
 
     alert("Опрос создан");
-    navigate(`/admin/surveys/${created.id}`);
+    navigate(`/management/surveys/${created.id}`);
   };
 
   return (

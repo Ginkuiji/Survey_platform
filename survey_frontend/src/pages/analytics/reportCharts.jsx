@@ -885,7 +885,14 @@ export function ResponseQualityFlagsTable({ result }) {
 export function TimeFlowTable({ result }) {
   const links = result?.flow?.links || [];
   if (!links.length) return chartEmpty("Поток прохождения недоступен.");
-  return <Box sx={{ overflowX: "auto" }}><Typography variant="subtitle1">Агрегированный поток прохождения</Typography><Table size="small"><TableHead><TableRow><TableCell>Откуда</TableCell><TableCell>Куда</TableCell><TableCell align="right">Респондентов</TableCell></TableRow></TableHead><TableBody>{links.map((item, index) => <TableRow key={`${item.source}-${item.target}-${index}`}><TableCell>{item.source}</TableCell><TableCell>{item.target}</TableCell><TableCell align="right">{formatNumber(item.value)}</TableCell></TableRow>)}</TableBody></Table></Box>;
+  const nodeLabels = Object.fromEntries((result?.flow?.nodes || []).map((node) => [node.id, node.label]));
+  const labelForNode = (id) => nodeLabels[id] || {
+    start: "Начали",
+    completed: "Завершили",
+    screenout: "Отсеяны",
+    unfinished: "Не завершили",
+  }[id] || id;
+  return <Box sx={{ overflowX: "auto" }}><Typography variant="subtitle1">Агрегированный поток прохождения</Typography><Table size="small"><TableHead><TableRow><TableCell>Откуда</TableCell><TableCell>Куда</TableCell><TableCell align="right">Респондентов</TableCell></TableRow></TableHead><TableBody>{links.map((item, index) => <TableRow key={`${item.source}-${item.target}-${index}`}><TableCell>{labelForNode(item.source)}</TableCell><TableCell>{labelForNode(item.target)}</TableCell><TableCell align="right">{formatNumber(item.value)}</TableCell></TableRow>)}</TableBody></Table></Box>;
 }
 
 export function MissingAnalysisChart({ result }) {

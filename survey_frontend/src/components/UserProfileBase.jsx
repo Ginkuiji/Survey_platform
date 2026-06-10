@@ -1,5 +1,5 @@
 import { Card, CardContent, TextField, Typography, Box, Button, Avatar } from "@mui/material";
-import { blue } from "@mui/material/colors";
+import { formatDateTime } from "../utils/date";
 
 export default function UserProfileBase({
   user,
@@ -90,7 +90,7 @@ export default function UserProfileBase({
         {showAdminActions && (
           <Box sx={{ mt: 2 }}>
             <Typography variant="body2" sx={{ mb: 1 }}>
-              Дата регистрации: {user.date_joined || "-"}
+              Дата регистрации: {formatDateTime(user.date_joined)}
             </Typography>
 
             <Box sx={{ display: "flex", gap: 2, mt: 2, ml: "13%" }}>
@@ -112,6 +112,7 @@ export default function UserProfileBase({
               <Button variant="contained" color="error" onClick={onDelete}>
                 Удалить пользователя
               </Button>
+              <a color="blue">Сбросить пароль</a>
             </Box>
           </Box>
         )}

@@ -1,4 +1,4 @@
-export const API_URL = "http://127.0.0.1:8000/api";
+export const API_URL = import.meta.env.VITE_API_URL || "/api";
 
 function clearAuthAndRedirect() {
   localStorage.removeItem("accessToken");
@@ -40,10 +40,10 @@ function isAuthError(status, text) {
   if (status == 403) {
     const lower = text.toLowerCase();
     return (
-      lower.includes("token") ||
-      lower.includes("credentials") ||
-      lower.includes("authentication") ||
+      lower.includes("authentication credentials were not provided") ||
       lower.includes("not authenticated") ||
+      lower.includes("invalid token") ||
+      lower.includes("token not valid") ||
       lower.includes("given token not valid")
     );
   }

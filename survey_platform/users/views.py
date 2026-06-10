@@ -1,4 +1,3 @@
-from django.shortcuts import render
 from rest_framework import viewsets, status
 from rest_framework.permissions import AllowAny
 from rest_framework.decorators import action
@@ -6,6 +5,7 @@ from rest_framework.response import Response as DRFResponse
 from .userSerializers import RegisterSer
 
 class AuthViewSet(viewsets.ViewSet):
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     @action(detail=False, methods=["post"], url_path="register")

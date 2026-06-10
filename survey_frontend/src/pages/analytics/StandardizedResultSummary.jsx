@@ -21,6 +21,90 @@ function formatValue(value) {
   return String(value);
 }
 
+const MAIN_RESULT_LABELS = {
+  adjusted_r2: "Скорректированный R²",
+  average_completion_time_seconds: "Среднее время полного прохождения, сек.",
+  average_screenout_time_seconds: "Среднее время до отсева, сек.",
+  average_seconds: "Среднее, сек.",
+  average_inter_item_correlation: "Средняя межпунктовая корреляция",
+  base_rate: "Базовая частота события",
+  balanced_accuracy: "Balanced accuracy",
+  bartlett_p_value: "p-value критерия Бартлетта",
+  completion_rate: "Доля полных завершений, %",
+  cronbach_alpha: "Alpha Кронбаха",
+  cumulative_explained_variance: "Накопленная объясненная дисперсия",
+  dof: "Степени свободы",
+  expected_below_5_rate: "Ожидаемых частот меньше 5, %",
+  features_count: "Количество факторов",
+  finish_rate: "Доля завершивших, %",
+  groups_count: "Количество групп",
+  high_group_percent: "Доля высокого уровня, %",
+  iqr_duration_seconds: "IQR длительности, сек.",
+  items_count: "Количество пунктов",
+  kmo_overall: "KMO общий",
+  max_completion_time_seconds: "Максимальное время полного прохождения, сек.",
+  max_screenout_time_seconds: "Максимальное время до отсева, сек.",
+  max_cluster_size: "Максимальный размер кластера",
+  mean_normalized_score: "Среднее 0–100",
+  mean_score: "Среднее значение индекса",
+  median_completion_time_seconds: "Медианное время полного прохождения, сек.",
+  median_duration_seconds: "Медианное время, сек.",
+  median_screenout_time_seconds: "Медианное время до отсева, сек.",
+  min_cluster_size: "Минимальный размер кластера",
+  min_completion_time_seconds: "Минимальное время полного прохождения, сек.",
+  min_screenout_time_seconds: "Минимальное время до отсева, сек.",
+  n: "Наблюдений",
+  n_clusters: "Количество кластеров",
+  n_dimensions: "Количество измерений",
+  n_factors: "Количество факторов",
+  n_variables: "Количество переменных",
+  p25_duration_seconds: "P25 длительности, сек.",
+  p75_duration_seconds: "P75 длительности, сек.",
+  p_value: "p-value",
+  possibly_low_quality_rate: "Возможное низкое качество, %",
+  precision: "Precision",
+  problematic_items_count: "Проблемных пунктов",
+  r2: "R²",
+  recall: "Recall",
+  recommended_n_factors: "Рекомендованное число факторов",
+  rmse: "RMSE",
+  roc_auc: "ROC-AUC",
+  rows_count: "Количество строк",
+  screenout_rate: "Доля отсева, %",
+  significant: "Статистически значимо",
+  significant_coefficients_count: "Значимых коэффициентов",
+  significant_post_hoc_pairs_count: "Значимых post-hoc пар",
+  silhouette_score: "Silhouette score",
+  specificity: "Specificity",
+  table_size: "Размер таблицы",
+  too_fast_rate: "Слишком быстрых, %",
+  total_active_unfinished: "Активных незавершенных",
+  total_completed: "Полностью завершили",
+  total_finished: "Завершили",
+  total_screened_out: "Отсеяны",
+  total_started: "Начали",
+};
+
+const METHOD_LABELS = {
+  kendall: "Kendall",
+  pearson: "Pearson",
+  spearman: "Spearman",
+};
+
+function formatMainResultLabel(name) {
+  return MAIN_RESULT_LABELS[name] || name.replaceAll("_", " ");
+}
+
+function isChipValue(value) {
+  return value !== null && value !== undefined && ["string", "number", "boolean"].includes(typeof value);
+}
+
+function formatMainResultValue(name, value, variableLabels = {}) {
+  if (name === "method") return METHOD_LABELS[value] || value;
+  if (typeof value === "string" && variableLabels[value]) return variableLabels[value];
+  return formatValue(value);
+}
+
 function formatPercent(value) {
   if (value === null || value === undefined) return "—";
   return `${formatValue(value)}%`;
@@ -210,7 +294,12 @@ export default function StandardizedResultSummary({ result }) {
   if (!result) return null;
 
   const indicators = Object.entries(result.main_results || {}).filter(
-    ([, value]) => value !== null && value !== undefined && !Array.isArray(value),
+    ([, value]) => isChipValue(value),
+  );
+  const variableLabels = Object.fromEntries(
+    (result.input_summary?.variables || [])
+      .filter((variable) => variable.code && variable.label)
+      .map((variable) => [variable.code, variable.label]),
   );
 
   return (
@@ -247,7 +336,7 @@ export default function StandardizedResultSummary({ result }) {
           <Typography variant="subtitle1" sx={{ mb: 1 }}>Главные показатели</Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             {indicators.map(([name, value]) => (
-              <Chip key={name} label={`${name}: ${formatValue(value)}`} />
+              <Chip key={name} label={`${formatMainResultLabel(name)}: ${formatMainResultValue(name, value, variableLabels)}`} />
             ))}
           </Stack>
         </Box>

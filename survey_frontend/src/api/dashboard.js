@@ -1,11 +1,6 @@
 import { fetchAdminSurveys, fetchSurveyResponses } from "./surveys";
 import { fetchAllUsers } from "./users";
-
-function toDate(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
+import { formatDateTime, toDate } from "../utils/date";
 
 function dateKey(value) {
   const date = toDate(value);
@@ -56,19 +51,6 @@ async function fetchResponsesForSurveys(surveys) {
   );
 
   return responseGroups.flat();
-}
-
-function formatDateTime(value) {
-  const date = toDate(value);
-  if (!date) return "—";
-
-  return date.toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 export async function fetchDashboardData() {
