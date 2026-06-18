@@ -40,8 +40,9 @@ import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 
 const surveyPassContainerSx = {
   width: "100%",
-  maxWidth: "1100px",
+  minWidth: 900,
   mx: "auto",
+  ml: "30%",
   mt: 4,
   px: { xs: 2, sm: 3 },
 

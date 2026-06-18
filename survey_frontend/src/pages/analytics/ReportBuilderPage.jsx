@@ -90,6 +90,7 @@ const compactReportBuilderSx = {
   mt: 2,
   width: "100%",
   maxWidth: REPORT_PAGE_WIDTH,
+  minWidth: 700,
   mx: "auto",
   pb: 3,
   "& .MuiCard-root": {
