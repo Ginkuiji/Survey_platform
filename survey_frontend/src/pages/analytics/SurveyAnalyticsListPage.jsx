@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchAdminSurveys } from "../../api/surveys";
 import {
@@ -5,6 +6,7 @@ import {
   Typography,
   Card,
   CardContent,
+  TextField,
   Grid,
   Chip
 } from "@mui/material";
@@ -12,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 
 export default function SurveyAnalyticsListPage() {
   const navigate = useNavigate();
+  const [search, setSearch] = useState("");
 
   const { data: surveys } = useQuery({
     queryKey: ["admin-surveys"],
@@ -20,20 +23,36 @@ export default function SurveyAnalyticsListPage() {
 
   if (!surveys) return null;
 
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredSurveys = surveys.filter(survey => {
+    if (survey.status === "deleted") return false;
+    return !normalizedSearch
+      || survey.title.toLowerCase().includes(normalizedSearch)
+      || (survey.description || "").toLowerCase().includes(normalizedSearch);
+  });
+
   return (
     <Container sx={{ mt: 0 }}>
       <Typography variant="h4" sx={{ mb: 3 }}>
         Аналитика моих опросов
       </Typography>
 
-      {surveys.length === 0 && (
+      <TextField
+        fullWidth
+        label="Поиск по названию и описанию"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        sx={{ mb: 3 }}
+      />
+
+      {filteredSurveys.length === 0 && (
         <Typography variant="body1">
-          У вас пока нет опросов с доступной аналитикой.
+          Опросы с доступной аналитикой не найдены.
         </Typography>
       )}
 
       <Grid container spacing={3}>
-        {surveys.map(survey => (
+        {filteredSurveys.map(survey => (
           <Grid item xs={12} md={6} lg={4} key={survey.id}>
             <Card
               sx={{ cursor: "pointer", width: "100%" }}

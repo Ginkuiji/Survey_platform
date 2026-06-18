@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Alert,
   Container,
   Typography,
   Card,
@@ -15,19 +16,43 @@ import {
   Grid
 } from "@mui/material";
 
-import { fetchAdminSurveys } from "../api/surveys";
+import { fetchAdminSurveys, updateSurvey } from "../api/surveys";
 import { useNavigate } from "react-router-dom";
+
+const STATUS_LABELS = {
+  draft: "Черновик",
+  active: "Активный",
+  closed: "Закрыт",
+  deleted: "Удалён",
+};
 
 export default function AdminSurveysPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
+  const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [author, setAuthor] = useState("");
   const [date, setDate] = useState("");
+  const [statusError, setStatusError] = useState("");
 
   const { data: surveys } = useQuery({
     queryKey: ["allSurveys"],
     queryFn: fetchAdminSurveys
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ surveyId, nextStatus }) =>
+      updateSurvey(surveyId, { status: nextStatus }),
+    onSuccess: () => {
+      setStatusError("");
+      queryClient.invalidateQueries({ queryKey: ["allSurveys"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-surveys"] });
+      queryClient.invalidateQueries({ queryKey: ["surveys"] });
+    },
+    onError: (error) => {
+      setStatusError(error.message || "Не удалось изменить статус опроса.");
+    },
   });
 
   if (!surveys) return null;
@@ -36,10 +61,14 @@ export default function AdminSurveysPage() {
 
   // Фильтрация
   const filtered = surveys.filter(s => {
+    const normalizedSearch = search.trim().toLowerCase();
+    const okSearch = !normalizedSearch
+      || s.title.toLowerCase().includes(normalizedSearch)
+      || (s.description || "").toLowerCase().includes(normalizedSearch);
     const okStatus = status ? s.status === status : true;
     const okAuthor = author ? s.author === author : true;
     const okDate = date ? s.starts_at === date : true;
-    return okStatus && okAuthor && okDate;
+    return okSearch && okStatus && okAuthor && okDate;
   });
 
   return (
@@ -48,10 +77,20 @@ export default function AdminSurveysPage() {
         Опросы
       </Typography>
 
+      {statusError && <Alert severity="error" sx={{ mb: 2 }}>{statusError}</Alert>}
+
       {/* Фильтры */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Grid container spacing={2}>
+            <Grid item xs={12} md={4} sx={{ width: "30%" }}>
+              <TextField
+                label="Поиск по названию и описанию"
+                fullWidth
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </Grid>
 
             <Grid item xs={12} md={4} sx={{width: "20%"}}>
               <TextField
@@ -65,6 +104,7 @@ export default function AdminSurveysPage() {
                 <MenuItem value="draft">Черновик</MenuItem>
                 <MenuItem value="active">Активный</MenuItem>
                 <MenuItem value="closed">Закрыт</MenuItem>
+                <MenuItem value="deleted">Удалён</MenuItem>
               </TextField>
             </Grid>
 
@@ -125,12 +165,40 @@ export default function AdminSurveysPage() {
                 >
                   <TableCell>{s.title}</TableCell>
                   <TableCell>{s.description}</TableCell>
-                  <TableCell>{s.status}</TableCell>
+                  <TableCell onClick={event => event.stopPropagation()}>
+                    <TextField
+                      select
+                      size="small"
+                      value={s.status}
+                      disabled={statusMutation.isPending}
+                      onChange={event => {
+                        statusMutation.mutate({
+                          surveyId: s.id,
+                          nextStatus: event.target.value,
+                        });
+                      }}
+                      sx={{ minWidth: 130 }}
+                    >
+                      {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                        <MenuItem key={value} value={value}>
+                          {label}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </TableCell>
                   <TableCell>{s.author}</TableCell>
                   <TableCell>{s.responses_count}</TableCell>
                   <TableCell>{s.starts_at}</TableCell>
                 </TableRow>
               ))}
+
+              {!filtered.length && (
+                <TableRow>
+                  <TableCell colSpan={6}>
+                    Опросы не найдены.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>

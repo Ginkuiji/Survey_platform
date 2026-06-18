@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box,
+  Alert,
   Button,
   Card,
   CardContent,
@@ -18,6 +19,7 @@ import {
 } from "@mui/material";
 
 import {
+  exportSurveyResponsesCsv,
   fetchAdminSurveyById,
   fetchSurveyResponses,
   updateSurveyResponseStatus,
@@ -48,6 +50,8 @@ export default function AdminResponsesPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
 
   const { data: survey } = useQuery({
     queryKey: ["admin-survey", id],
@@ -98,6 +102,27 @@ export default function AdminResponsesPage() {
     statusMutation.mutate({ responseId: response.id, status: nextStatus });
   };
 
+  const handleExportCsv = async () => {
+    setExportError("");
+    setIsExporting(true);
+
+    try {
+      const blob = await exportSurveyResponsesCsv(id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `survey_${id}_responses.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      setExportError(error.message || "Не удалось экспортировать ответы.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <Container maxWidth={false} sx={{ mt: 4, width: "100%" }}>
       <Typography variant="h4" sx={{ mb: 1 }}>
@@ -107,6 +132,21 @@ export default function AdminResponsesPage() {
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
         {survey.description}
       </Typography>
+
+      {exportError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {exportError}
+        </Alert>
+      )}
+
+      <Button
+        variant="outlined"
+        disabled={isExporting || !responses.length}
+        onClick={handleExportCsv}
+        sx={{ mb: 3 }}
+      >
+        {isExporting ? "Формирование CSV..." : "Экспорт ответов в CSV"}
+      </Button>
 
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mb: 3 }}>
         <Card sx={{ flex: 1 }}>

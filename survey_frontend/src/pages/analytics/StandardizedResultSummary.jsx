@@ -86,9 +86,9 @@ const MAIN_RESULT_LABELS = {
 };
 
 const METHOD_LABELS = {
-  kendall: "Kendall",
-  pearson: "Pearson",
-  spearman: "Spearman",
+  kendall: "Кендалл",
+  pearson: "Пирсон",
+  spearman: "Спирмен",
 };
 
 function formatMainResultLabel(name) {
@@ -354,25 +354,25 @@ export default function StandardizedResultSummary({ result }) {
         <Alert severity="warning" key={`${String(warning)}-${index}`}>{String(warning)}</Alert>
       ))}
 
-      {!!result.interpretation?.limitations?.length && (
+      {/* {!!result.interpretation?.limitations?.length && (
         <Box>
           <Typography variant="subtitle1">Ограничения интерпретации</Typography>
           <ul>
             {result.interpretation.limitations.map((item) => <li key={String(item)}>{String(item)}</li>)}
           </ul>
         </Box>
-      )}
+      )} */}
 
-      {!!result.recommendations?.length && (
+      {/* {!!result.recommendations?.length && (
         <Box>
           <Typography variant="subtitle1">Рекомендации</Typography>
           <ul>
             {result.recommendations.map((item) => <li key={item}>{item}</li>)}
           </ul>
         </Box>
-      )}
+      )} */}
 
-      {!!result.visualizations?.length && (
+      {/* {!!result.visualizations?.length && (
         <Box>
           <Typography variant="subtitle1">Рекомендуемые визуализации</Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
@@ -381,7 +381,7 @@ export default function StandardizedResultSummary({ result }) {
             ))}
           </Stack>
         </Box>
-      )}
+      )} */}
     </Stack>
   );
 }

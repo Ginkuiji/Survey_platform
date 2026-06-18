@@ -75,6 +75,7 @@ from survey_analytics.advanced_analytics_services import (
 from survey_analytics.advanced_analytics_charts import build_report_section_chart
 from .pdf_export import build_analytics_pdf
 from .csv_export import build_analytics_csv
+from .response_csv_export import build_responses_csv
 from .xlsx_export import build_analytics_xlsx
 from .branching_services import evaluate_conditions
 from .survey_builder import create_question_items
@@ -273,6 +274,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
         ser = SurveyAnalyticsSer(data=request.query_params)
         ser.is_valid(raise_exception=True)
         sid = ser.validated_data["survey_id"]
+        get_object_or_404(Survey, id=sid, status__in=["draft", "active", "closed"])
         save_flag = request.query_params.get("save") == "true"
 
         data = survey_distribution(sid, save=save_flag)
@@ -473,6 +475,15 @@ class SurveyResponseViewSet(viewsets.ReadOnlyModelViewSet):
         resp.status = next_status
         resp.save(update_fields=["status"])
         return DRFResponse(self.get_serializer(resp).data)
+
+    def export_csv(self, request, *args, **kwargs):
+        survey_id = self.kwargs["survey_id"]
+        survey = get_object_or_404(Survey, id=survey_id)
+        csv_bytes = build_responses_csv(survey, self.get_queryset())
+        filename = f"survey_{survey_id}_responses_{timezone.now():%Y%m%d_%H%M}.csv"
+        response = HttpResponse(csv_bytes, content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
     
 
 class UserViewSet(viewsets.ViewSet):
@@ -589,6 +600,25 @@ class AdminSurveyViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         survey = serializer.save()
         survey.owners.add(self.request.user)
+
+    def destroy(self, request, *args, **kwargs):
+        survey = self.get_object()
+        delete_responses = request.query_params.get("delete_responses") == "true"
+
+        if not delete_responses:
+            survey.status = "deleted"
+            survey.save(update_fields=["status"])
+            return DRFResponse(
+                {"status": "deleted"},
+                status=status.HTTP_200_OK,
+            )
+
+        with transaction.atomic():
+            survey.responses.all().delete()
+            survey.produces.all().delete()
+            survey.delete()
+
+        return DRFResponse(status=status.HTTP_204_NO_CONTENT)
 
     def get_serializer_class(self):
         if self.action == "list":

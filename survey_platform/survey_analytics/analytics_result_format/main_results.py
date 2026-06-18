@@ -169,7 +169,7 @@ def build_effect_size_summary(analysis_type, result):
     if analysis_type == "chi_square":
         value = (result.get("cramers_v") or {}).get("cramers_v")
         if value is not None:
-            return {"name": "Cramér’s V", "value": value, "interpretation": interpret_cramers_v(value), "description": "Показывает силу связи между категориальными переменными."}
+            return {"name": "V Крамера", "value": value, "interpretation": interpret_cramers_v(value), "description": "Показывает силу связи между категориальными переменными."}
     if analysis_type == "regression" and result.get("r2") is not None:
         return {"name": "R²", "value": result["r2"], "interpretation": interpret_r2(result["r2"]), "description": "Показывает долю вариации целевой переменной, объясняемую моделью."}
     if analysis_type == "logistic_regression":

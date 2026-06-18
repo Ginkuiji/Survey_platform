@@ -407,6 +407,7 @@ export default function SurveyEditorPage() {
             <MenuItem value="draft">Черновик</MenuItem>
             <MenuItem value="active">Активный</MenuItem>
             <MenuItem value="closed">Закрыт</MenuItem>
+            <MenuItem value="deleted">Удалён</MenuItem>
           </TextField>
 
           <TextField

@@ -51,13 +51,14 @@ function isAuthError(status, text) {
 }
 
 export async function apiFetch(path, options = {}){
+  const { responseType = "json", ...fetchOptions } = options;
   const makeRequest = async (token) => {
     return fetch(`${API_URL}${path}`, {
-      ...options,
+      ...fetchOptions,
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(options.headers || {}),
+        ...(fetchOptions.headers || {}),
       },
     });
   };
@@ -85,5 +86,6 @@ export async function apiFetch(path, options = {}){
   }
 
   if (res.status == 204) return null;
+  if (responseType === "blob") return res.blob();
   return res.json();
 }

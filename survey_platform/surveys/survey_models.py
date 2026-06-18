@@ -3,7 +3,12 @@ from django.db import models
 
 
 class Survey(models.Model):
-    STATUS = (("draft","Draft"), ("active","Active"), ("closed","Closed"))
+    STATUS = (
+        ("draft", "Draft"),
+        ("active", "Active"),
+        ("closed", "Closed"),
+        ("deleted", "Deleted"),
+    )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=STATUS, default="draft")

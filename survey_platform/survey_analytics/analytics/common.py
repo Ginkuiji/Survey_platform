@@ -1,6 +1,6 @@
 ﻿# surveys/analytics.py
 from collections import Counter
-from statistics import median, stdev
+from statistics import median, stdev, variance
 from typing import Any, Callable, Dict, Iterable, Optional
 
 from surveys.models import AnalyticResults, Answer, MatrixAnswerCell, MatrixColumn, MatrixRow, Option, Question, QuestionCondition, Response, Survey, SurveyPage
@@ -174,6 +174,7 @@ def describe_numeric_answers(values, total_count):
         "missing_rate": percent(missing_count, total_count),
         "average": round(sum(values) / len(values), 2) if values else None,
         "median": median(values) if values else None,
+        "variance": round(variance(values), 2) if len(values) > 1 else None,
         "std": round(stdev(values), 2) if len(values) > 1 else None,
         "min": min(values) if values else None,
         "max": max(values) if values else None,

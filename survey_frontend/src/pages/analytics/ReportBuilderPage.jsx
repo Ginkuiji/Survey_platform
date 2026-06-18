@@ -56,16 +56,16 @@ const ANALYSIS_TYPES = [
   { value: "correlation", label: "Корреляционный анализ" },
   { value: "crosstab", label: "Таблица сопряжённости" },
   { value: "chi_square", label: "χ²-критерий" },
-  { value: "correspondence_analysis", label: "Анализ соответствий" },
+  // { value: "correspondence_analysis", label: "Анализ соответствий" },
   { value: "regression", label: "Линейная регрессия" },
-  { value: "logistic_regression", label: "Логистическая регрессия" },
-  { value: "factor_analysis", label: "Факторный анализ" },
-  { value: "cluster_analysis", label: "Кластерный анализ" },
+  // { value: "logistic_regression", label: "Логистическая регрессия" },
+  // { value: "factor_analysis", label: "Факторный анализ" },
+  // { value: "cluster_analysis", label: "Кластерный анализ" },
   { value: "group_comparison", label: "Сравнение групп" },
-  { value: "time_analysis", label: "Анализ времени прохождения и отсева" },
-  { value: "reliability_analysis", label: "Надёжность шкалы" },
-  { value: "scale_index", label: "Индекс шкалы" },
-  { value: "missing_analysis", label: "Анализ пропусков" },
+  // { value: "time_analysis", label: "Анализ времени прохождения и отсева" },
+  // { value: "reliability_analysis", label: "Надёжность шкалы" },
+  // { value: "scale_index", label: "Индекс шкалы" },
+  // { value: "missing_analysis", label: "Анализ пропусков" },
 ];
 
 const API_BY_TYPE = {
@@ -84,11 +84,16 @@ const API_BY_TYPE = {
   missing_analysis: runMissingAnalysis,
 };
 
+const REPORT_PAGE_WIDTH = 1120;
+
 const compactReportBuilderSx = {
   mt: 2,
   width: "100%",
+  maxWidth: REPORT_PAGE_WIDTH,
+  mx: "auto",
   pb: 3,
   "& .MuiCard-root": {
+    width: "100%",
     borderRadius: 1
   },
   "& .MuiCardContent-root": {
@@ -374,7 +379,7 @@ function SectionFields({ section, questions, updateSection }) {
           >
             <MenuItem value="pearson">Пирсон</MenuItem>
             <MenuItem value="spearman">Спирман</MenuItem>
-            <MenuItem value="kendall">Кендалл</MenuItem>
+            {/*<MenuItem value="kendall">Кендалл</MenuItem>*/}
           </Select>
         </FormControl>
 
@@ -830,7 +835,8 @@ function SectionFields({ section, questions, updateSection }) {
     return (
       <Stack spacing={2}>
         <Alert severity="info">
-          t-критерий и Манн-Уитни требуют ровно 2 группы; ANOVA и Крускал-Уоллис подходят для 2+ групп.
+          t-критерий требует ровно 2 группы.
+          {/* t-критерий и Манн-Уитни требуют ровно 2 группы; ANOVA и Крускал-Уоллис подходят для 2+ групп. */}
         </Alert>
 
         <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
@@ -882,10 +888,10 @@ function SectionFields({ section, questions, updateSection }) {
                 });
               }}
             >
-              <MenuItem value="t_test">t-критей Уэлча</MenuItem>
-              <MenuItem value="anova">ANOVA</MenuItem>
+              <MenuItem value="t_test">t-критей Стьюдента</MenuItem>
+              {/* <MenuItem value="anova">ANOVA</MenuItem>
               <MenuItem value="mann_whitney">U-критерий Манна-Уитни</MenuItem>
-              <MenuItem value="kruskal_wallis">Крускал-Уоллис</MenuItem>
+              <MenuItem value="kruskal_wallis">Крускал-Уоллис</MenuItem> */}
             </Select>
           </FormControl>
 
@@ -898,7 +904,7 @@ function SectionFields({ section, questions, updateSection }) {
             onChange={(event) => updateSection(section.id, { alpha: Number(event.target.value) })}
           />
         </Stack>
-        <FormControlLabel
+        {/* <FormControlLabel
           control={
             <Checkbox
               checked={section.post_hoc && !twoGroupMethod}
@@ -907,9 +913,9 @@ function SectionFields({ section, questions, updateSection }) {
             />
           }
           label="Выполнить post-hoc сравнения"
-        />
+        /> */}
 
-        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+        {/* <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
           <FormControl fullWidth disabled={!section.post_hoc || twoGroupMethod}>
             <InputLabel>Post-hoc метод</InputLabel>
             <Select
@@ -935,13 +941,13 @@ function SectionFields({ section, questions, updateSection }) {
               <MenuItem value="holm">Холма</MenuItem>
             </Select>
           </FormControl>
-        </Stack>
+        </Stack> */}
 
-        <Alert severity="info">
+        {/* <Alert severity="info">
           {twoGroupMethod
             ? "Post-hoc сравнения обычно не требуются для двух групп."
             : "Post-hoc сравнения помогают определить, между какими группами есть различия после общего теста."}
-        </Alert>
+        </Alert> */}
       </Stack>
     );
   }

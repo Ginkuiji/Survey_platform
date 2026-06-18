@@ -97,6 +97,13 @@ const SECTION_LABELS = {
   missing_analysis: "Анализ пропусков",
 };
 
+const REPORT_PAGE_SX = {
+  mt: 4,
+  width: "100%",
+  maxWidth: 1120,
+  mx: "auto",
+};
+
 function formatNumber(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   if (typeof value !== "number") return String(value);
@@ -186,9 +193,9 @@ const SCALE_SUMMARY_LABELS = {
   variance: "Дисперсия",
   min: "Мини",
   max: "Макс",
-  p25: "25-й процентиль",
-  p75: "75-й процентиль",
-  iqr: "Межквартильный размах",
+  // p25: "25-й процентиль",
+  // p75: "75-й процентиль",
+  // iqr: "Межквартильный размах",
 };
 
 const MISSING_SUMMARY_LABELS = {
@@ -202,7 +209,7 @@ const MISSING_SUMMARY_LABELS = {
 
 function ReportSectionCard({ section, children, onRequestChart, serverChart }) {
   return (
-    <Card variant="outlined">
+    <Card variant="outlined" sx={{ width: "100%" }}>
       <CardContent>
         <Stack
           direction={{ xs: "column", sm: "row" }}
@@ -462,10 +469,10 @@ function renderChiSquareSection(section) {
         <Chip label={`χ²: ${formatNumber(chiSquare?.chi2)}`} />
         <Chip label={`p-value: ${formatNumber(chiSquare?.p_value)}`} />
         <Chip label={`Степени свободы: ${formatNumber(chiSquare?.dof)}`} />
-        <Chip label={`V Крамера: ${formatNumber(cramersV?.cramers_v)}`} />
+        {/* <Chip label={`V Крамера: ${formatNumber(cramersV?.cramers_v)}`} />
         <Chip label={`Сила связи: ${cramersV?.interpretation || "—"}`} />
         <Chip label={`n: ${formatNumber(cramersV?.n)}`} />
-        <Chip label={`${formatNumber(cramersV?.rows)}×${formatNumber(cramersV?.columns)}`} />
+        <Chip label={`${formatNumber(cramersV?.rows)}×${formatNumber(cramersV?.columns)}`} /> */}
       </Stack>
 
       <Typography color="text.secondary" variant="body2">
@@ -482,10 +489,10 @@ function renderChiSquareSection(section) {
           )}
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Chip label={`Всего ячеек: ${formatNumber(diagnostics.cells_count)}`} />
-            <Chip label={`Expected < 5: ${formatNumber(diagnostics.below_5_count)}`} />
-            <Chip label={`Доля expected < 5: ${formatNumber(diagnostics.below_5_rate)}%`} />
-            <Chip label={`Expected < 1: ${formatNumber(diagnostics.below_1_count)}`} />
-            <Chip label={`Минимальная expected: ${formatNumber(diagnostics.min_expected)}`} />
+            <Chip label={`Ожидание < 5: ${formatNumber(diagnostics.below_5_count)}`} />
+            <Chip label={`Доля ожидания < 5: ${formatNumber(diagnostics.below_5_rate)}%`} />
+            <Chip label={`Ожидание < 1: ${formatNumber(diagnostics.below_1_count)}`} />
+            <Chip label={`Минимальное ожидание: ${formatNumber(diagnostics.min_expected)}`} />
           </Stack>
         </Box>
       )}
@@ -659,8 +666,8 @@ function renderRegressionSection(section) {
         <Chip label={`Предикторов: ${featureLabels.length}`} />
         <Chip label={`R²: ${formatNumber(result?.r2)}`} />
         <Chip label={`Скорректированный R²: ${formatNumber(result?.adjusted_r2)}`} />
-        <Chip label={`RMSE: ${formatNumber(result?.rmse)}`} />
-        <Chip label={`MAE: ${formatNumber(result?.mae)}`} />
+        {/* <Chip label={`RMSE: ${formatNumber(result?.rmse)}`} />
+        <Chip label={`MAE: ${formatNumber(result?.mae)}`} /> */}
       </Stack>
 
       <Typography color="text.secondary" variant="body2">
@@ -707,9 +714,9 @@ function renderRegressionSection(section) {
         </Table>
       </Box>
 
-      {!!vif.length && <Box sx={{ overflowX: "auto" }}><Typography variant="subtitle1">VIF</Typography><Table size="small"><TableHead><TableRow><TableCell>Переменная</TableCell><TableCell align="right">VIF</TableCell><TableCell>Интерпретация</TableCell></TableRow></TableHead><TableBody>{vif.map((item) => <TableRow key={item.name}><TableCell>{getVariableLabel(result, item.name)}</TableCell><TableCell align="right">{formatNumber(item.vif)}</TableCell><TableCell>{item.interpretation}</TableCell></TableRow>)}</TableBody></Table></Box>}
+      {/* {!!vif.length && <Box sx={{ overflowX: "auto" }}><Typography variant="subtitle1">VIF</Typography><Table size="small"><TableHead><TableRow><TableCell>Переменная</TableCell><TableCell align="right">VIF</TableCell><TableCell>Интерпретация</TableCell></TableRow></TableHead><TableBody>{vif.map((item) => <TableRow key={item.name}><TableCell>{getVariableLabel(result, item.name)}</TableCell><TableCell align="right">{formatNumber(item.vif)}</TableCell><TableCell>{item.interpretation}</TableCell></TableRow>)}</TableBody></Table></Box>} */}
 
-      {!!Object.keys(residualSummary).length && <Box><Typography variant="subtitle1">Диагностика остатков</Typography><Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap><Chip label={`Среднее: ${formatNumber(residualSummary.mean)}`} /><Chip label={`Std: ${formatNumber(residualSummary.std)}`} /><Chip label={`Мин: ${formatNumber(residualSummary.min)}`} /><Chip label={`Медиана: ${formatNumber(residualSummary.median)}`} /><Chip label={`Макс: ${formatNumber(residualSummary.max)}`} /><Chip label={`Выбросы: ${formatNumber(residualSummary.outliers_count)}`} /><Chip label={`Normality p-value: ${formatNumber(diagnostics.normality?.p_value)}`} /><Chip label={`Гетероскедастичность: ${formatNumber(diagnostics.heteroscedasticity?.correlation)}`} /></Stack></Box>}
+      {/* {!!Object.keys(residualSummary).length && <Box><Typography variant="subtitle1">Диагностика остатков</Typography><Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap><Chip label={`Среднее: ${formatNumber(residualSummary.mean)}`} /><Chip label={`Std: ${formatNumber(residualSummary.std)}`} /><Chip label={`Мин: ${formatNumber(residualSummary.min)}`} /><Chip label={`Медиана: ${formatNumber(residualSummary.median)}`} /><Chip label={`Макс: ${formatNumber(residualSummary.max)}`} /><Chip label={`Выбросы: ${formatNumber(residualSummary.outliers_count)}`} /><Chip label={`Normality p-value: ${formatNumber(diagnostics.normality?.p_value)}`} /><Chip label={`Гетероскедастичность: ${formatNumber(diagnostics.heteroscedasticity?.correlation)}`} /></Stack></Box>} */}
     </Stack>
   );
 }
@@ -1412,7 +1419,7 @@ function renderGroupComparisonSection(section) {
       ))}
 
       <GroupMeanCiChart result={result} />
-      <GroupBoxplotApproxChart result={result} />
+      {/* <GroupBoxplotApproxChart result={result} /> */}
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
@@ -1428,9 +1435,9 @@ function renderGroupComparisonSection(section) {
               <TableCell align="right">Стандартное отклонение</TableCell>
               <TableCell align="right">Мин</TableCell>
               <TableCell align="right">Макс</TableCell>
-              <TableCell align="right">Q1</TableCell>
+              {/* <TableCell align="right">Q1</TableCell>
               <TableCell align="right">Q3</TableCell>
-              <TableCell align="right">IQR</TableCell>
+              <TableCell align="right">IQR</TableCell> */}
               <TableCell align="right">Пропуски</TableCell>
               <TableCell align="right">Выбросы</TableCell>
               <TableCell align="right">95% CI среднего</TableCell>
@@ -1446,9 +1453,9 @@ function renderGroupComparisonSection(section) {
                 <TableCell align="right">{formatNumber(group.std)}</TableCell>
                 <TableCell align="right">{formatNumber(group.min)}</TableCell>
                 <TableCell align="right">{formatNumber(group.max)}</TableCell>
-                <TableCell align="right">{formatNumber(group.q1)}</TableCell>
+                {/* <TableCell align="right">{formatNumber(group.q1)}</TableCell>
                 <TableCell align="right">{formatNumber(group.q3)}</TableCell>
-                <TableCell align="right">{formatNumber(group.iqr)}</TableCell>
+                <TableCell align="right">{formatNumber(group.iqr)}</TableCell> */}
                 <TableCell align="right">{formatNumber(group.missing_count)}</TableCell>
                 <TableCell align="right">{formatNumber(group.outliers_count)}</TableCell>
                 <TableCell align="right">{formatNumber(group.confidence_interval_95?.low)} … {formatNumber(group.confidence_interval_95?.high)}</TableCell>
@@ -1528,7 +1535,7 @@ function renderTimeAnalysisSection(section) {
         <Chip label={`Среднее время прохождения: ${formatDurationSeconds(summary.average_completion_time_seconds)}`} />
         <Chip label={`Среднее время до отсева: ${formatDurationSeconds(summary.average_screenout_time_seconds)}`} />
         <Chip label={`Медианное время: ${formatDurationSeconds(durationSummary.median_seconds ?? summary.median_completion_time_seconds)}`} />
-        <Chip label={`P25 / P75: ${formatDurationSeconds(durationSummary.p25_seconds)} / ${formatDurationSeconds(durationSummary.p75_seconds)}`} />
+        {/* <Chip label={`P25 / P75: ${formatDurationSeconds(durationSummary.p25_seconds)} / ${formatDurationSeconds(durationSummary.p75_seconds)}`} /> */}
         <Chip label={`Слишком быстрых: ${formatNumber(quality.too_fast?.count)}`} />
       </Stack>
 
@@ -1542,9 +1549,9 @@ function renderTimeAnalysisSection(section) {
       />
       <TimeFunnelChart result={result} />
       <RetentionCurveChart result={result} />
-      <CompletionTimeBoxplotApprox result={result} />
+      {/* <CompletionTimeBoxplotApprox result={result} /> */}
       <DropoutByPageChart result={result} />
-      <GroupTimeBoxplotApprox result={result} />
+      {/* <GroupTimeBoxplotApprox result={result} /> */}
       <ResponseQualityFlagsTable result={result} />
       <TimeFlowTable result={result} />
       <TimeDistributionChart
@@ -1767,9 +1774,9 @@ function renderScaleIndexSection(section) {
     ["variance", summary.variance],
     ["min", summary.min],
     ["max", summary.max],
-    ["p25", summary.p25],
-    ["p75", summary.p75],
-    ["iqr", summary.iqr],
+    // ["p25", summary.p25],
+    // ["p75", summary.p75],
+    // ["iqr", summary.iqr],
   ];
   const scores = (result.scores || []).slice(0, 20);
 
@@ -1795,7 +1802,7 @@ function renderScaleIndexSection(section) {
       <ScaleIndexDistributionChart result={result} />
       <ScaleIndexScoreCard result={result} />
       <ScaleIndexGroupsChart result={result} />
-      <ScaleIndexBoxplotApprox result={result} />
+      {/* <ScaleIndexBoxplotApprox result={result} /> */}
       <ScaleItemsCorrelationHeatmap result={result} />
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>
@@ -2287,7 +2294,7 @@ export default function ReportResultPage() {
 
   if (!report) {
     return (
-      <Container maxWidth={false} sx={{ mt: 4, width: "100%" }}>
+      <Container maxWidth={false} sx={REPORT_PAGE_SX}>
         <Alert severity="warning" sx={{ mb: 2 }}>
           Результат отчёта не найден
         </Alert>
@@ -2303,7 +2310,7 @@ export default function ReportResultPage() {
   }
 
   return (
-    <Container maxWidth={false} sx={{ mt: 4, width: "100%" }}>
+    <Container maxWidth={false} sx={REPORT_PAGE_SX}>
       <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={2} sx={{ mb: 3 }}>
         <Box>
           <Typography variant="h4" sx={{ mb: 1 }}>

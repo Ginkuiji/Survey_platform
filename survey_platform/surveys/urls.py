@@ -33,7 +33,16 @@ survey_response_detail = SurveyResponseViewSet.as_view({
     "patch": "partial_update",
 })
 
+survey_responses_csv = SurveyResponseViewSet.as_view({
+    "get": "export_csv",
+})
+
 urlpatterns += [
+    path(
+        "surveys/<int:survey_id>/responses/export/csv/",
+        survey_responses_csv,
+        name="survey-responses-csv",
+    ),
     path(
         "surveys/<int:survey_id>/responses/",
         survey_responses,

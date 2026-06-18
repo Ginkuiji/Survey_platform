@@ -39,7 +39,7 @@ export default function AdminUsersPage() {
   });
 
   return (
-    <Container maxWidth={false} sx={{ mt: "-25%", width: "170%" }}>
+    <Container maxWidth={false} sx={{ mt: "-25%", width: "140%" }}>
       <Typography variant="h4" sx={{ mb: 3 }}>
         Пользователи
       </Typography>

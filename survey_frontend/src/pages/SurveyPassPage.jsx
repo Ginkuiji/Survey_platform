@@ -38,6 +38,15 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 
+const surveyPassContainerSx = {
+  width: "100%",
+  maxWidth: "1100px",
+  mx: "auto",
+  mt: 4,
+  px: { xs: 2, sm: 3 },
+
+};
+
 function SortableRankingItem({ option, rank }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: option.id });
@@ -409,7 +418,7 @@ export default function SurveyPassPage() {
 
       {q.qtype === "single" && (
         <RadioGroup
-          sx={{ mt: 1 }}
+          sx={{ mt: 1, alignItems: "flex-start" }}
           value={answers[q.id]?.selected_options?.[0] || ""}
           onChange={(e) =>
             handleChange(q.id, {
@@ -429,7 +438,7 @@ export default function SurveyPassPage() {
       )}
 
       {q.qtype === "multi" && (
-        <Box sx={{ mt: 1 }}>
+        <Box sx={{ mt: 1, display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
           {q.options.map((opt) => {
             const current = answers[q.id]?.selected_options || [];
             const checked = current.includes(opt.id);
@@ -591,7 +600,7 @@ export default function SurveyPassPage() {
 
   if (screeningResult) {
     return (
-      <Container maxWidth="sm" sx={{ mt: 8 }}>
+      <Container maxWidth="lg" sx={{ ...surveyPassContainerSx, mt: 8 }}>
         <Typography variant="h4" sx={{ mb: 2 }}>
           Опрос завершён
         </Typography>
@@ -606,7 +615,7 @@ export default function SurveyPassPage() {
   }
 
   return (
-    <Container maxWidth="md" sx={{ mt: 4, width: 100 }}>
+    <Container maxWidth="lg" sx={surveyPassContainerSx}>
       <Button
         startIcon={<ArrowBackIcon />}
         onClick={() => navigate(-1)}

@@ -43,6 +43,11 @@ export const updateSurvey = (id, data) =>
     body: JSON.stringify(data)
   });
 
+export const deleteSurvey = (id, deleteResponses = false) =>
+  apiFetch(`/admin/surveys/${id}/?delete_responses=${deleteResponses}`, {
+    method: "DELETE",
+  });
+
 const choiceTypes = ["single", "multi", "dropdown", "yesno", "ranking"];
 const matrixTypes = ["matrix_single", "matrix_multi"];
 
@@ -149,6 +154,12 @@ export async function fetchSurveyResponses(surveyId) {
   // }
 
   // return res.json();
+}
+
+export async function exportSurveyResponsesCsv(surveyId) {
+  return apiFetch(`/surveys/${surveyId}/responses/export/csv/`, {
+    responseType: "blob",
+  });
 }
 
 export async function fetchSurveyResponseById(surveyId, responseId) {
