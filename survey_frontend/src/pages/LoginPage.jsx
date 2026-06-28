@@ -4,7 +4,6 @@ import { useState } from "react";
 import { API_URL } from "../api/client";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -22,16 +21,15 @@ export default function LoginPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email,
-          password,
           username,
+          password,
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.detail || data.email?.[0] || "Ошибка входа");
+        throw new Error(data.detail || data.username?.[0] || "Ошибка входа");
       }
 
       localStorage.setItem("accessToken", data.access);
@@ -87,17 +85,8 @@ export default function LoginPage() {
         </Typography>
 
         <TextField
-          label="Email"
-          type="email"
-          fullWidth
-          sx={{ mb: 2 }}
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-        />
-
-        <TextField
           label="Логин"
-          type="username"
+          type="text"
           fullWidth
           sx={{ mb: 2 }}
           value={username}

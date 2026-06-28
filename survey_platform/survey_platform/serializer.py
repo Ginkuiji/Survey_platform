@@ -6,29 +6,24 @@ User = get_user_model()
 
 
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
-    email = serializers.EmailField(write_only=True)
+    username = serializers.CharField(write_only=True)
     password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
-        email = attrs.get("email")
+        username = attrs.get("username")
         password = attrs.get("password")
 
-        if not email or not password:
-            raise serializers.ValidationError("Нужно указать email и пароль")
-
-        try:
-            user_obj = User.objects.get(email=email)
-        except User.DoesNotExist:
-            raise serializers.ValidationError("Неверный email или пароль")
+        if not username or not password:
+            raise serializers.ValidationError("Нужно указать логин и пароль")
 
         user = authenticate(
             request=self.context.get("request"),
-            username=user_obj.username,
+            username=username,
             password=password,
         )
 
         if user is None:
-            raise serializers.ValidationError("Неверный email или пароль")
+            raise serializers.ValidationError("Неверный логин или пароль")
 
         refresh = self.get_token(user)
 
