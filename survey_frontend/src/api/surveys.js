@@ -11,22 +11,24 @@ export const fetchAdminSurveys = () =>
   apiFetch("/admin/surveys/");
 
 // один опрос (для прохождения и аналитики)
-export const fetchSurveyById = (id) =>
-  apiFetch(`/surveys/${id}/`);
+export const fetchSurveyById = (id, options = {}) =>
+  apiFetch(`/surveys/${id}/`, options);
 
 // ===== ПРОХОЖДЕНИЕ ОПРОСА =====
 
 // старт сессии ответа
-export const startSurvey = (surveyId) =>
+export const startSurvey = (surveyId, options = {}) =>
   apiFetch(`/surveys/${surveyId}/start/`, {
-    method: "POST"
+    method: "POST",
+    ...options,
   });
 
 // отправка ответов
-export const submitSurvey = (payload) =>
+export const submitSurvey = (payload, options = {}) =>
   apiFetch("/surveys/submit/", {
     method: "POST",
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    ...options,
   });
 
 // ===== АДМИН =====

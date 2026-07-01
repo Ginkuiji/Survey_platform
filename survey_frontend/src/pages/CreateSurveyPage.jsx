@@ -12,7 +12,8 @@ import {
   Box,
   IconButton,
   FormControlLabel,
-  Checkbox
+  Checkbox,
+  Alert
 } from "@mui/material";
 
 import { DndContext, closestCenter } from "@dnd-kit/core";
@@ -34,6 +35,7 @@ import {
 } from "../api/surveys";
 import { createEmptyQuestion } from "../types/survey";
 import { buildConditionPayload } from "../utils/branching";
+import { getErrorMessage } from "../utils/errors";
 
 const compactEditorSx = {
   mt: 2,
@@ -127,6 +129,8 @@ export default function CreateSurveyPage() {
 
   const [pages, setPages] = useState([createEmptyPage(0)]);
   const [conditions, setConditions] = useState([]);
+  const [saveError, setSaveError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleSurveyChange = (field, value) => {
     setSurvey(prev => ({ ...prev, [field]: value }));
@@ -207,22 +211,35 @@ export default function CreateSurveyPage() {
   };
 
   const handleSave = async () => {
+    setSaveError("");
+
     if (!survey.title.trim()) {
-      alert("Введите название опроса");
+      setSaveError("Введите название опроса.");
       return;
     }
 
-    const created = await createSurvey(survey);
-    await saveSurveyPages(created.id, pages);
-    const savedSurvey = await fetchAdminSurveyById(created.id);
-    const savedPages = sortSavedPages(savedSurvey.pages || []);
-    const conditionsPayload = conditions
-      .map(condition => buildConditionPayload(condition, pages, savedPages))
-      .filter(Boolean);
-    await saveSurveyConditions(created.id, conditionsPayload);
+    setIsSaving(true);
 
-    alert("Опрос создан");
-    navigate(`/management/surveys/${created.id}`);
+    try {
+      const created = await createSurvey(survey);
+      await saveSurveyPages(created.id, pages);
+      const savedSurvey = await fetchAdminSurveyById(created.id);
+      const savedPages = sortSavedPages(savedSurvey.pages || []);
+      const conditionsPayload = conditions
+        .map(condition => buildConditionPayload(condition, pages, savedPages))
+        .filter(Boolean);
+      await saveSurveyConditions(created.id, conditionsPayload);
+
+      alert("Опрос создан");
+      navigate(`/management/surveys/${created.id}`);
+    } catch (error) {
+      setSaveError(getErrorMessage(error, {
+        fallback: "Не удалось создать опрос.",
+        pages,
+      }));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -230,6 +247,12 @@ export default function CreateSurveyPage() {
       <Typography variant="h4" sx={{ mb: 2 }}>
         Создание опроса
       </Typography>
+
+      {saveError && (
+        <Alert severity="error" sx={{ mb: 2, whiteSpace: "pre-line" }}>
+          {saveError}
+        </Alert>
+      )}
 
       <Card sx={{ mb: 2 }}>
         <CardContent>
@@ -400,8 +423,8 @@ export default function CreateSurveyPage() {
         </Card>
       ))}
 
-      <Button variant="contained" onClick={handleSave}>
-        Создать опрос
+      <Button variant="contained" onClick={handleSave} disabled={isSaving}>
+        {isSaving ? "Сохранение..." : "Создать опрос"}
       </Button>
     </Container>
   );

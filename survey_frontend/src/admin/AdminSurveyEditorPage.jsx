@@ -14,7 +14,8 @@ import {
   Box,
   IconButton,
   FormControlLabel,
-  Checkbox
+  Checkbox,
+  Alert
 } from "@mui/material";
 
 import {
@@ -47,6 +48,7 @@ import {
   mapServerConditionsToEditor,
   normalizeEditorConditions,
 } from "../utils/branching";
+import { getErrorMessage } from "../utils/errors";
 
 function normalizeQuestions(questions = []) {
   return questions.map((q, qIndex) => ({
@@ -126,15 +128,17 @@ export default function AdminSurveyEditorPage() {
   const [initialPagesSnapshot, setInitialPagesSnapshot] = useState("[]");
   const [conditions, setConditions] = useState([]);
   const [initialConditionsSnapshot, setInitialConditionsSnapshot] = useState("[]");
+  const [saveError, setSaveError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   /* -------- загрузка опроса -------- */
-  const { data } = useQuery({
+  const { data, error: surveyError, isError: isSurveyError } = useQuery({
     queryKey: ["admin-survey-editor", id],
     queryFn: () => fetchAdminSurveyById(id)
   });
 
   /* -------- есть ли ответы -------- */
-  const { data: responses = [] } = useQuery({
+  const { data: responses = [], error: responsesError, isError: isResponsesError } = useQuery({
     queryKey: ["survey-responses-check", id],
     queryFn: () => fetchSurveyResponses(id),
     enabled: !!id,
@@ -290,45 +294,68 @@ export default function AdminSurveyEditorPage() {
 
   const shouldCreateCopy = hasResponses && (structureChanged || conditionsChanged);
 
+  if (isSurveyError) {
+    return (
+      <Container sx={{ mt: 4 }}>
+        <Alert severity="error">
+          {getErrorMessage(surveyError, "Не удалось загрузить опрос.")}
+        </Alert>
+      </Container>
+    );
+  }
+
   if (!survey) return null;
 
   /* -------- сохранение -------- */
   const handleSave = async () => {
-    if (shouldCreateCopy) {
-      const newSurvey = await createSurvey({
-        title: `${survey.title} (копия)`,
+    setSaveError("");
+    setIsSaving(true);
+
+    try {
+      if (shouldCreateCopy) {
+        const newSurvey = await createSurvey({
+          title: `${survey.title} (копия)`,
+          description: survey.description,
+          status: "draft",
+          starts_at: survey.starts_at,
+          ends_at: survey.ends_at,
+          is_anonymous: survey.is_anonymous,
+          randomize_pages: survey.randomize_pages
+        });
+
+        await saveSurveyPages(newSurvey.id, survey.pages);
+        const savedSurvey = await fetchAdminSurveyById(newSurvey.id);
+        await saveConditionsForSurvey(newSurvey.id, survey.pages, buildPages(savedSurvey));
+
+        alert("Создана копия опроса");
+        navigate(`/management/surveys/${newSurvey.id}`);
+        return;
+      }
+
+      await updateSurvey(id, {
+        title: survey.title,
         description: survey.description,
-        status: "draft",
+        status: survey.status,
         starts_at: survey.starts_at,
         ends_at: survey.ends_at,
         is_anonymous: survey.is_anonymous,
         randomize_pages: survey.randomize_pages
       });
 
-      await saveSurveyPages(newSurvey.id, survey.pages);
-      const savedSurvey = await fetchAdminSurveyById(newSurvey.id);
-      await saveConditionsForSurvey(newSurvey.id, survey.pages, buildPages(savedSurvey));
+      await saveSurveyPages(id, survey.pages);
+      const savedSurvey = await fetchAdminSurveyById(id);
+      await saveConditionsForSurvey(id, survey.pages, buildPages(savedSurvey));
 
-      alert("Создана копия опроса");
-      navigate(`/management/surveys/${newSurvey.id}`);
-      return;
+      alert("Опрос обновлён");
+    } catch (error) {
+      setSaveError(getErrorMessage(error, {
+        fallback: "Не удалось сохранить опрос.",
+        pages: survey.pages,
+        questions: survey.questions,
+      }));
+    } finally {
+      setIsSaving(false);
     }
-
-    await updateSurvey(id, {
-      title: survey.title,
-      description: survey.description,
-      status: survey.status,
-      starts_at: survey.starts_at,
-      ends_at: survey.ends_at,
-      is_anonymous: survey.is_anonymous,
-      randomize_pages: survey.randomize_pages
-    });
-
-    await saveSurveyPages(id, survey.pages);
-    const savedSurvey = await fetchAdminSurveyById(id);
-    await saveConditionsForSurvey(id, survey.pages, buildPages(savedSurvey));
-
-    alert("Опрос обновлён");
   };
 
   return (
@@ -336,6 +363,18 @@ export default function AdminSurveyEditorPage() {
       <Typography variant="h4" sx={{ mb: 3 }}>
         Редактирование опроса
       </Typography>
+
+      {isResponsesError && (
+        <Alert severity="warning" sx={{ mb: 2, whiteSpace: "pre-line" }}>
+          {getErrorMessage(responsesError, "Не удалось проверить, есть ли ответы у опроса.")}
+        </Alert>
+      )}
+
+      {saveError && (
+        <Alert severity="error" sx={{ mb: 2, whiteSpace: "pre-line" }}>
+          {saveError}
+        </Alert>
+      )}
 
       <Card sx={{ mb: 3 }}>
         <CardContent>
@@ -515,8 +554,12 @@ export default function AdminSurveyEditorPage() {
         Посмотреть ответы
       </Button>
 
-      <Button variant="contained" onClick={handleSave}>
-        {shouldCreateCopy ? "Создать копию опроса" : "Сохранить изменения"}
+      <Button variant="contained" onClick={handleSave} disabled={isSaving}>
+        {isSaving
+          ? "Сохранение..."
+          : shouldCreateCopy
+            ? "Создать копию опроса"
+            : "Сохранить изменения"}
       </Button>
     </Container>
   );

@@ -51,7 +51,13 @@ function isAuthError(status, text) {
 }
 
 export async function apiFetch(path, options = {}){
-  const { responseType = "json", ...fetchOptions } = options;
+  const {
+    responseType = "json",
+    redirectOnAuthError = true,
+    retryWithoutAuthOnAuthError = false,
+    auth = true,
+    ...fetchOptions
+  } = options;
   const makeRequest = async (token) => {
     return fetch(`${API_URL}${path}`, {
       ...fetchOptions,
@@ -62,16 +68,22 @@ export async function apiFetch(path, options = {}){
       },
     });
   };
-  let accessToken = localStorage.getItem("accessToken");
+  let accessToken = auth ? localStorage.getItem("accessToken") : null;
   let res = await makeRequest(accessToken);
 
   if (res.status == 401 ){
-    try{
-      accessToken = await refreshAccessToken();
-      res = await makeRequest(accessToken);
-    } catch (e) {
-      clearAuthAndRedirect();
-      throw e;
+    if (retryWithoutAuthOnAuthError && accessToken) {
+      res = await makeRequest(null);
+    } else if (!redirectOnAuthError) {
+      throw new Error("Session expired");
+    } else {
+      try{
+        accessToken = await refreshAccessToken();
+        res = await makeRequest(accessToken);
+      } catch (e) {
+        clearAuthAndRedirect();
+        throw e;
+      }
     }
   }
 
@@ -79,7 +91,17 @@ export async function apiFetch(path, options = {}){
     const text = await res.text();
 
     if (isAuthError(res.status, text)) {
-      clearAuthAndRedirect();
+      if (retryWithoutAuthOnAuthError && accessToken) {
+        const publicRes = await makeRequest(null);
+        if (publicRes.ok) {
+          if (publicRes.status == 204) return null;
+          if (responseType === "blob") return publicRes.blob();
+          return publicRes.json();
+        }
+      }
+      if (redirectOnAuthError) {
+        clearAuthAndRedirect();
+      }
       throw new Error("Session expired");
     }
     throw new Error(text || "API error");

@@ -33,10 +33,12 @@ import {
   TableBody,
   TableCell,
   TableHead,
-  TableRow
+  TableRow,
+  Alert
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
+import { getErrorMessage } from "../utils/errors";
 
 const surveyPassContainerSx = {
   width: "100%",
@@ -184,15 +186,16 @@ export default function SurveyPassPage() {
   const navigate = useNavigate();
   const { id } = useParams();
 
-  const { data: survey } = useQuery({
+  const { data: survey, error: surveyError, isError: isSurveyError } = useQuery({
     queryKey: ["survey-pass", id],
-    queryFn: () => fetchSurveyById(id)
+    queryFn: () => fetchSurveyById(id, { retryWithoutAuthOnAuthError: true })
   });
 
   const [answers, setAnswers] = useState({});
   const [responseToken, setResponseToken] = useState(null);
   const [pageIndex, setPageIndex] = useState(0);
   const [screeningResult, setScreeningResult] = useState(null);
+  const [submitError, setSubmitError] = useState("");
 
   const pages = useMemo(() => (survey ? buildPages(survey) : []), [survey]);
   const conditions = survey?.conditions || [];
@@ -215,20 +218,34 @@ export default function SurveyPassPage() {
   }, [pageIndex, visiblePages.length]);
 
   const startMutation = useMutation({
-    mutationFn: () => startSurvey(id),
-    onSuccess: (data) => setResponseToken(data.response_token)
+    mutationFn: () => startSurvey(id, survey?.is_anonymous ? { auth: false, redirectOnAuthError: false } : {}),
+    onSuccess: (data) => {
+      setSubmitError("");
+      setResponseToken(data.response_token);
+    },
+    onError: (error) => setSubmitError(getErrorMessage(error, {
+      fallback: "Не удалось начать прохождение опроса.",
+      pages,
+      questions: survey?.questions,
+    }))
   });
 
   const submitMutation = useMutation({
-    mutationFn: (payload) => submitSurvey(payload),
+    mutationFn: (payload) => submitSurvey(payload, survey?.is_anonymous ? { auth: false, redirectOnAuthError: false } : {}),
     onSuccess: (data) => {
+      setSubmitError("");
       if (data.status === "screened_out") {
         setScreeningResult(data);
         return;
       }
       alert("Ответы отправлены");
       navigate("/");
-    }
+    },
+    onError: (error) => setSubmitError(getErrorMessage(error, {
+      fallback: "Не удалось отправить ответы.",
+      pages,
+      questions: survey?.questions,
+    }))
   });
 
   const handleChange = (questionId, data) => {
@@ -278,28 +295,38 @@ export default function SurveyPassPage() {
   });
 
   const handleSubmit = async (answersOverride = null) => {
-    let token = responseToken;
+    setSubmitError("");
 
-    if (!token) {
-      const res = await startMutation.mutateAsync();
-      token = res.response_token;
+    try {
+      let token = responseToken;
+
+      if (!token) {
+        const res = await startMutation.mutateAsync();
+        token = res.response_token;
+      }
+
+      const safeAnswersOverride = answersOverride && !answersOverride?.nativeEvent
+        ? answersOverride
+        : null;
+      const answerMap = { ...(safeAnswersOverride || answers) };
+      visiblePages
+        .flatMap(page => page.questions || [])
+        .filter(question => question.qtype === "ranking")
+        .forEach(question => {
+          answerMap[question.id] = {
+            ...(answerMap[question.id] || {}),
+            ranking_items: buildRankingItems(getRankingOrder(question, answerMap[question.id]))
+          };
+        });
+
+      await submitMutation.mutateAsync(buildSubmitPayload(token, answerMap));
+    } catch (error) {
+      setSubmitError(getErrorMessage(error, {
+        fallback: "Не удалось отправить ответы.",
+        pages,
+        questions: survey?.questions,
+      }));
     }
-
-    const safeAnswersOverride = answersOverride && !answersOverride?.nativeEvent
-      ? answersOverride
-      : null;
-    const answerMap = { ...(safeAnswersOverride || answers) };
-    visiblePages
-      .flatMap(page => page.questions || [])
-      .filter(question => question.qtype === "ranking")
-      .forEach(question => {
-        answerMap[question.id] = {
-          ...(answerMap[question.id] || {}),
-          ranking_items: buildRankingItems(getRankingOrder(question, answerMap[question.id]))
-        };
-      });
-
-    submitMutation.mutate(buildSubmitPayload(token, answerMap));
   };
 
   const handleNext = () => {
@@ -597,6 +624,16 @@ export default function SurveyPassPage() {
     </Box>
   );
 
+  if (isSurveyError) {
+    return (
+      <Container maxWidth="lg" sx={surveyPassContainerSx}>
+        <Alert severity="error">
+          {getErrorMessage(surveyError, "Не удалось загрузить опрос.")}
+        </Alert>
+      </Container>
+    );
+  }
+
   if (!survey) return null;
 
   if (screeningResult) {
@@ -627,6 +664,12 @@ export default function SurveyPassPage() {
 
       <Typography variant="h4">{survey.title}</Typography>
       <Typography sx={{ mb: 3 }}>{survey.description}</Typography>
+
+      {submitError && (
+        <Alert severity="error" sx={{ mb: 3, whiteSpace: "pre-line" }}>
+          {submitError}
+        </Alert>
+      )}
 
       <Box sx={{ mb: 3 }}>
         <Typography variant="body2" sx={{ mb: 1 }}>

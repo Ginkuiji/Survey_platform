@@ -51,6 +51,7 @@ import {
   getQuestionTypeLabel,
   isQuestionSupportedForAnalysis,
 } from "../../utils/advancedAnalytics";
+import { getErrorMessage } from "../../utils/errors";
 
 const ANALYSIS_TYPES = [
   { value: "correlation", label: "Корреляционный анализ" },
@@ -292,15 +293,6 @@ function createSection(type) {
     featureQuestionIds: [],
     include_intercept: true,
   };
-}
-
-function getErrorMessage(error) {
-  try {
-    const data = JSON.parse(error.message);
-    return data.detail || error.message;
-  } catch {
-    return error.message;
-  }
 }
 
 function QuestionOption({ question }) {
@@ -1324,8 +1316,9 @@ export default function ReportBuilderPage() {
   const [newSectionType, setNewSectionType] = useState("correlation");
   const [isRunning, setIsRunning] = useState(false);
   const [pageError, setPageError] = useState("");
+  const [sectionErrors, setSectionErrors] = useState({});
 
-  const { data: survey, isLoading } = useQuery({
+  const { data: survey, error: surveyError, isError: isSurveyError, isLoading } = useQuery({
     queryKey: ["admin-survey", id],
     enabled: !!id,
     queryFn: () => fetchAdminSurveyById(id),
@@ -1339,17 +1332,30 @@ export default function ReportBuilderPage() {
   };
 
   const updateSection = (sectionId, patch) => {
+    setSectionErrors((current) => {
+      if (!current[sectionId]) return current;
+      const next = { ...current };
+      delete next[sectionId];
+      return next;
+    });
     setSections((current) => current.map((section) => (
       section.id === sectionId ? { ...section, ...patch } : section
     )));
   };
 
   const removeSection = (sectionId) => {
+    setSectionErrors((current) => {
+      if (!current[sectionId]) return current;
+      const next = { ...current };
+      delete next[sectionId];
+      return next;
+    });
     setSections((current) => current.filter((section) => section.id !== sectionId));
   };
 
   const buildReport = async () => {
     setPageError("");
+    setSectionErrors({});
     if (!sections.length) {
       setPageError("Добавьте хотя бы один аналитический блок.");
       return;
@@ -1357,6 +1363,7 @@ export default function ReportBuilderPage() {
 
     setIsRunning(true);
     const resultSections = [];
+    const nextSectionErrors = {};
 
     for (const section of sections) {
       try {
@@ -1371,15 +1378,23 @@ export default function ReportBuilderPage() {
           error: null,
         });
       } catch (error) {
+        nextSectionErrors[section.id] = getErrorMessage(error, { questions });
         resultSections.push({
           id: section.id,
           type: section.type,
           title: section.title,
           config: section,
           result: null,
-          error: getErrorMessage(error),
+          error: getErrorMessage(error, { questions }),
         });
       }
+    }
+
+    if (Object.keys(nextSectionErrors).length) {
+      setSectionErrors(nextSectionErrors);
+      setPageError("Исправьте ошибки в блоках отчёта и запустите формирование ещё раз.");
+      setIsRunning(false);
+      return;
     }
 
     const reportResult = {
@@ -1411,11 +1426,24 @@ export default function ReportBuilderPage() {
 
       navigate(`/analytics/surveys/${id}/report-result/${savedReport.id}`);
     } catch (error) {
-      setPageError(getErrorMessage(error));
+      setPageError(getErrorMessage(error, {
+        fallback: "Не удалось сохранить отчёт.",
+        questions,
+      }));
     } finally {
       setIsRunning(false);
     }
   };
+
+  if (isSurveyError) {
+    return (
+      <Container maxWidth={false} sx={compactReportBuilderSx}>
+        <Alert severity="error">
+          {getErrorMessage(surveyError, "Не удалось загрузить данные опроса для отчёта.")}
+        </Alert>
+      </Container>
+    );
+  }
 
   if (isLoading || !survey) return null;
 
@@ -1435,7 +1463,7 @@ export default function ReportBuilderPage() {
         </Button>
       </Stack>
 
-      {pageError && <Alert severity="warning" sx={{ mb: 2 }}>{pageError}</Alert>}
+      {pageError && <Alert severity="warning" sx={{ mb: 2, whiteSpace: "pre-line" }}>{pageError}</Alert>}
 
       <TextField
         fullWidth
@@ -1488,6 +1516,11 @@ export default function ReportBuilderPage() {
               </Stack>
 
               <SectionFields section={section} questions={questions} updateSection={updateSection} />
+              {sectionErrors[section.id] && (
+                <Alert severity="error" sx={{ mt: 1.5, whiteSpace: "pre-line" }}>
+                  {sectionErrors[section.id]}
+                </Alert>
+              )}
             </CardContent>
           </Card>
         ))}

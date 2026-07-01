@@ -42,10 +42,14 @@ function getAnswerValue(answer) {
 }
 
 function getAllSurveyQuestions(survey) {
-  return [
+  const questions = [
     ...(survey.questions || []),
     ...((survey.pages || []).flatMap(page => page.questions || [])),
   ];
+
+  return questions.filter((question, index, list) => (
+    list.findIndex(item => item.id === question.id) === index
+  ));
 }
 
 export default function AdminDetRespPage() {

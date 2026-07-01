@@ -1,12 +1,71 @@
 from django.test import SimpleTestCase
+from django.utils import timezone
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
+
+from rest_framework.test import APITestCase
 
 from survey_analytics.analytics import classify_question_response_state
 from survey_analytics.analytics_result_format import standardize_analysis_result
 from survey_analytics.analytics_descriptive_profile import describe_numeric_values
 from survey_analytics.advanced_analytics_methods import compute_chi_square, compute_cramers_v, compute_factor_analysis, compute_group_comparison, compute_kmeans_clustering, compute_linear_regression, compute_logistic_regression, compute_cronbach_alpha, compute_scale_index, compute_time_analysis
+from surveys.models import Question, Response, Survey
+
+
+class AnonymousSurveySubmissionTests(APITestCase):
+    def create_response_with_text_question(self, is_anonymous):
+        survey = Survey.objects.create(
+            title="Public survey" if is_anonymous else "Private survey",
+            status="active",
+            starts_at=timezone.now() - timedelta(days=1),
+            is_anonymous=is_anonymous,
+        )
+        question = Question.objects.create(
+            survey=survey,
+            text="Comment",
+            qtype=Question.TEXT,
+            required=False,
+        )
+        response = Response.objects.create(
+            survey=survey,
+            session_token=f"token-{survey.id}",
+        )
+        return response, question
+
+    def test_anonymous_survey_can_be_submitted_without_authentication(self):
+        response, question = self.create_response_with_text_question(is_anonymous=True)
+
+        result = self.client.post(
+            "/api/surveys/submit/",
+            {
+                "response_token": response.session_token,
+                "answers": [{"question": question.id, "text": ""}],
+            },
+            format="json",
+        )
+
+        self.assertEqual(result.status_code, 200)
+        response.refresh_from_db()
+        self.assertTrue(response.is_complete)
+        self.assertIsNone(response.user)
+
+    def test_non_anonymous_survey_still_requires_authentication_on_submit(self):
+        response, question = self.create_response_with_text_question(is_anonymous=False)
+
+        result = self.client.post(
+            "/api/surveys/submit/",
+            {
+                "response_token": response.session_token,
+                "answers": [{"question": question.id, "text": ""}],
+            },
+            format="json",
+        )
+
+        self.assertIn(result.status_code, (401, 403))
+        self.assertIn("Authentication credentials", str(result.data.get("detail", "")))
+        response.refresh_from_db()
+        self.assertFalse(response.is_complete)
 
 
 class StandardizedAnalysisResultTests(SimpleTestCase):

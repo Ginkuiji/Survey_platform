@@ -11,7 +11,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response as DRFResponse
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import NotAuthenticated, PermissionDenied
 from .models import (
     Survey,
     Response as Resp,
@@ -85,7 +85,7 @@ User = get_user_model()
 class SurveyViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Survey.objects.all()
     def get_permissions(self):
-        return [AllowAny()] if self.action in ["list","retrieve"] else [IsAuthenticated()]
+        return [AllowAny()] if self.action in ["list", "retrieve", "start", "submit"] else [IsAuthenticated()]
 
     def get_serializer_class(self):
         return SurveyListSer if self.action == "list" else SurveyDetailSer
@@ -110,7 +110,7 @@ class SurveyViewSet(viewsets.ReadOnlyModelViewSet):
                                    client_meta={"ua": request.META.get("HTTP_USER_AGENT","")})
         return DRFResponse({"response_token": token}, status=201)
 
-    @action(detail=False, methods=["post"], url_path="submit")
+    @action(detail=False, methods=["post"], url_path="submit", permission_classes=[AllowAny])
     def submit(self, request):
         ser = SubmitAnswerSer(data=request.data); ser.is_valid(raise_exception=True)
         token = ser.validated_data["response_token"]
@@ -119,6 +119,9 @@ class SurveyViewSet(viewsets.ReadOnlyModelViewSet):
             resp = Resp.objects.get(session_token=token, is_complete=False)
         except Resp.DoesNotExist:
             return DRFResponse({"detail":"invalid or completed token"}, status=400)
+
+        if not resp.survey.is_anonymous and not request.user.is_authenticated:
+            raise NotAuthenticated("Authentication credentials were not provided.")
 
         answer_question_ids = [a["question"] for a in answers]
         if len(answer_question_ids) != len(set(answer_question_ids)):
