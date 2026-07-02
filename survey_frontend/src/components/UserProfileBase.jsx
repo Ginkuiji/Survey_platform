@@ -112,7 +112,6 @@ export default function UserProfileBase({
               <Button variant="contained" color="error" onClick={onDelete}>
                 Удалить пользователя
               </Button>
-              <a color="blue">Сбросить пароль</a>
             </Box>
           </Box>
         )}
